@@ -98,13 +98,52 @@ function deleteSaree(id) {
 function createSale(sale) {
   const saleId = "SL-" + Math.floor(1000 + Math.random() * 9000);
   const date = new Date().toISOString();
-  const totalAmount = sale.quantity * sale.sellingPrice;
-  const saree = getSareeById(sale.sareeId);
-  const profit = totalAmount - (sale.quantity * (saree.purchasePrice || 0));
+  let totalTransactionAmount = 0;
+  let totalTransactionProfit = 0;
 
-  const currentStock = parseInt(saree.stock) || 0;
-  if (currentStock < sale.quantity) throw new Error("Insufficient stock");
-  updateSaree(sale.sareeId, { stock: currentStock - sale.quantity });
+  // sale.items will be an array: [{sareeId, sareeName, quantity, sellingPrice}, ...]
+  if (!sale.items || !Array.isArray(sale.items) || sale.items.length === 0) {
+    throw new Error("No items in sale");
+  }
+
+  // First pass: validate all stock and calculate totals
+  sale.items.forEach(item => {
+    const saree = getSareeById(item.sareeId);
+    if (!saree) throw new Error(`Saree not found: ${item.sareeId}`);
+
+    const currentStock = parseInt(saree.stock) || 0;
+    if (currentStock < item.quantity) {
+      throw new Error(`Insufficient stock for ${saree.sareeName} (Available: ${currentStock})`);
+    }
+
+    const rowAmount = item.quantity * item.sellingPrice;
+    const rowProfit = rowAmount - (item.quantity * (saree.purchasePrice || 0));
+
+    totalTransactionAmount += rowAmount;
+    totalTransactionProfit += rowProfit;
+  });
+
+  // Second pass: update stock and append rows
+  sale.items.forEach(item => {
+    const saree = getSareeById(item.sareeId);
+    const rowAmount = item.quantity * item.sellingPrice;
+    const rowProfit = rowAmount - (item.quantity * (saree.purchasePrice || 0));
+
+    updateSaree(item.sareeId, { stock: (parseInt(saree.stock) || 0) - item.quantity });
+
+    SALES_SHEET.appendRow([
+      saleId,
+      item.sareeId,
+      item.sareeName,
+      item.quantity,
+      item.sellingPrice,
+      rowAmount,
+      rowProfit,
+      date,
+      sale.customerName || '',
+      sale.customerMobile || ''
+    ]);
+  });
 
   // Update Customer Total Purchases & Amount (Safe Implementation)
   if (sale.customerMobile) {
@@ -123,7 +162,7 @@ function createSale(sale) {
 
           if (totalSpentIdx > -1) {
             const currentSpent = parseFloat(customerData[i][totalSpentIdx]) || 0;
-            CUSTOMER_SHEET.getRange(i + 1, totalSpentIdx + 1).setValue(currentSpent + totalAmount);
+            CUSTOMER_SHEET.getRange(i + 1, totalSpentIdx + 1).setValue(currentSpent + totalTransactionAmount);
           }
           customerFound = true;
           break;
@@ -133,13 +172,12 @@ function createSale(sale) {
       if (!customerFound && sale.customerName) {
         // Create new customer with 1 purchase and initial amount
         const customerId = "CU-" + Math.floor(1000 + Math.random() * 9000);
-        CUSTOMER_SHEET.appendRow([customerId, sale.customerName, sale.customerMobile, '', '', 1, totalAmount]);
+        CUSTOMER_SHEET.appendRow([customerId, sale.customerName, sale.customerMobile, '', '', 1, totalTransactionAmount]);
       }
     }
   }
 
-  SALES_SHEET.appendRow([saleId, sale.sareeId, sale.sareeName, sale.quantity, sale.sellingPrice, totalAmount, profit, date, sale.customerName || '', sale.customerMobile || '']);
-  return { saleId, date, totalAmount, profit, ...sale };
+  return { saleId, date, totalAmount: totalTransactionAmount, profit: totalTransactionProfit, ...sale };
 }
 
 function createPurchase(purchase) {
@@ -226,4 +264,26 @@ function getDashboardStats() {
       date: row[7]
     }))
   };
+}
+
+function getSales() {
+  const data = SALES_SHEET.getDataRange().getValues();
+  const headers = data.shift();
+  if (!headers) return [];
+  return data.map(row => {
+    let obj = {};
+    headers.forEach((h, i) => obj[h] = row[i]);
+    return obj;
+  });
+}
+
+function getPurchases() {
+  const data = PURCHASE_SHEET.getDataRange().getValues();
+  const headers = data.shift();
+  if (!headers) return [];
+  return data.map(row => {
+    let obj = {};
+    headers.forEach((h, i) => obj[h] = row[i]);
+    return obj;
+  });
 }

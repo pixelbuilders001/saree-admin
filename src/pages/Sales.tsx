@@ -10,26 +10,33 @@ import {
     Trash2,
     CheckCircle2,
     AlertCircle,
-    Loader2
+    Loader2,
+    Table as TableIcon
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue
-} from '@/components/ui/select';
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table"
 import { toast } from 'sonner';
 
 export default function SalesPage() {
-    const [selectedSareeId, setSelectedSareeId] = React.useState<string>('');
-    const [quantity, setQuantity] = React.useState<number>(1);
-    const [selectedSaree, setSelectedSaree] = React.useState<Saree | null>(null);
     const [customerName, setCustomerName] = React.useState<string>('');
     const [customerMobile, setCustomerMobile] = React.useState<string>('');
+    const [sareeSearchTerm, setSareeSearchTerm] = React.useState<string>('');
+    const [cart, setCart] = React.useState<Array<{
+        sareeId: string;
+        sareeName: string;
+        quantity: number;
+        sellingPrice: number;
+        purchasePrice: number;
+    }>>([]);
 
     const queryClient = useQueryClient();
 
@@ -51,22 +58,25 @@ export default function SalesPage() {
             queryClient.invalidateQueries({ queryKey: ['customers'] });
             queryClient.invalidateQueries({ queryKey: ['dashboardStats'] });
             toast.success('Sale recorded successfully!');
-            setSelectedSareeId('');
-            setSelectedSaree(null);
-            setQuantity(1);
+            setCart([]);
+            setCustomerName('');
+            setCustomerMobile('');
         },
         onError: () => {
             toast.error('Failed to record sale');
         }
     });
 
-    const handleSareeSelect = (id: string) => {
-        const saree = sarees?.find(s => s.id === id);
-        if (saree) {
-            setSelectedSaree(saree);
-            setSelectedSareeId(id);
-        }
-    };
+    const filteredSarees = React.useMemo(() => {
+        if (!Array.isArray(sarees)) return [];
+        return sarees.filter(s =>
+            s.status === 'active' && (
+                s.sareeName.toLowerCase().includes(sareeSearchTerm.toLowerCase()) ||
+                s.id.toLowerCase().includes(sareeSearchTerm.toLowerCase()) ||
+                s.barcode?.toLowerCase().includes(sareeSearchTerm.toLowerCase())
+            )
+        );
+    }, [sarees, sareeSearchTerm]);
 
     const handleCustomerSearch = () => {
         if (!customerMobile) {
@@ -87,21 +97,23 @@ export default function SalesPage() {
         }
     };
 
-    const totalAmount = (selectedSaree?.sellingPrice || 0) * quantity;
-    const estimatedProfit = ((selectedSaree?.sellingPrice || 0) - (selectedSaree?.purchasePrice || 0)) * quantity;
+    const handleRemoveFromCart = (index: number) => {
+        const newCart = [...cart];
+        newCart.splice(index, 1);
+        setCart(newCart);
+    };
+
+    const cartTotal = cart.reduce((sum, item) => sum + (item.sellingPrice * item.quantity), 0);
+    const cartProfit = cart.reduce((sum, item) => sum + ((item.sellingPrice - item.purchasePrice) * item.quantity), 0);
 
     const handleCreateSale = async () => {
-        if (!selectedSaree) return;
-        if (quantity > selectedSaree.stock) {
-            toast.error('Not enough stock available');
+        if (cart.length === 0) {
+            toast.error('Cart is empty');
             return;
         }
 
         createSaleMutation.mutate({
-            sareeId: selectedSaree.id,
-            sareeName: selectedSaree.sareeName,
-            quantity,
-            sellingPrice: selectedSaree.sellingPrice,
+            items: cart.map(({ purchasePrice: _, ...item }) => item),
             customerName,
             customerMobile,
         });
@@ -109,79 +121,135 @@ export default function SalesPage() {
 
     return (
         <div className="space-y-6">
-            <div>
-                <h1 className="text-3xl font-bold text-maroon">Create New Sale</h1>
-                <p className="text-gray-500">Record a customer purchase and update inventory</p>
-            </div>
-
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 space-y-6">
                     <Card className="border-gold/20 shadow-md">
                         <CardHeader className="bg-cream/20 border-b border-gold/10">
                             <CardTitle className="text-xl text-maroon flex items-center gap-2">
-                                <ShoppingCart className="h-5 w-5" />
-                                Sale Details
+                                <Search className="h-5 w-5" />
+                                Add Sarees to Sale
                             </CardTitle>
                         </CardHeader>
-                        <CardContent className="pt-6 space-y-6">
-                            <div className="space-y-2">
-                                <label className="text-sm font-semibold text-maroon">Select Saree</label>
-                                <Select value={selectedSareeId} onValueChange={handleSareeSelect}>
-                                    <SelectTrigger className="border-gold/30">
-                                        <SelectValue placeholder={isLoadingSarees ? "Loading collection..." : "Select a saree by name or barcode"} />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {Array.isArray(sarees) && sarees.filter(s => s.status === 'active').map(saree => (
-                                            <SelectItem key={saree.id} value={saree.id}>
-                                                {saree.sareeName} ({saree.barcode}) - Stock: {saree.stock}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            {selectedSaree && (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-cream/10 rounded-lg border border-gold/10">
-                                    <div className="flex gap-4">
-                                        <div>
-                                            <h4 className="font-bold text-maroon">{selectedSaree.sareeName}</h4>
-                                            <p className="text-sm text-gray-500">{selectedSaree.category} | {selectedSaree.fabric}</p>
-                                            <p className="text-sm font-semibold mt-1">Rack: {selectedSaree.rackNo}</p>
-                                        </div>
-                                    </div>
-                                    <div className="space-y-3">
-                                        <div className="flex justify-between text-sm">
-                                            <span className="text-gray-500">Unit Price:</span>
-                                            <span className="font-bold text-maroon">₹{selectedSaree.sellingPrice.toLocaleString()}</span>
-                                        </div>
-                                        <div className="flex justify-between text-sm">
-                                            <span className="text-gray-500">Available Stock:</span>
-                                            <span className={selectedSaree.stock < 5 ? "text-red-600 font-bold" : "text-green-600 font-bold"}>
-                                                {selectedSaree.stock}
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-
-                            <div className="space-y-2">
-                                <label className="text-sm font-semibold text-maroon">Quantity</label>
-                                <div className="flex items-center gap-4">
+                        <CardContent className="pt-6">
+                            <div className="space-y-2 relative">
+                                <label className="text-sm font-semibold text-maroon">Search by Name, ID or Barcode</label>
+                                <div className="relative">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                                     <Input
-                                        type="number"
-                                        min="1"
-                                        max={selectedSaree?.stock || 1}
-                                        value={quantity}
-                                        onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
-                                        className="border-gold/30 max-w-[150px]"
+                                        placeholder="Type to search..."
+                                        className="pl-10 border-gold/30 h-12 text-lg"
+                                        value={sareeSearchTerm}
+                                        onChange={(e) => setSareeSearchTerm(e.target.value)}
+                                        autoFocus
                                     />
-                                    <div className="text-sm text-gray-500">
-                                        Max: {selectedSaree?.stock || 0}
-                                    </div>
                                 </div>
+
+                                {sareeSearchTerm && (
+                                    <Card className="absolute z-50 w-full mt-1 border-gold/20 shadow-xl max-h-[300px] overflow-y-auto">
+                                        <CardContent className="p-0">
+                                            {filteredSarees.length > 0 ? (
+                                                filteredSarees.map(saree => (
+                                                    <div
+                                                        key={saree.id}
+                                                        className="p-3 hover:bg-cream/20 cursor-pointer border-b border-gray-50 last:border-0 flex justify-between items-center"
+                                                        onClick={() => {
+                                                            const existingItemIndex = cart.findIndex(item => item.sareeId === saree.id);
+                                                            if (existingItemIndex > -1) {
+                                                                const newCart = [...cart];
+                                                                newCart[existingItemIndex].quantity += 1;
+                                                                setCart(newCart);
+                                                            } else {
+                                                                setCart([...cart, {
+                                                                    sareeId: saree.id,
+                                                                    sareeName: saree.sareeName,
+                                                                    quantity: 1,
+                                                                    sellingPrice: saree.sellingPrice,
+                                                                    purchasePrice: saree.purchasePrice
+                                                                }]);
+                                                            }
+                                                            setSareeSearchTerm('');
+                                                            toast.success(`${saree.sareeName} added to cart`);
+                                                        }}
+                                                    >
+                                                        <div>
+                                                            <div className="font-bold text-maroon">{saree.sareeName}</div>
+                                                            <div className="text-xs text-gray-500">{saree.id} | {saree.category}</div>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <div className="font-bold text-maroon">₹{saree.sellingPrice.toLocaleString()}</div>
+                                                            <div className={`text-xs ${saree.stock < 5 ? 'text-red-600' : 'text-green-600'}`}>Stock: {saree.stock}</div>
+                                                        </div>
+                                                    </div>
+                                                ))
+                                            ) : (
+                                                <div className="p-4 text-center text-gray-500 italic">No sarees match your search</div>
+                                            )}
+                                        </CardContent>
+                                    </Card>
+                                )}
                             </div>
                         </CardContent>
                     </Card>
+
+                    {cart.length > 0 && (
+                        <Card className="border-gold/20 shadow-md">
+                            <CardHeader className="bg-cream/20 border-b border-gold/10">
+                                <CardTitle className="text-xl text-maroon flex items-center gap-2">
+                                    <ShoppingCart className="h-5 w-5" />
+                                    Shopping Cart ({cart.length})
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="p-0">
+                                <Table>
+                                    <TableHeader className="bg-cream/30">
+                                        <TableRow>
+                                            <TableHead>Item</TableHead>
+                                            <TableHead className="text-center">Qty</TableHead>
+                                            <TableHead className="text-right">Price</TableHead>
+                                            <TableHead className="text-right">Total</TableHead>
+                                            <TableHead className="text-right"></TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {cart.map((item, index) => (
+                                            <TableRow key={index}>
+                                                <TableCell className="font-medium text-maroon">
+                                                    <div>{item.sareeName}</div>
+                                                    <div className="text-xs text-gray-500 font-normal">{item.sareeId}</div>
+                                                </TableCell>
+                                                <TableCell className="text-center">
+                                                    <Input
+                                                        type="number"
+                                                        className="w-20 h-8 text-center mx-auto"
+                                                        value={item.quantity}
+                                                        min="1"
+                                                        onChange={(e) => {
+                                                            const val = parseInt(e.target.value) || 1;
+                                                            const newCart = [...cart];
+                                                            newCart[index].quantity = val;
+                                                            setCart(newCart);
+                                                        }}
+                                                    />
+                                                </TableCell>
+                                                <TableCell className="text-right">₹{item.sellingPrice.toLocaleString()}</TableCell>
+                                                <TableCell className="text-right font-bold">₹{(item.sellingPrice * item.quantity).toLocaleString()}</TableCell>
+                                                <TableCell className="text-right">
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="text-red-500 hover:text-red-700 p-0 h-auto"
+                                                        onClick={() => handleRemoveFromCart(index)}
+                                                    >
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </Button>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </CardContent>
+                        </Card>
+                    )}
 
                     <Card className="border-gold/20 shadow-md">
                         <CardHeader className="bg-cream/20 border-b border-gold/10">
@@ -229,7 +297,7 @@ export default function SalesPage() {
                         <CardContent className="pt-6 space-y-4">
                             <div className="flex justify-between text-gold/80">
                                 <span>Subtotal</span>
-                                <span className="font-semibold">₹{totalAmount.toLocaleString()}</span>
+                                <span className="font-semibold">₹{cartTotal.toLocaleString()}</span>
                             </div>
                             <div className="flex justify-between text-gold/80">
                                 <span>Discount</span>
@@ -237,17 +305,17 @@ export default function SalesPage() {
                             </div>
                             <div className="pt-4 border-t border-gold/20 flex justify-between text-2xl font-bold">
                                 <span>Total</span>
-                                <span>₹{totalAmount.toLocaleString()}</span>
+                                <span>₹{cartTotal.toLocaleString()}</span>
                             </div>
                             <div className="pt-2 flex justify-between text-xs text-gold/50">
                                 <span>Estimated Profit</span>
-                                <span>₹{estimatedProfit.toLocaleString()}</span>
+                                <span>₹{cartProfit.toLocaleString()}</span>
                             </div>
                         </CardContent>
                         <CardFooter className="pb-6">
                             <Button
                                 className="w-full bg-gold hover:bg-gold-dark text-maroon font-bold h-14 text-lg gap-2"
-                                disabled={!selectedSaree || createSaleMutation.isPending}
+                                disabled={cart.length === 0 || createSaleMutation.isPending}
                                 onClick={handleCreateSale}
                             >
                                 {createSaleMutation.isPending ? <Loader2 className="h-6 w-6 animate-spin" /> : <CheckCircle2 className="h-6 w-6" />}
@@ -255,17 +323,6 @@ export default function SalesPage() {
                             </Button>
                         </CardFooter>
                     </Card>
-
-                    {selectedSaree && selectedSaree.stock < 5 && (
-                        <Card className="bg-red-50 border-red-200">
-                            <CardContent className="p-4 flex gap-3 text-red-700">
-                                <AlertCircle className="h-5 w-5 shrink-0" />
-                                <p className="text-sm font-medium">
-                                    Low Stock Warning: Only {selectedSaree.stock} items remaining.
-                                </p>
-                            </CardContent>
-                        </Card>
-                    )}
                 </div>
             </div>
         </div>

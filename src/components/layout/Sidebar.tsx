@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { useAuthStore } from '@/store/useAuthStore';
 
 const navItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
@@ -25,6 +26,7 @@ const navItems = [
 
 export const Sidebar = () => {
     const [isOpen, setIsOpen] = React.useState(false);
+    const logout = useAuthStore(state => state.logout);
 
     return (
         <>
@@ -43,9 +45,9 @@ export const Sidebar = () => {
             )}>
                 <div className="flex flex-col h-full">
                     <div className="p-6 border-b border-gold/20">
-                        <h1 className="text-2xl font-bold text-gold flex items-center gap-2">
-                            <span className="bg-gold text-maroon p-1 rounded">S</span>
-                            Saree Shop
+                        <h1 className="text-xl font-bold text-gold flex items-center gap-2">
+                            <span className="bg-gold text-maroon p-1 rounded">KS</span>
+                            Kasturi Sarees
                         </h1>
                     </div>
 
@@ -73,7 +75,7 @@ export const Sidebar = () => {
                             variant="secondary"
                             className="w-full justify-start gap-3 bg-transparent text-white border-white/20 hover:bg-white/10"
                             onClick={() => {
-                                // Logout logic
+                                logout();
                             }}
                         >
                             <LogOut className="h-5 w-5" />

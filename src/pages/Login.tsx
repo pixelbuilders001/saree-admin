@@ -1,4 +1,5 @@
 import React from 'react';
+import { Eye, EyeOff } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -10,8 +11,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter }
 import { toast } from 'sonner';
 
 const loginSchema = z.object({
-    username: z.string().min(3, 'Username must be at least 3 characters'),
-    password: z.string().min(5, 'Password must be at least 5 characters'),
+    password: z.string().min(1, 'Password is required'),
 });
 
 type LoginFormValues = z.infer<typeof loginSchema>;
@@ -19,6 +19,7 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 export default function LoginPage() {
     const navigate = useNavigate();
     const { login, isAuthenticated } = useAuthStore();
+    const [showPassword, setShowPassword] = React.useState(false);
 
     React.useEffect(() => {
         if (isAuthenticated) {
@@ -31,10 +32,13 @@ export default function LoginPage() {
     });
 
     const onSubmit = async (data: LoginFormValues) => {
-        // Allowing any credentials for dummy/testing purposes as requested
-        login({ username: data.username, role: 'admin' });
-        toast.success('Login successful (Dummy Mode)!');
-        navigate('/', { replace: true });
+        if (data.password === 'Admin@123') {
+            login();
+            toast.success('Login successful!');
+            navigate('/', { replace: true });
+        } else {
+            toast.error('Invalid password. Please try again.');
+        }
     };
 
     return (
@@ -46,34 +50,30 @@ export default function LoginPage() {
             <Card className="w-full max-w-md border-gold/20 shadow-2xl z-10">
                 <CardHeader className="text-center space-y-1">
                     <div className="mx-auto w-16 h-16 bg-maroon rounded-full flex items-center justify-center mb-4 border-2 border-gold shadow-lg">
-                        <span className="text-2xl font-bold text-gold">S</span>
+                        <span className="text-2xl font-bold text-gold">K</span>
                     </div>
-                    <CardTitle className="text-3xl font-bold text-maroon">Saree Shop</CardTitle>
-                    <CardDescription className="text-gray-500 font-medium">Premium Inventory Management System</CardDescription>
-                    <div className="mt-2 p-2 bg-gold/10 rounded-md border border-gold/20">
-                        <p className="text-[10px] text-maroon/60 uppercase tracking-wider font-bold">Testing Mode</p>
-                        <p className="text-xs text-maroon/80 italic">Use any username & password to enter</p>
-                    </div>
+                    <CardTitle className="text-3xl font-bold text-maroon">Kasturi Sarees Admin</CardTitle>
+                    <CardDescription className="text-gray-500 font-medium">Secure Inventory Management System</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
                         <div className="space-y-2">
-                            <label className="text-sm font-semibold text-maroon/80 ml-1">Username</label>
-                            <Input
-                                {...register('username')}
-                                placeholder="Enter username"
-                                className="border-gold/30 focus-visible:ring-maroon"
-                            />
-                            {errors.username && <p className="text-xs text-red-500 ml-1">{errors.username.message}</p>}
-                        </div>
-                        <div className="space-y-2">
-                            <label className="text-sm font-semibold text-maroon/80 ml-1">Password</label>
-                            <Input
-                                {...register('password')}
-                                type="password"
-                                placeholder="Enter password"
-                                className="border-gold/30 focus-visible:ring-maroon"
-                            />
+                            <label className="text-sm font-semibold text-maroon/80 ml-1">Admin Password</label>
+                            <div className="relative">
+                                <Input
+                                    {...register('password')}
+                                    type={showPassword ? 'text' : 'password'}
+                                    placeholder="Enter admin password"
+                                    className="border-gold/30 focus-visible:ring-maroon h-11 pr-10"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-maroon/50 hover:text-maroon transition-colors"
+                                >
+                                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                                </button>
+                            </div>
                             {errors.password && <p className="text-xs text-red-500 ml-1">{errors.password.message}</p>}
                         </div>
                         <Button
@@ -81,12 +81,12 @@ export default function LoginPage() {
                             className="w-full bg-maroon hover:bg-maroon-dark text-gold font-bold h-12 mt-4 text-lg"
                             disabled={isSubmitting}
                         >
-                            {isSubmitting ? 'Authenticating...' : 'Sign In'}
+                            {isSubmitting ? 'Verifying...' : 'Access Dashboard'}
                         </Button>
                     </form>
                 </CardContent>
                 <CardFooter className="flex flex-col items-center">
-                    <p className="text-xs text-gray-400">© 2026 Saree Shop Admin Panel</p>
+                    <p className="text-xs text-gray-400">© 2026 Kasturi Sarees Admin portal</p>
                 </CardFooter>
             </Card>
         </div>
