@@ -25,6 +25,8 @@ import {
     TableRow,
 } from "@/components/ui/table"
 import { toast } from 'sonner';
+import { ReceiptModal } from '@/components/ReceiptModal';
+import type { Sale } from '@/services/salesService';
 
 export default function SalesPage() {
     const [customerName, setCustomerName] = React.useState<string>('');
@@ -37,6 +39,8 @@ export default function SalesPage() {
         sellingPrice: number;
         purchasePrice: number;
     }>>([]);
+    const [lastCompletedSale, setLastCompletedSale] = React.useState<Sale | null>(null);
+    const [isReceiptModalOpen, setIsReceiptModalOpen] = React.useState(false);
 
     const queryClient = useQueryClient();
 
@@ -52,7 +56,7 @@ export default function SalesPage() {
 
     const createSaleMutation = useMutation({
         mutationFn: salesService.createSale,
-        onSuccess: () => {
+        onSuccess: (data: Sale) => {
             queryClient.invalidateQueries({ queryKey: ['sales'] });
             queryClient.invalidateQueries({ queryKey: ['sarees'] });
             queryClient.invalidateQueries({ queryKey: ['customers'] });
@@ -61,6 +65,8 @@ export default function SalesPage() {
             setCart([]);
             setCustomerName('');
             setCustomerMobile('');
+            setLastCompletedSale(data);
+            setIsReceiptModalOpen(true);
         },
         onError: () => {
             toast.error('Failed to record sale');
@@ -325,6 +331,12 @@ export default function SalesPage() {
                     </Card>
                 </div>
             </div>
+
+            <ReceiptModal
+                isOpen={isReceiptModalOpen}
+                onClose={() => setIsReceiptModalOpen(false)}
+                sale={lastCompletedSale}
+            />
         </div>
     );
 }
