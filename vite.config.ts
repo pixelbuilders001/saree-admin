@@ -11,7 +11,7 @@ export default defineConfig({
   },
   server: {
     allowedHosts: [
-      'mold-attacks-programmer-sur.trycloudflare.com',
+      'modelling-peripheral-loose-excellent.trycloudflare.com',
       'saree-admin-chi.vercel.app'
     ]
   }

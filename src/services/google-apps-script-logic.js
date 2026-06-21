@@ -16,6 +16,7 @@ const SAREE_SHEET = SS.getSheetByName("Sarees");
 const SALES_SHEET = SS.getSheetByName("Sales");
 const PURCHASE_SHEET = SS.getSheetByName("Purchases");
 const CUSTOMER_SHEET = SS.getSheetByName("Customers");
+const SYNC_SHEET = SS.getSheetByName("Sync");
 
 function doPost(e) {
   try {
@@ -41,6 +42,9 @@ function doPost(e) {
       case 'createCustomer': result = createCustomer(data.customer); break;
 
       case 'getDashboardStats': result = getDashboardStats(); break;
+
+      case 'pushScannedItem': result = pushScannedItem(data.sessionId, data.barcode); break;
+      case 'getScannedItems': result = getScannedItems(data.sessionId); break;
 
       default: throw new Error('Invalid Action: ' + action);
     }
@@ -286,4 +290,37 @@ function getPurchases() {
     headers.forEach((h, i) => obj[h] = row[i]);
     return obj;
   });
+}
+
+function pushScannedItem(sessionId, barcode) {
+  if (!SYNC_SHEET) {
+    SS.insertSheet("Sync");
+    const sheet = SS.getSheetByName("Sync");
+    sheet.appendRow(["sessionId", "barcode", "timestamp"]);
+  }
+  const sheet = SS.getSheetByName("Sync");
+  sheet.appendRow([sessionId, barcode, new Date().toISOString()]);
+  return { success: true };
+}
+
+function getScannedItems(sessionId) {
+  if (!SYNC_SHEET) return [];
+  const data = SYNC_SHEET.getDataRange().getValues();
+  const headers = data.shift();
+  const items = [];
+  const rowsToKeep = [headers];
+
+  data.forEach(row => {
+    if (row[0] == sessionId) {
+      items.push({ barcode: row[1], timestamp: row[2] });
+    } else {
+      rowsToKeep.push(row);
+    }
+  });
+
+  // Clear retrieved items and write back others
+  SYNC_SHEET.clear();
+  SYNC_SHEET.getRange(1, 1, rowsToKeep.length, rowsToKeep[0].length).setValues(rowsToKeep);
+
+  return items;
 }

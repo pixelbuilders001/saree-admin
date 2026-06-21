@@ -1,5 +1,6 @@
 import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import { inventoryService, type Saree } from '@/services/inventoryService';
 import { salesService } from '@/services/salesService';
 import { customerService } from '@/services/customerService';
@@ -12,7 +13,10 @@ import {
     AlertCircle,
     Loader2,
     Table as TableIcon,
-    Camera
+    Camera,
+    Wifi,
+    WifiOff,
+    Smartphone
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,6 +32,8 @@ import {
 import { toast } from 'sonner';
 import { ReceiptModal } from '@/components/ReceiptModal';
 import { BarcodeScanner } from '@/components/sales/BarcodeScanner';
+import { RemoteScannerLink } from '@/components/sales/RemoteScannerLink';
+import { syncService } from '@/services/syncService';
 import { playBeep } from '@/lib/audio';
 import type { Sale } from '@/services/salesService';
 
@@ -45,6 +51,22 @@ export default function SalesPage() {
     const [lastCompletedSale, setLastCompletedSale] = React.useState<Sale | null>(null);
     const [isReceiptModalOpen, setIsReceiptModalOpen] = React.useState(false);
     const [isScannerOpen, setIsScannerOpen] = React.useState(false);
+    const [lastScannedBarcode, setLastScannedBarcode] = React.useState<string | null>(null);
+    const [isProcessingScan, setIsProcessingScan] = React.useState(false);
+    const [isRemoteLinkOpen, setIsRemoteLinkOpen] = React.useState(false);
+    const [searchParams] = useSearchParams();
+    const remoteMode = searchParams.get('remoteMode');
+    const urlSessionId = searchParams.get('sessionId');
+
+    // Persist session ID for the laptop
+    const [sessionId] = React.useState(() => {
+        if (urlSessionId) return urlSessionId;
+        const saved = localStorage.getItem('sales_session_id');
+        if (saved) return saved;
+        const id = 'S-' + Math.random().toString(36).substring(2, 7).toUpperCase();
+        localStorage.setItem('sales_session_id', id);
+        return id;
+    });
 
     const queryClient = useQueryClient();
 
@@ -117,24 +139,51 @@ export default function SalesPage() {
     const cartProfit = cart.reduce((sum, item) => sum + ((item.sellingPrice - item.purchasePrice) * item.quantity), 0);
 
     const handleAddToCart = (saree: Saree) => {
-        const existingItemIndex = cart.findIndex(item => item.sareeId === saree.id);
-        if (existingItemIndex > -1) {
-            const newCart = [...cart];
-            newCart[existingItemIndex].quantity += 1;
-            setCart(newCart);
-        } else {
-            setCart([...cart, {
-                sareeId: saree.id,
-                sareeName: saree.sareeName,
-                quantity: 1,
-                sellingPrice: saree.sellingPrice,
-                purchasePrice: saree.purchasePrice
-            }]);
-        }
+        setCart(prevCart => {
+            const existingItemIndex = prevCart.findIndex(item => item.sareeId === saree.id);
+            if (existingItemIndex > -1) {
+                const newCart = [...prevCart];
+                newCart[existingItemIndex] = {
+                    ...newCart[existingItemIndex],
+                    quantity: newCart[existingItemIndex].quantity + 1
+                };
+                return newCart;
+            } else {
+                return [...prevCart, {
+                    sareeId: saree.id,
+                    sareeName: saree.sareeName,
+                    quantity: 1,
+                    sellingPrice: saree.sellingPrice,
+                    purchasePrice: saree.purchasePrice
+                }];
+            }
+        });
         toast.success(`${saree.sareeName} added to cart`);
     };
 
     const handleBarcodeScan = (decodedText: string) => {
+        if (isProcessingScan || (lastScannedBarcode === decodedText)) return;
+
+        setIsProcessingScan(true);
+        setLastScannedBarcode(decodedText);
+
+        // Reset cooldown after 2 seconds
+        setTimeout(() => {
+            setIsProcessingScan(false);
+            setLastScannedBarcode(null);
+        }, 2000);
+
+        if (remoteMode === 'scanner') {
+            // In scanner mode, just push to sync
+            syncService.pushScannedItem(sessionId, decodedText)
+                .then(() => {
+                    playBeep();
+                    toast.success(`Scanned: ${decodedText}`);
+                })
+                .catch(() => toast.error("Failed to sync scan"));
+            return;
+        }
+
         const saree = sarees?.find(s =>
             s.id.toLowerCase() === decodedText.toLowerCase() ||
             s.barcode?.toLowerCase() === decodedText.toLowerCase()
@@ -143,11 +192,38 @@ export default function SalesPage() {
         if (saree) {
             playBeep();
             handleAddToCart(saree);
-            setIsScannerOpen(false); // Close scanner after successful scan, or keep it open if multi-scan is preferred
+            setIsScannerOpen(false); // Close scanner after successful scan
         } else {
             toast.error(`No saree found with barcode: ${decodedText}`);
         }
     };
+
+    // Polling logic for Master (Laptop) mode
+    React.useEffect(() => {
+        if (remoteMode === 'scanner' || !sarees) return;
+
+        const interval = setInterval(async () => {
+            try {
+                const items = await syncService.getScannedItems(sessionId);
+                if (items && items.length > 0) {
+                    items.forEach(item => {
+                        const saree = sarees.find(s =>
+                            s.id.toLowerCase() === item.barcode.toLowerCase() ||
+                            s.barcode?.toLowerCase() === item.barcode.toLowerCase()
+                        );
+                        if (saree) {
+                            playBeep();
+                            handleAddToCart(saree);
+                        }
+                    });
+                }
+            } catch (err) {
+                console.error("Polling error:", err);
+            }
+        }, 2000);
+
+        return () => clearInterval(interval);
+    }, [sessionId, remoteMode, sarees]);
 
     const handleCreateSale = async () => {
         if (cart.length === 0) {
@@ -162,16 +238,67 @@ export default function SalesPage() {
         });
     };
 
+    if (remoteMode === 'scanner') {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[80vh] p-4 space-y-6">
+                <Card className="w-full max-w-sm border-gold/20 shadow-xl overflow-hidden">
+                    <CardHeader className="bg-maroon text-gold text-center py-8">
+                        <div className="flex justify-center mb-4">
+                            <div className="p-4 bg-gold/10 rounded-full border-2 border-gold/20 animate-pulse">
+                                <Smartphone className="h-12 w-12" />
+                            </div>
+                        </div>
+                        <CardTitle className="text-2xl">Remote Scanner</CardTitle>
+                        <p className="text-gold/60 mt-2 font-mono">Session: {sessionId}</p>
+                    </CardHeader>
+                    <CardContent className="p-6 space-y-6">
+                        <p className="text-center text-gray-500 italic">
+                            Your phone is now acting as a wireless scanner for your laptop.
+                        </p>
+                        <Button
+                            className="w-full h-20 bg-gold hover:bg-gold-dark text-maroon font-bold text-xl gap-3 shadow-lg"
+                            onClick={() => setIsScannerOpen(true)}
+                        >
+                            <Camera className="h-8 w-8" />
+                            Open Camera
+                        </Button>
+                        <div className="pt-4 border-t border-gray-100 flex flex-col items-center gap-2">
+                            <div className="flex items-center gap-2 text-green-600 font-medium">
+                                <Wifi className="h-4 w-4" /> Connected to Sync
+                            </div>
+                            <Button variant="ghost" className="text-gray-400" onClick={() => window.location.href = '/sales'}>
+                                Exit Scanner Mode
+                            </Button>
+                        </div>
+                    </CardContent>
+                </Card>
+                <BarcodeScanner
+                    isOpen={isScannerOpen}
+                    onClose={() => setIsScannerOpen(false)}
+                    onScan={handleBarcodeScan}
+                />
+            </div>
+        );
+    }
     return (
         <div className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 space-y-6">
                     <Card className="border-gold/20 shadow-md">
-                        <CardHeader className="bg-cream/20 border-b border-gold/10">
+                        <CardHeader className="bg-cream/20 border-b border-gold/10 flex flex-row items-center justify-between py-4">
                             <CardTitle className="text-xl text-maroon flex items-center gap-2">
                                 <Search className="h-5 w-5" />
                                 Add Sarees to Sale
                             </CardTitle>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-maroon hover:bg-maroon/5 gap-2 border border-maroon/10"
+                                onClick={() => setIsRemoteLinkOpen(true)}
+                            >
+                                <Smartphone className="h-4 w-4" />
+                                Remote Scan
+                            </Button>
                         </CardHeader>
                         <CardContent className="pt-6">
                             <div className="space-y-2 relative">
@@ -375,6 +502,11 @@ export default function SalesPage() {
                 isOpen={isScannerOpen}
                 onClose={() => setIsScannerOpen(false)}
                 onScan={handleBarcodeScan}
+            />
+            <RemoteScannerLink
+                sessionId={sessionId}
+                isOpen={isRemoteLinkOpen}
+                onClose={() => setIsRemoteLinkOpen(false)}
             />
         </div>
     );

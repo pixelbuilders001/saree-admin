@@ -1,20 +1,41 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import type { Sale } from './salesService';
+import { NotoSansDevanagariBase64 } from '@/assets/fonts/HindiFont';
 
 export const receiptService = {
     generatePDF: (sale: Sale): jsPDF => {
         const doc = new jsPDF();
+
+        // Register Hindi font
+        doc.addFileToVFS('NotoSansDevanagari-Regular.ttf', NotoSansDevanagariBase64);
+        doc.addFont('NotoSansDevanagari-Regular.ttf', 'NotoSansDevanagari', 'normal');
+
+        // Use Helvetica as default for better reliability
+        doc.setFont('helvetica');
+
         const shopName = "Kasturi Sarees";
         const shopAddress = "Near City Center, Main Market";
         const shopContact = "+91 XXXXX XXXXX";
 
+        const drawText = (text: string, x: number, y: number, options?: any) => {
+            const hindiRegex = /[\u0900-\u097F]/;
+            if (hindiRegex.test(text)) {
+                doc.setFont('NotoSansDevanagari');
+            } else {
+                doc.setFont('helvetica');
+            }
+            doc.text(text, x, y, options);
+        };
+
         // Header
         doc.setFontSize(22);
+        doc.setFont("helvetica", "bold");
         doc.setTextColor(128, 0, 0); // Maroon
         doc.text(shopName, 105, 20, { align: 'center' });
 
         doc.setFontSize(10);
+        doc.setFont("helvetica", "normal");
         doc.setTextColor(100);
         doc.text(shopAddress, 105, 27, { align: 'center' });
         doc.text(`Contact: ${shopContact}`, 105, 32, { align: 'center' });
@@ -26,15 +47,17 @@ export const receiptService = {
         // Bill Info
         doc.setFontSize(12);
         doc.setTextColor(0);
-        doc.text(`Bill No: ${sale.saleId}`, 20, 50);
-        doc.text(`Date: ${new Date(sale.date).toLocaleDateString()}`, 190, 50, { align: 'right' });
+        drawText(`Bill No: ${sale.saleId}`, 20, 50);
+        drawText(`Date: ${new Date(sale.date).toLocaleDateString()}`, 190, 50, { align: 'right' });
 
         if (sale.customerName || sale.customerMobile) {
             doc.setFontSize(11);
-            doc.text("Customer Details:", 20, 62);
+            doc.setFont("helvetica", "bold");
+            drawText("Customer Details:", 20, 62);
             doc.setFontSize(10);
-            doc.text(`Name: ${sale.customerName || 'N/A'}`, 20, 68);
-            doc.text(`Mobile: ${sale.customerMobile || 'N/A'}`, 20, 73);
+            doc.setFont("helvetica", "normal");
+            drawText(`Name: ${sale.customerName || 'N/A'}`, 20, 68);
+            drawText(`Mobile: ${sale.customerMobile || 'N/A'}`, 20, 73);
         }
 
         // Table
@@ -52,8 +75,22 @@ export const receiptService = {
             head: [tableColumn],
             body: tableRows,
             theme: 'striped',
-            headStyles: { fillColor: [128, 0, 0], textColor: [255, 255, 255] },
+            headStyles: {
+                fillColor: [128, 0, 0],
+                textColor: [255, 255, 255],
+                font: 'helvetica'
+            },
             alternateRowStyles: { fillColor: [245, 245, 220] },
+            styles: {
+                font: 'helvetica'
+            },
+            didParseCell: (data) => {
+                // Check if the cell content contains Hindi characters
+                const hindiRegex = /[\u0900-\u097F]/;
+                if (hindiRegex.test(data.cell.text.join(''))) {
+                    data.cell.styles.font = 'NotoSansDevanagari';
+                }
+            },
             margin: { left: 20, right: 20 },
         });
 
@@ -62,13 +99,13 @@ export const receiptService = {
         // Total
         doc.setFontSize(14);
         doc.setFont("helvetica", "bold");
-        doc.text(`Total Amount: Rs. ${sale.totalAmount.toLocaleString()}`, 190, finalY, { align: 'right' });
+        drawText(`Total Amount: Rs. ${sale.totalAmount.toLocaleString()}`, 190, finalY, { align: 'right' });
 
         // Footer
         doc.setFontSize(10);
         doc.setFont("helvetica", "italic");
         doc.setTextColor(150);
-        doc.text("Thank you for shopping with us!", 105, finalY + 30, { align: 'center' });
+        drawText("Thank you for shopping with us!", 105, finalY + 30, { align: 'center' });
 
         return doc;
     },
