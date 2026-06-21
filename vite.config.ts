@@ -9,4 +9,10 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  server: {
+    allowedHosts: [
+      'mold-attacks-programmer-sur.trycloudflare.com',
+      'saree-admin-chi.vercel.app'
+    ]
+  }
 })

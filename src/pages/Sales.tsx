@@ -11,7 +11,8 @@ import {
     CheckCircle2,
     AlertCircle,
     Loader2,
-    Table as TableIcon
+    Table as TableIcon,
+    Camera
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,6 +27,8 @@ import {
 } from "@/components/ui/table"
 import { toast } from 'sonner';
 import { ReceiptModal } from '@/components/ReceiptModal';
+import { BarcodeScanner } from '@/components/sales/BarcodeScanner';
+import { playBeep } from '@/lib/audio';
 import type { Sale } from '@/services/salesService';
 
 export default function SalesPage() {
@@ -41,6 +44,7 @@ export default function SalesPage() {
     }>>([]);
     const [lastCompletedSale, setLastCompletedSale] = React.useState<Sale | null>(null);
     const [isReceiptModalOpen, setIsReceiptModalOpen] = React.useState(false);
+    const [isScannerOpen, setIsScannerOpen] = React.useState(false);
 
     const queryClient = useQueryClient();
 
@@ -112,6 +116,39 @@ export default function SalesPage() {
     const cartTotal = cart.reduce((sum, item) => sum + (item.sellingPrice * item.quantity), 0);
     const cartProfit = cart.reduce((sum, item) => sum + ((item.sellingPrice - item.purchasePrice) * item.quantity), 0);
 
+    const handleAddToCart = (saree: Saree) => {
+        const existingItemIndex = cart.findIndex(item => item.sareeId === saree.id);
+        if (existingItemIndex > -1) {
+            const newCart = [...cart];
+            newCart[existingItemIndex].quantity += 1;
+            setCart(newCart);
+        } else {
+            setCart([...cart, {
+                sareeId: saree.id,
+                sareeName: saree.sareeName,
+                quantity: 1,
+                sellingPrice: saree.sellingPrice,
+                purchasePrice: saree.purchasePrice
+            }]);
+        }
+        toast.success(`${saree.sareeName} added to cart`);
+    };
+
+    const handleBarcodeScan = (decodedText: string) => {
+        const saree = sarees?.find(s =>
+            s.id.toLowerCase() === decodedText.toLowerCase() ||
+            s.barcode?.toLowerCase() === decodedText.toLowerCase()
+        );
+
+        if (saree) {
+            playBeep();
+            handleAddToCart(saree);
+            setIsScannerOpen(false); // Close scanner after successful scan, or keep it open if multi-scan is preferred
+        } else {
+            toast.error(`No saree found with barcode: ${decodedText}`);
+        }
+    };
+
     const handleCreateSale = async () => {
         if (cart.length === 0) {
             toast.error('Cart is empty');
@@ -139,15 +176,26 @@ export default function SalesPage() {
                         <CardContent className="pt-6">
                             <div className="space-y-2 relative">
                                 <label className="text-sm font-semibold text-maroon">Search by Name, ID or Barcode</label>
-                                <div className="relative">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                                    <Input
-                                        placeholder="Type to search..."
-                                        className="pl-10 border-gold/30 h-12 text-lg"
-                                        value={sareeSearchTerm}
-                                        onChange={(e) => setSareeSearchTerm(e.target.value)}
-                                        autoFocus
-                                    />
+                                <div className="flex gap-2">
+                                    <div className="relative flex-1">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                        <Input
+                                            placeholder="Type name, ID or scan barcode..."
+                                            className="pl-10 border-gold/30 h-12 text-lg"
+                                            value={sareeSearchTerm}
+                                            onChange={(e) => setSareeSearchTerm(e.target.value)}
+                                            autoFocus
+                                        />
+                                    </div>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        className="h-12 px-4 border-gold/30 text-maroon hover:bg-cream/20 gap-2"
+                                        onClick={() => setIsScannerOpen(true)}
+                                    >
+                                        <Camera className="h-5 w-5" />
+                                        <span className="hidden sm:inline">Scan</span>
+                                    </Button>
                                 </div>
 
                                 {sareeSearchTerm && (
@@ -159,22 +207,8 @@ export default function SalesPage() {
                                                         key={saree.id}
                                                         className="p-3 hover:bg-cream/20 cursor-pointer border-b border-gray-50 last:border-0 flex justify-between items-center"
                                                         onClick={() => {
-                                                            const existingItemIndex = cart.findIndex(item => item.sareeId === saree.id);
-                                                            if (existingItemIndex > -1) {
-                                                                const newCart = [...cart];
-                                                                newCart[existingItemIndex].quantity += 1;
-                                                                setCart(newCart);
-                                                            } else {
-                                                                setCart([...cart, {
-                                                                    sareeId: saree.id,
-                                                                    sareeName: saree.sareeName,
-                                                                    quantity: 1,
-                                                                    sellingPrice: saree.sellingPrice,
-                                                                    purchasePrice: saree.purchasePrice
-                                                                }]);
-                                                            }
+                                                            handleAddToCart(saree);
                                                             setSareeSearchTerm('');
-                                                            toast.success(`${saree.sareeName} added to cart`);
                                                         }}
                                                     >
                                                         <div>
@@ -336,6 +370,11 @@ export default function SalesPage() {
                 isOpen={isReceiptModalOpen}
                 onClose={() => setIsReceiptModalOpen(false)}
                 sale={lastCompletedSale}
+            />
+            <BarcodeScanner
+                isOpen={isScannerOpen}
+                onClose={() => setIsScannerOpen(false)}
+                onScan={handleBarcodeScan}
             />
         </div>
     );

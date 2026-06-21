@@ -12,7 +12,8 @@ import {
     Loader2,
     Eye,
     EyeOff,
-    Lock
+    Lock,
+    Barcode as BarcodeIcon
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -41,6 +42,7 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog";
 import { SareeForm } from '@/components/inventory/SareeForm';
+import { BarcodeGenerator } from '@/components/inventory/BarcodeGenerator';
 import { toast } from 'sonner';
 
 export default function InventoryPage() {
@@ -51,6 +53,7 @@ export default function InventoryPage() {
     const [pendingSareeId, setPendingSareeId] = React.useState<string | null>(null);
     const [isPasswordDialogOpen, setIsPasswordDialogOpen] = React.useState(false);
     const [passwordInput, setPasswordInput] = React.useState('');
+    const [barcodeToShow, setBarcodeToShow] = React.useState<{ value: string, label: string } | null>(null);
 
     const queryClient = useQueryClient();
 
@@ -61,9 +64,11 @@ export default function InventoryPage() {
 
     const createMutation = useMutation({
         mutationFn: inventoryService.createSaree,
-        onSuccess: () => {
+        onSuccess: (data) => {
             queryClient.invalidateQueries({ queryKey: ['sarees'] });
             setIsFormOpen(false);
+            // Automatically show barcode after creation
+            setBarcodeToShow({ value: data.id, label: data.sareeName });
         }
     });
 
@@ -262,6 +267,12 @@ export default function InventoryPage() {
                                                         <Edit className="h-4 w-4" /> Edit
                                                     </DropdownMenuItem>
                                                     <DropdownMenuItem
+                                                        className="gap-2 cursor-pointer"
+                                                        onClick={() => setBarcodeToShow({ value: saree.id, label: saree.sareeName })}
+                                                    >
+                                                        <BarcodeIcon className="h-4 w-4" /> Barcode
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem
                                                         className="gap-2 text-red-600 cursor-pointer focus:text-red-600"
                                                         onClick={() => handleDelete(saree.id)}
                                                     >
@@ -331,6 +342,13 @@ export default function InventoryPage() {
                     </div>
                 </DialogContent>
             </Dialog>
+
+            <BarcodeGenerator
+                isOpen={!!barcodeToShow}
+                onClose={() => setBarcodeToShow(null)}
+                value={barcodeToShow?.value || ''}
+                label={barcodeToShow?.label || ''}
+            />
         </div>
     );
 }
