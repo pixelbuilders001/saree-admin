@@ -13,7 +13,9 @@ import {
     Eye,
     EyeOff,
     Lock,
-    Barcode as BarcodeIcon
+    Barcode as BarcodeIcon,
+    ChevronLeft,
+    ChevronRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -47,6 +49,9 @@ import { toast } from 'sonner';
 
 export default function InventoryPage() {
     const [searchTerm, setSearchTerm] = React.useState('');
+    const [currentPage, setCurrentPage] = React.useState(1);
+    const itemsPerPage = 20;
+
     const [isFormOpen, setIsFormOpen] = React.useState(false);
     const [editingSaree, setEditingSaree] = React.useState<Saree | undefined>();
     const [visiblePrices, setVisiblePrices] = React.useState<Set<string>>(new Set());
@@ -61,6 +66,11 @@ export default function InventoryPage() {
         queryKey: ['sarees'],
         queryFn: inventoryService.getSarees
     });
+
+    // Reset pagination when search changes
+    React.useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm]);
 
     const createMutation = useMutation({
         mutationFn: inventoryService.createSaree,
@@ -86,6 +96,12 @@ export default function InventoryPage() {
         saree.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
         saree.rackNo.toLowerCase().includes(searchTerm.toLowerCase())
     ) : [];
+
+    const totalPages = Math.ceil(filteredSarees.length / itemsPerPage);
+    const paginatedSarees = filteredSarees.slice(
+        (currentPage - 1) * itemsPerPage,
+        currentPage * itemsPerPage
+    );
 
     const handleDelete = async (id: string) => {
         if (confirm('Are you sure you want to delete this saree?')) {
@@ -201,12 +217,12 @@ export default function InventoryPage() {
                                         Loading collection...
                                     </TableCell>
                                 </TableRow>
-                            ) : filteredSarees?.length === 0 ? (
+                            ) : paginatedSarees?.length === 0 ? (
                                 <TableRow>
                                     <TableCell colSpan={10} className="h-24 text-center">No sarees found</TableCell>
                                 </TableRow>
                             ) : (
-                                filteredSarees?.map((saree) => (
+                                paginatedSarees?.map((saree) => (
                                     <TableRow key={saree.id} className="hover:bg-cream/10 transition-colors">
                                         <TableCell className="font-medium text-maroon">{saree.id}</TableCell>
                                         <TableCell className="font-medium text-maroon">{saree.sareeName}</TableCell>
@@ -286,6 +302,61 @@ export default function InventoryPage() {
                             )}
                         </TableBody>
                     </Table>
+
+                    {/* Pagination */}
+                    {totalPages > 1 && (
+                        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100">
+                            <p className="text-sm text-gray-500">
+                                Showing <span className="font-medium">{(currentPage - 1) * itemsPerPage + 1}</span> to{' '}
+                                <span className="font-medium">
+                                    {Math.min(currentPage * itemsPerPage, filteredSarees.length)}
+                                </span> of{' '}
+                                <span className="font-medium">{filteredSarees.length}</span> sarees
+                            </p>
+                            <div className="flex items-center gap-2">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="border-gold/20 text-maroon h-8 w-8 p-0"
+                                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                                    disabled={currentPage === 1}
+                                >
+                                    <ChevronLeft className="h-4 w-4" />
+                                </Button>
+                                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                                    .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+                                    .map((page, i, arr) => (
+                                        <React.Fragment key={page}>
+                                            {i > 0 && arr[i - 1] !== page - 1 && (
+                                                <span className="text-gray-400">...</span>
+                                            )}
+                                            <Button
+                                                variant={currentPage === page ? "default" : "outline"}
+                                                size="sm"
+                                                className={cn(
+                                                    "h-8 w-8 p-0",
+                                                    currentPage === page
+                                                        ? "bg-maroon text-gold hover:bg-maroon-dark"
+                                                        : "border-gold/20 text-maroon"
+                                                )}
+                                                onClick={() => setCurrentPage(page)}
+                                            >
+                                                {page}
+                                            </Button>
+                                        </React.Fragment>
+                                    ))}
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="border-gold/20 text-maroon h-8 w-8 p-0"
+                                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                                    disabled={currentPage === totalPages}
+                                >
+                                    <ChevronRight className="h-4 w-4" />
+                                </Button>
+                            </div>
+                        </div>
+                    )}
                 </CardContent>
             </Card>
 

@@ -9,8 +9,11 @@ import {
     Calendar,
     TrendingUp,
     IndianRupee,
-    Filter
+    Filter,
+    ChevronLeft,
+    ChevronRight,
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -32,11 +35,18 @@ export default function ReportsPage() {
 
     const [startDate, setStartDate] = React.useState(firstDay);
     const [endDate, setEndDate] = React.useState(lastDay);
+    const [currentPage, setCurrentPage] = React.useState(1);
+    const itemsPerPage = 10;
 
     const { data: sales, isLoading: isLoadingSales } = useQuery<SaleReportItem[]>({
         queryKey: ['sales'],
         queryFn: salesService.getSales
     });
+
+    // Reset pagination when dates change
+    React.useEffect(() => {
+        setCurrentPage(1);
+    }, [startDate, endDate]);
 
     // Filter sales by date range
     const filteredSales = React.useMemo(() => {
@@ -46,6 +56,12 @@ export default function ReportsPage() {
             return saleDate >= startDate && saleDate <= endDate;
         }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }, [sales, startDate, endDate]);
+
+    const totalPages = Math.ceil(filteredSales.length / itemsPerPage);
+    const paginatedSales = filteredSales.slice(
+        (currentPage - 1) * itemsPerPage,
+        currentPage * itemsPerPage
+    );
 
     // Calculate Summary Stats for the selected period
     const stats = React.useMemo(() => {
@@ -221,7 +237,7 @@ export default function ReportsPage() {
                             <TableBody>
                                 {isLoadingSales ? (
                                     <TableRow><TableCell colSpan={7} className="h-24 text-center">Loading transactions...</TableCell></TableRow>
-                                ) : filteredSales.length === 0 ? (
+                                ) : paginatedSales.length === 0 ? (
                                     <TableRow><TableCell colSpan={7} className="h-48 text-center bg-gray-50/50">
                                         <div className="flex flex-col items-center justify-center text-gray-400 space-y-2">
                                             <Calendar className="h-12 w-12 opacity-20" />
@@ -229,7 +245,7 @@ export default function ReportsPage() {
                                         </div>
                                     </TableCell></TableRow>
                                 ) : (
-                                    filteredSales.map((sale) => (
+                                    paginatedSales.map((sale) => (
                                         <TableRow key={`${sale.saleId}-${sale.sareeId}`} className="hover:bg-cream/5 transition-colors">
                                             <TableCell className="whitespace-nowrap">{new Date(sale.date).toLocaleDateString()}</TableCell>
                                             <TableCell className="text-xs font-mono text-gray-500">{sale.saleId}</TableCell>
@@ -249,6 +265,61 @@ export default function ReportsPage() {
                             </TableBody>
                         </Table>
                     </div>
+
+                    {/* Pagination */}
+                    {totalPages > 1 && (
+                        <div className="flex items-center justify-between px-6 py-4 border-t border-gold/10 bg-cream/5">
+                            <p className="text-sm text-gray-500">
+                                Showing <span className="font-medium">{(currentPage - 1) * itemsPerPage + 1}</span> to{' '}
+                                <span className="font-medium">
+                                    {Math.min(currentPage * itemsPerPage, filteredSales.length)}
+                                </span> of{' '}
+                                <span className="font-medium">{filteredSales.length}</span> transactions
+                            </p>
+                            <div className="flex items-center gap-2">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="border-gold/20 text-maroon h-8 w-8 p-0"
+                                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                                    disabled={currentPage === 1}
+                                >
+                                    <ChevronLeft className="h-4 w-4" />
+                                </Button>
+                                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                                    .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+                                    .map((page, i, arr) => (
+                                        <React.Fragment key={page}>
+                                            {i > 0 && arr[i - 1] !== page - 1 && (
+                                                <span className="text-gray-400">...</span>
+                                            )}
+                                            <Button
+                                                variant={currentPage === page ? "default" : "outline"}
+                                                size="sm"
+                                                className={cn(
+                                                    "h-8 w-8 p-0",
+                                                    currentPage === page
+                                                        ? "bg-maroon text-gold hover:bg-maroon-dark"
+                                                        : "border-gold/20 text-maroon"
+                                                )}
+                                                onClick={() => setCurrentPage(page)}
+                                            >
+                                                {page}
+                                            </Button>
+                                        </React.Fragment>
+                                    ))}
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="border-gold/20 text-maroon h-8 w-8 p-0"
+                                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                                    disabled={currentPage === totalPages}
+                                >
+                                    <ChevronRight className="h-4 w-4" />
+                                </Button>
+                            </div>
+                        </div>
+                    )}
                 </CardContent>
             </Card>
         </div>

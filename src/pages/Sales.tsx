@@ -18,6 +18,7 @@ import {
     WifiOff,
     Smartphone
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -41,6 +42,7 @@ export default function SalesPage() {
     const [customerName, setCustomerName] = React.useState<string>('');
     const [customerMobile, setCustomerMobile] = React.useState<string>('');
     const [sareeSearchTerm, setSareeSearchTerm] = React.useState<string>('');
+    const [highlightedIndex, setHighlightedIndex] = React.useState<number>(0);
     const [cart, setCart] = React.useState<Array<{
         sareeId: string;
         sareeName: string;
@@ -107,27 +109,61 @@ export default function SalesPage() {
                 s.id.toLowerCase().includes(sareeSearchTerm.toLowerCase()) ||
                 s.barcode?.toLowerCase().includes(sareeSearchTerm.toLowerCase())
             )
-        );
+        ).slice(0, 8); // Limit search results for better UX
     }, [sarees, sareeSearchTerm]);
 
-    const handleCustomerSearch = () => {
-        if (!customerMobile) {
-            toast.error('Please enter a mobile number');
+    // Reset highlighted index when search results change
+    React.useEffect(() => {
+        setHighlightedIndex(0);
+    }, [filteredSarees.length]);
+
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (filteredSarees.length === 0) return;
+
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            setHighlightedIndex(prev => (prev + 1) % filteredSarees.length);
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            setHighlightedIndex(prev => (prev - 1 + filteredSarees.length) % filteredSarees.length);
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            const selectedSaree = filteredSarees[highlightedIndex];
+            if (selectedSaree) {
+                handleAddToCart(selectedSaree);
+                setSareeSearchTerm('');
+            }
+        } else if (e.key === 'Escape') {
+            setSareeSearchTerm('');
+        }
+    };
+
+    const handleCustomerSearch = (mobileOverride?: string) => {
+        const searchMobile = mobileOverride || customerMobile;
+        if (!searchMobile) {
+            if (!mobileOverride) toast.error('Please enter a mobile number');
             return;
         }
 
-        const trimmedSearch = customerMobile.trim();
+        const trimmedSearch = searchMobile.trim();
         const customer = customers?.find(c =>
             c.mobile?.toString().trim() === trimmedSearch
         );
 
         if (customer) {
             setCustomerName(customer.name);
-            toast.success('Customer found!');
-        } else {
+            toast.success(`Welcome back, ${customer.name}!`);
+        } else if (!mobileOverride) {
             toast.info('Customer not found. You can enter the name manually.');
         }
     };
+
+    // Auto-search when 10 digits are entered
+    React.useEffect(() => {
+        if (customerMobile.length === 10) {
+            handleCustomerSearch(customerMobile);
+        }
+    }, [customerMobile, customers]);
 
     const handleRemoveFromCart = (index: number) => {
         const newCart = [...cart];
@@ -311,6 +347,7 @@ export default function SalesPage() {
                                             className="pl-10 border-gold/30 h-12 text-lg"
                                             value={sareeSearchTerm}
                                             onChange={(e) => setSareeSearchTerm(e.target.value)}
+                                            onKeyDown={handleKeyDown}
                                             autoFocus
                                         />
                                     </div>
@@ -329,10 +366,14 @@ export default function SalesPage() {
                                     <Card className="absolute z-50 w-full mt-1 border-gold/20 shadow-xl max-h-[300px] overflow-y-auto">
                                         <CardContent className="p-0">
                                             {filteredSarees.length > 0 ? (
-                                                filteredSarees.map(saree => (
+                                                filteredSarees.map((saree, index) => (
                                                     <div
                                                         key={saree.id}
-                                                        className="p-3 hover:bg-cream/20 cursor-pointer border-b border-gray-50 last:border-0 flex justify-between items-center"
+                                                        className={cn(
+                                                            "p-3 cursor-pointer border-b border-gray-50 last:border-0 flex justify-between items-center transition-colors",
+                                                            index === highlightedIndex ? "bg-cream/40 border-l-4 border-l-maroon" : "hover:bg-cream/20"
+                                                        )}
+                                                        onMouseEnter={() => setHighlightedIndex(index)}
                                                         onClick={() => {
                                                             handleAddToCart(saree);
                                                             setSareeSearchTerm('');
@@ -388,13 +429,21 @@ export default function SalesPage() {
                                                     <Input
                                                         type="number"
                                                         className="w-20 h-8 text-center mx-auto"
-                                                        value={item.quantity}
+                                                        value={item.quantity === 0 ? '' : item.quantity}
                                                         min="1"
                                                         onChange={(e) => {
-                                                            const val = parseInt(e.target.value) || 1;
+                                                            const val = e.target.value === '' ? 0 : parseInt(e.target.value);
+                                                            if (isNaN(val)) return;
                                                             const newCart = [...cart];
                                                             newCart[index].quantity = val;
                                                             setCart(newCart);
+                                                        }}
+                                                        onBlur={() => {
+                                                            if (item.quantity < 1) {
+                                                                const newCart = [...cart];
+                                                                newCart[index].quantity = 1;
+                                                                setCart(newCart);
+                                                            }
                                                         }}
                                                     />
                                                 </TableCell>
@@ -429,15 +478,19 @@ export default function SalesPage() {
                                 <label className="text-sm font-semibold">Mobile Number</label>
                                 <div className="flex gap-2">
                                     <Input
-                                        placeholder="Enter mobile"
+                                        placeholder="Enter mobile (10 digits)"
                                         className="border-gold/30"
                                         value={customerMobile}
-                                        onChange={(e) => setCustomerMobile(e.target.value)}
+                                        onChange={(e) => {
+                                            const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                                            setCustomerMobile(val);
+                                        }}
+                                        maxLength={10}
                                     />
                                     <Button
                                         variant="ghost"
                                         className="text-maroon border border-maroon/20"
-                                        onClick={handleCustomerSearch}
+                                        onClick={() => handleCustomerSearch()}
                                     >
                                         Search
                                     </Button>
