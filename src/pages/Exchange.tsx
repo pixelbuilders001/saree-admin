@@ -13,7 +13,8 @@ import {
     Calendar,
     ArrowDownLeft,
     ArrowUpRight,
-    SearchCode
+    SearchCode,
+    Download
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,6 +29,7 @@ import {
 } from "@/components/ui/table";
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { receiptService } from '@/services/receiptService';
 
 export default function ExchangePage() {
     const [originalSaleId, setOriginalSaleId] = React.useState('');
@@ -51,11 +53,33 @@ export default function ExchangePage() {
 
     const exchangeMutation = useMutation({
         mutationFn: salesService.processExchange,
-        onSuccess: () => {
+        onSuccess: (data) => {
             queryClient.invalidateQueries({ queryKey: ['sales'] });
             queryClient.invalidateQueries({ queryKey: ['sarees'] });
             queryClient.invalidateQueries({ queryKey: ['dashboardStats'] });
-            toast.success('Exchange processed successfully!');
+
+            // Download Receipt
+            receiptService.downloadExchangePDF({
+                exchangeId: data.exchangeId,
+                customerName: returnItems[0]?.customerName || 'N/A',
+                customerMobile: returnItems[0]?.customerMobile || 'N/A',
+                date: data.date,
+                returnItems: returnItems.map(i => ({
+                    sareeId: i.sareeId,
+                    sareeName: i.sareeName,
+                    quantity: i.quantity,
+                    sellingPrice: i.sellingPrice
+                })),
+                replaceItems: replaceItems.map(i => ({
+                    sareeId: i.sareeId,
+                    sareeName: i.sareeName,
+                    quantity: i.quantity,
+                    sellingPrice: i.sellingPrice
+                })),
+                netDifference: data.netTotalAmount
+            });
+
+            toast.success('Exchange processed successfully & Receipt downloaded!');
             setOriginalSaleId('');
             setReturnItems([]);
             setReplaceItems([]);
