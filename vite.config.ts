@@ -11,7 +11,7 @@ export default defineConfig({
   },
   server: {
     allowedHosts: [
-      'modelling-peripheral-loose-excellent.trycloudflare.com',
+      'extreme-crucial-macintosh-storage.trycloudflare.com',
       'saree-admin-chi.vercel.app'
     ]
   }
