@@ -10,6 +10,8 @@ import PurchasesPage from '@/pages/Purchases';
 import CustomersPage from '@/pages/Customers';
 import DashboardPage from '@/pages/Dashboard';
 import ReportsPage from '@/pages/Reports';
+import ExchangePage from '@/pages/Exchange';
+import ExpensesPage from '@/pages/Expenses';
 
 const queryClient = new QueryClient();
 
@@ -36,6 +38,8 @@ function App() {
             <Route path="purchases" element={<PurchasesPage />} />
             <Route path="customers" element={<CustomersPage />} />
             <Route path="reports" element={<ReportsPage />} />
+            <Route path="exchange" element={<ExchangePage />} />
+            <Route path="expenses" element={<ExpensesPage />} />
           </Route>
         </Routes>
         <Toaster position="top-right" richColors />

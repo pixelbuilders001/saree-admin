@@ -43,33 +43,33 @@ export default function DashboardPage() {
 
     const statCards = [
         {
-            title: 'Total Revenue',
+            title: 'Revenue',
             value: `₹${stats?.totalRevenue.toLocaleString()}`,
-            description: '+12% from last month',
+            description: 'Total sales income',
             icon: DollarSign,
             trend: 'up',
             color: 'bg-green-50 text-green-600'
         },
         {
-            title: 'Total Sales',
-            value: stats?.totalSales.toString(),
-            description: '+5% from last month',
-            icon: ShoppingBag,
+            title: 'Total Expenses',
+            value: `₹${stats?.totalExpenses?.toLocaleString() || 0}`,
+            description: 'Rent, Bills, etc.',
+            icon: ArrowDownRight,
+            trend: 'down',
+            color: 'bg-orange-50 text-orange-600'
+        },
+        {
+            title: 'Net Profit',
+            value: `₹${stats?.netProfit?.toLocaleString() || 0}`,
+            description: 'After all expenses',
+            icon: TrendingUp,
             trend: 'up',
             color: 'bg-blue-50 text-blue-600'
         },
         {
-            title: 'Total Customers',
-            value: stats?.totalCustomers.toString(),
-            description: '+2 new today',
-            icon: Users,
-            trend: 'up',
-            color: 'bg-purple-50 text-purple-600'
-        },
-        {
-            title: 'Low Stock Items',
+            title: 'Low Stock',
             value: stats?.lowStockCount.toString(),
-            description: 'Requires attention',
+            description: 'Sarees below 5 qty',
             icon: AlertTriangle,
             trend: 'down',
             color: 'bg-red-50 text-red-600'

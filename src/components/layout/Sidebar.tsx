@@ -9,7 +9,9 @@ import {
     BarChart3,
     LogOut,
     Menu,
-    X
+    X,
+    ArrowLeftRight,
+    Receipt
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -19,7 +21,9 @@ const navItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
     { icon: Package, label: 'Inventory', path: '/inventory' },
     { icon: ShoppingCart, label: 'Sales', path: '/sales' },
-    { icon: Truck, label: 'Purchases', path: '/purchases' },
+    // { icon: Truck, label: 'Purchases', path: '/purchases' },
+    { icon: ArrowLeftRight, label: 'Exchange', path: '/exchange' },
+    { icon: Receipt, label: 'Expenses', path: '/expenses' },
     { icon: Users, label: 'Customers', path: '/customers' },
     { icon: BarChart3, label: 'Reports', path: '/reports' },
 ];

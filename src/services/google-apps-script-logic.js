@@ -17,6 +17,7 @@ const SALES_SHEET = SS.getSheetByName("Sales");
 const PURCHASE_SHEET = SS.getSheetByName("Purchases");
 const CUSTOMER_SHEET = SS.getSheetByName("Customers");
 const SYNC_SHEET = SS.getSheetByName("Sync");
+const EXPENSE_SHEET = SS.getSheetByName("Expenses");
 
 function doPost(e) {
   try {
@@ -41,10 +42,15 @@ function doPost(e) {
       case 'getCustomerById': result = getCustomerById(data.id); break;
       case 'createCustomer': result = createCustomer(data.customer); break;
 
+      case 'getExpenses': result = getExpenses(); break;
+      case 'createExpense': result = createExpense(data.expense); break;
+
       case 'getDashboardStats': result = getDashboardStats(); break;
 
       case 'pushScannedItem': result = pushScannedItem(data.sessionId, data.barcode); break;
       case 'getScannedItems': result = getScannedItems(data.sessionId); break;
+
+      case 'processExchange': result = processExchange(data.exchange); break;
 
       default: throw new Error('Invalid Action: ' + action);
     }
@@ -216,8 +222,12 @@ function getDashboardStats() {
   salesRows.shift();
 
   const customers = getCustomers();
+  const expenses = getExpenses();
 
   let totalRevenue = 0;
+  let grossProfit = 0;
+  let totalExpenses = expenses.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
+
   const monthlyMap = {};
   const categoryMap = {};
 
@@ -231,7 +241,9 @@ function getDashboardStats() {
 
   salesRows.forEach(row => {
     const amount = parseFloat(row[5]) || 0;
+    const profit = parseFloat(row[6]) || 0;
     totalRevenue += amount;
+    grossProfit += profit;
 
     // Monthly aggregation
     const date = new Date(row[7]);
@@ -256,6 +268,9 @@ function getDashboardStats() {
 
   return {
     totalRevenue,
+    grossProfit,
+    totalExpenses,
+    netProfit: grossProfit - totalExpenses,
     totalSales: salesRows.length,
     totalCustomers: customers.length,
     lowStockCount: sarees.filter(s => s.stock < 5).length,
@@ -268,6 +283,36 @@ function getDashboardStats() {
       date: row[7]
     }))
   };
+}
+
+function getExpenses() {
+  const sheet = SS.getSheetByName("Expenses");
+  if (!sheet) {
+    SS.insertSheet("Expenses");
+    const newSheet = SS.getSheetByName("Expenses");
+    newSheet.appendRow(["expenseId", "category", "amount", "description", "date"]);
+    return [];
+  }
+  const data = sheet.getDataRange().getValues();
+  const headers = data.shift();
+  if (!headers) return [];
+  return data.map(row => {
+    let obj = {};
+    headers.forEach((h, i) => obj[h] = row[i]);
+    return obj;
+  });
+}
+
+function createExpense(expense) {
+  let sheet = SS.getSheetByName("Expenses");
+  if (!sheet) {
+    getExpenses(); // creates it
+    sheet = SS.getSheetByName("Expenses");
+  }
+  const id = "EXP-" + Math.floor(1000 + Math.random() * 9000);
+  const date = new Date().toISOString();
+  sheet.appendRow([id, expense.category, expense.amount, expense.description || '', date]);
+  return { id, date, ...expense };
 }
 
 function getSales() {
@@ -323,4 +368,90 @@ function getScannedItems(sessionId) {
   SYNC_SHEET.getRange(1, 1, rowsToKeep.length, rowsToKeep[0].length).setValues(rowsToKeep);
 
   return items;
+}
+
+function processExchange(exchange) {
+  const exchangeId = "EX-" + Math.floor(1000 + Math.random() * 9000);
+  const date = new Date().toISOString();
+  let netTotalAmount = 0;
+
+  // 1. Process Returns (Undo original sale)
+  exchange.returnItems.forEach(item => {
+    const saree = getSareeById(item.sareeId);
+    if (!saree) throw new Error(`Saree not found: ${item.sareeId}`);
+
+    // Increment stock for the returned item
+    updateSaree(item.sareeId, { stock: (parseInt(saree.stock) || 0) + item.quantity });
+
+    // Record Negative Sale Entry
+    const rowAmount = -(item.quantity * item.sellingPrice);
+    const rowProfit = -((item.quantity * item.sellingPrice) - (item.quantity * (saree.purchasePrice || 0)));
+    netTotalAmount += rowAmount;
+
+    SALES_SHEET.appendRow([
+      exchangeId,
+      item.sareeId,
+      item.sareeName,
+      -item.quantity,
+      item.sellingPrice,
+      rowAmount,
+      rowProfit,
+      date,
+      exchange.customerName || '',
+      exchange.customerMobile || ''
+    ]);
+  });
+
+  // 2. Process Replacements (New sale entry)
+  exchange.replaceItems.forEach(item => {
+    const saree = getSareeById(item.sareeId);
+    if (!saree) throw new Error(`Saree not found: ${item.sareeId}`);
+
+    // Validate stock for replacement
+    const currentStock = parseInt(saree.stock) || 0;
+    if (currentStock < item.quantity) {
+      throw new Error(`Insufficient stock for ${saree.sareeName} (Available: ${currentStock})`);
+    }
+
+    // Decrement stock
+    updateSaree(item.sareeId, { stock: currentStock - item.quantity });
+
+    // Record Positive Sale Entry
+    const rowAmount = item.quantity * item.sellingPrice;
+    const rowProfit = rowAmount - (item.quantity * (saree.purchasePrice || 0));
+    netTotalAmount += rowAmount;
+
+    SALES_SHEET.appendRow([
+      exchangeId,
+      item.sareeId,
+      item.sareeName,
+      item.quantity,
+      item.sellingPrice,
+      rowAmount,
+      rowProfit,
+      date,
+      exchange.customerName || '',
+      exchange.customerMobile || ''
+    ]);
+  });
+
+  // Update Customer's total spent with the net difference
+  if (exchange.customerMobile && netTotalAmount !== 0) {
+    const customerData = CUSTOMER_SHEET.getDataRange().getValues();
+    const headers = customerData[0];
+    const mobileIdx = headers.indexOf('mobile');
+    const totalSpentIdx = headers.indexOf('totalSpent');
+
+    if (mobileIdx > -1 && totalSpentIdx > -1) {
+      for (let i = 1; i < customerData.length; i++) {
+        if (customerData[i][mobileIdx] == exchange.customerMobile) {
+          const currentSpent = parseFloat(customerData[i][totalSpentIdx]) || 0;
+          CUSTOMER_SHEET.getRange(i + 1, totalSpentIdx + 1).setValue(currentSpent + netTotalAmount);
+          break;
+        }
+      }
+    }
+  }
+
+  return { exchangeId, date, success: true, netTotalAmount };
 }

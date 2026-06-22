@@ -42,4 +42,13 @@ export const salesService = {
     }): Promise<Sale> => {
         return gsRequest('createSale', { sale });
     },
+
+    processExchange: async (exchange: {
+        returnItems: SaleItem[];
+        replaceItems: SaleItem[];
+        customerName?: string;
+        customerMobile?: string;
+    }): Promise<{ exchangeId: string; date: string; success: boolean; netTotalAmount: number }> => {
+        return gsRequest('processExchange', { exchange });
+    },
 };

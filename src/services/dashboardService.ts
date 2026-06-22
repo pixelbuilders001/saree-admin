@@ -2,6 +2,9 @@ import { gsRequest } from './api';
 
 export interface DashboardStats {
     totalRevenue: number;
+    grossProfit: number;
+    totalExpenses: number;
+    netProfit: number;
     totalSales: number;
     totalCustomers: number;
     lowStockCount: number;
