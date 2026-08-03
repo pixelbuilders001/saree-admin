@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { useAuthStore } from '@/store/useAuthStore';
 
 export interface SaleItem {
     sareeId: string;
@@ -28,6 +29,8 @@ export interface SaleReportItem {
     date: string;
     customerName?: string;
     customerMobile?: string;
+    createdBy?: string;
+    updatedBy?: string;
 }
 
 export const getFriendlyId = (uuid: string, isExchange: boolean): string => {
@@ -48,6 +51,8 @@ export const salesService = {
                 created_at,
                 total_amount,
                 profit,
+                created_by,
+                updated_by,
                 customers (
                     name,
                     mobile
@@ -94,6 +99,8 @@ export const salesService = {
                     date: sale.created_at,
                     customerName,
                     customerMobile,
+                    createdBy: sale.created_by || '',
+                    updatedBy: sale.updated_by || '',
                 });
             });
         });
@@ -168,12 +175,15 @@ export const salesService = {
         });
 
         // 3. Create Sale Header
+        const userEmail = useAuthStore.getState().user?.email || 'system';
         const { data: insertedSale, error: saleInsertError } = await supabase
             .from('sales')
             .insert([{
                 customer_id: customerId,
                 total_amount: totalAmount,
-                profit: totalProfit
+                profit: totalProfit,
+                created_by: userEmail,
+                updated_by: userEmail
             }])
             .select()
             .single();
@@ -190,7 +200,7 @@ export const salesService = {
             // Update Saree stock
             const { error: stockUpdateError } = await supabase
                 .from('inventory')
-                .update({ stock: newStock })
+                .update({ stock: newStock, updated_by: userEmail })
                 .eq('id', item.sareeId);
 
             if (stockUpdateError) throw stockUpdateError;
@@ -302,12 +312,15 @@ export const salesService = {
         });
 
         // 3. Create Exchange Sale Header
+        const userEmail = useAuthStore.getState().user?.email || 'system';
         const { data: insertedSale, error: saleInsertError } = await supabase
             .from('sales')
             .insert([{
                 customer_id: customerId,
                 total_amount: netTotalAmount,
-                profit: netProfit
+                profit: netProfit,
+                created_by: userEmail,
+                updated_by: userEmail
             }])
             .select()
             .single();
@@ -323,7 +336,7 @@ export const salesService = {
             const currentStock = Number(saree?.stock || 0);
             const newStock = currentStock + item.quantity;
 
-            await supabase.from('inventory').update({ stock: newStock }).eq('id', item.sareeId);
+            await supabase.from('inventory').update({ stock: newStock, updated_by: userEmail }).eq('id', item.sareeId);
 
             itemsToInsert.push({
                 sale_id: insertedSale.id,
@@ -339,7 +352,7 @@ export const salesService = {
             const currentStock = Number(saree?.stock || 0);
             const newStock = Math.max(0, currentStock - item.quantity);
 
-            await supabase.from('inventory').update({ stock: newStock }).eq('id', item.sareeId);
+            await supabase.from('inventory').update({ stock: newStock, updated_by: userEmail }).eq('id', item.sareeId);
 
             itemsToInsert.push({
                 sale_id: insertedSale.id,

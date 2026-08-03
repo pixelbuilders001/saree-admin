@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { useAuthStore } from '@/store/useAuthStore';
 
 export interface Saree {
     id: string;
@@ -13,6 +14,8 @@ export interface Saree {
     barcode: string;
     addedDate: string;
     status: 'active' | 'inactive';
+    createdBy?: string;
+    updatedBy?: string;
 }
 
 export const inventoryService = {
@@ -37,6 +40,8 @@ export const inventoryService = {
             barcode: item.barcode || '',
             addedDate: item.created_at,
             status: item.status as 'active' | 'inactive',
+            createdBy: item.created_by || '',
+            updatedBy: item.updated_by || '',
         }));
     },
 
@@ -63,12 +68,15 @@ export const inventoryService = {
             barcode: data.barcode || '',
             addedDate: data.created_at,
             status: data.status as 'active' | 'inactive',
+            createdBy: data.created_by || '',
+            updatedBy: data.updated_by || '',
         };
     },
 
     createSaree: async (saree: Omit<Saree, 'id' | 'addedDate'>): Promise<Saree> => {
         // Generate a random ID (e.g. S-XXXX) for standard inventory item
         const randId = 'S' + Math.floor(1000 + Math.random() * 9000);
+        const userEmail = useAuthStore.getState().user?.email || 'system';
         const newSaree = {
             id: randId,
             saree_name: saree.sareeName,
@@ -81,6 +89,8 @@ export const inventoryService = {
             rack_no: saree.rackNo,
             barcode: saree.barcode || randId,
             status: saree.status || 'active',
+            created_by: userEmail,
+            updated_by: userEmail,
         };
 
         const { data, error } = await supabase
@@ -104,6 +114,8 @@ export const inventoryService = {
             barcode: data.barcode || '',
             addedDate: data.created_at,
             status: data.status as 'active' | 'inactive',
+            createdBy: data.created_by || '',
+            updatedBy: data.updated_by || '',
         };
     },
 
@@ -119,6 +131,9 @@ export const inventoryService = {
         if (saree.rackNo !== undefined) updateData.rack_no = saree.rackNo;
         if (saree.barcode !== undefined) updateData.barcode = saree.barcode;
         if (saree.status !== undefined) updateData.status = saree.status;
+
+        const userEmail = useAuthStore.getState().user?.email || 'system';
+        updateData.updated_by = userEmail;
 
         const { data, error } = await supabase
             .from('inventory')
@@ -142,6 +157,8 @@ export const inventoryService = {
             barcode: data.barcode || '',
             addedDate: data.created_at,
             status: data.status as 'active' | 'inactive',
+            createdBy: data.created_by || '',
+            updatedBy: data.updated_by || '',
         };
     },
 

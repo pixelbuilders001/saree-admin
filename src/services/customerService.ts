@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { useAuthStore } from '@/store/useAuthStore';
 
 export interface Customer {
     customerId: string;
@@ -49,6 +50,7 @@ export const customerService = {
     },
 
     createCustomer: async (customer: Omit<Customer, 'customerId' | 'totalPurchases' | 'totalSpent'>): Promise<Customer> => {
+        const userEmail = useAuthStore.getState().user?.email || 'system';
         const { data, error } = await supabase
             .from('customers')
             .insert([{
@@ -56,6 +58,8 @@ export const customerService = {
                 mobile: customer.mobile,
                 address: customer.address,
                 city: customer.city,
+                created_by: userEmail,
+                updated_by: userEmail,
             }])
             .select()
             .single();

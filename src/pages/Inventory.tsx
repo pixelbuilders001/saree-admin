@@ -207,22 +207,24 @@ export default function InventoryPage() {
                                 <TableHead className="h-8 text-[10px] font-bold text-maroon py-1 text-right">Purchase (₹)</TableHead>
                                 <TableHead className="h-8 text-[10px] font-bold text-maroon py-1 text-right">Price (₹)</TableHead>
                                 <TableHead className="h-8 text-[10px] font-bold text-maroon py-1 text-center">Stock</TableHead>
-                                <TableHead className="h-8 text-[10px] font-bold text-maroon py-1">Rack</TableHead>
+                                {/* <TableHead className="h-8 text-[10px] font-bold text-maroon py-1">Rack</TableHead> */}
                                 <TableHead className="h-8 text-[10px] font-bold text-maroon py-1">Status</TableHead>
+                                <TableHead className="h-8 text-[10px] font-bold text-maroon py-1">Created By</TableHead>
+                                <TableHead className="h-8 text-[10px] font-bold text-maroon py-1">Updated By</TableHead>
                                 <TableHead className="h-8 text-[10px] font-bold text-maroon py-1 text-right px-3">Actions</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {isLoading ? (
                                 <TableRow>
-                                    <TableCell colSpan={10} className="h-24 text-center text-maroon/50 text-xs italic">
+                                    <TableCell colSpan={12} className="h-24 text-center text-maroon/50 text-xs italic">
                                         <Loader2 className="h-5 w-5 animate-spin mx-auto mb-1" />
                                         Loading inventory database...
                                     </TableCell>
                                 </TableRow>
                             ) : paginatedSarees?.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={10} className="h-20 text-center text-xs text-gray-500 italic">No sarees match filter criteria</TableCell>
+                                    <TableCell colSpan={12} className="h-20 text-center text-xs text-gray-500 italic">No sarees match filter criteria</TableCell>
                                 </TableRow>
                             ) : (
                                 paginatedSarees?.map((saree) => (
@@ -263,13 +265,19 @@ export default function InventoryPage() {
                                                 {saree.stock}
                                             </span>
                                         </TableCell>
-                                        <TableCell className="py-1 text-xs text-gray-600 font-semibold">{saree.rackNo}</TableCell>
+                                        {/* <TableCell className="py-1 text-xs text-gray-600 font-semibold">{saree.rackNo}</TableCell> */}
                                         <TableCell className="py-1 text-xs">
                                             <span className={cn(
                                                 "inline-block rounded-full w-2 h-2 mr-1",
                                                 saree.status === 'active' ? 'bg-green-500' : 'bg-gray-300'
                                             )} />
                                             <span className="text-[10px] uppercase font-bold text-gray-500">{saree.status}</span>
+                                        </TableCell>
+                                        <TableCell className="py-1 text-[10px] font-mono text-gray-500 truncate max-w-[125px]" title={saree.createdBy || 'system'}>
+                                            {saree.createdBy || 'system'}
+                                        </TableCell>
+                                        <TableCell className="py-1 text-[10px] font-mono text-gray-500 truncate max-w-[125px]" title={saree.updatedBy || 'system'}>
+                                            {saree.updatedBy || 'system'}
                                         </TableCell>
                                         <TableCell className="py-1 px-3 text-right">
                                             <DropdownMenu>

@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { useAuthStore } from '@/store/useAuthStore';
 
 export interface Expense {
     expenseId: string;
@@ -27,12 +28,15 @@ export const expenseService = {
     },
 
     createExpense: async (expense: Omit<Expense, 'expenseId' | 'date'>): Promise<Expense> => {
+        const userEmail = useAuthStore.getState().user?.email || 'system';
         const { data, error } = await supabase
             .from('expenses')
             .insert([{
                 category: expense.category,
                 amount: expense.amount,
                 description: expense.description,
+                created_by: userEmail,
+                updated_by: userEmail,
             }])
             .select()
             .single();

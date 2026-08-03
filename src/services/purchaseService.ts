@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { useAuthStore } from '@/store/useAuthStore';
 
 export interface Purchase {
     purchaseId: string;
@@ -44,11 +45,13 @@ export const purchaseService = {
         const newStock = currentStock + purchase.quantity;
 
         // 2. Update stock & purchase price inside sarees table
+        const userEmail = useAuthStore.getState().user?.email || 'system';
         const { error: updateError } = await supabase
             .from('inventory')
             .update({
                 stock: newStock,
                 purchase_price: purchase.purchasePrice,
+                updated_by: userEmail,
             })
             .eq('id', purchase.sareeId);
 
@@ -63,6 +66,8 @@ export const purchaseService = {
                 quantity: purchase.quantity,
                 purchase_price: purchase.purchasePrice,
                 supplier: purchase.supplier,
+                created_by: userEmail,
+                updated_by: userEmail,
             }])
             .select()
             .single();

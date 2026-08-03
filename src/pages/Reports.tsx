@@ -230,20 +230,21 @@ export default function ReportsPage() {
                                     <TableHead className="h-8 text-[10px] font-bold text-maroon py-1 text-right">Qty</TableHead>
                                     <TableHead className="h-8 text-[10px] font-bold text-maroon py-1 text-right">Total Net (₹)</TableHead>
                                     <TableHead className="h-8 text-[10px] font-bold text-maroon py-1 text-right">Profit Margin (₹)</TableHead>
+                                    <TableHead className="h-8 text-[10px] font-bold text-maroon py-1">Created By</TableHead>
                                     <TableHead className="h-8 text-[10px] font-bold text-maroon py-1">Customer Profile</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {isLoadingSales ? (
                                     <TableRow>
-                                        <TableCell colSpan={7} className="h-24 text-center text-maroon/50 text-xs italic">
+                                        <TableCell colSpan={8} className="h-24 text-center text-maroon/50 text-xs italic">
                                             <Loader2 className="h-5 w-5 animate-spin mx-auto mb-1 inline" />
                                             Fetching transaction audit data...
                                         </TableCell>
                                     </TableRow>
                                 ) : paginatedSales.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={7} className="h-32 text-center bg-gray-50/20">
+                                        <TableCell colSpan={8} className="h-32 text-center bg-gray-50/20">
                                             <div className="flex flex-col items-center justify-center text-gray-400 space-y-1">
                                                 <Calendar className="h-8 w-8 opacity-20" />
                                                 <p className="text-xs">No transactions recorded between {new Date(startDate).toLocaleDateString()} and {new Date(endDate).toLocaleDateString()}</p>
@@ -259,6 +260,9 @@ export default function ReportsPage() {
                                             <TableCell className="py-1 text-xs text-right font-semibold font-mono text-gray-800">{sale.quantity}</TableCell>
                                             <TableCell className="py-1 text-xs text-right font-bold font-mono text-maroon">₹{sale.totalAmount?.toLocaleString()}</TableCell>
                                             <TableCell className="py-1 text-xs text-right text-green-700 font-bold font-mono">₹{sale.profit?.toLocaleString()}</TableCell>
+                                            <TableCell className="py-1 text-[10px] font-mono text-gray-500 truncate max-w-[125px]" title={sale.createdBy || 'system'}>
+                                                {sale.createdBy || 'system'}
+                                            </TableCell>
                                             <TableCell className="py-1 text-xs">
                                                 <div className="flex flex-col">
                                                     <span className="font-semibold text-gray-700">{sale.customerName || 'N/A'}</span>
