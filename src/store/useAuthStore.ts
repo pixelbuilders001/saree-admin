@@ -1,26 +1,26 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 
 interface User {
-    username: string;
-    role: string;
+    email: string;
+    id: string;
 }
 
 interface AuthState {
+    user: User | null;
     isAuthenticated: boolean;
-    login: () => void;
-    logout: () => void;
+    isInitialized: boolean;
+    setSession: (user: User | null) => void;
+    logout: () => Promise<void>;
 }
 
-export const useAuthStore = create<AuthState>()(
-    persist(
-        (set) => ({
-            isAuthenticated: false,
-            login: () => set({ isAuthenticated: true }),
-            logout: () => set({ isAuthenticated: false }),
-        }),
-        {
-            name: 'auth-storage',
-        }
-    )
-);
+export const useAuthStore = create<AuthState>((set) => ({
+    user: null,
+    isAuthenticated: false,
+    isInitialized: false,
+    setSession: (user) => set({ user, isAuthenticated: !!user, isInitialized: true }),
+    logout: async () => {
+        const { supabase } = await import('@/lib/supabase');
+        await supabase.auth.signOut();
+        set({ user: null, isAuthenticated: false, isInitialized: true });
+    }
+}));

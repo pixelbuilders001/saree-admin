@@ -11,7 +11,8 @@ import {
     Menu,
     X,
     ArrowLeftRight,
-    Receipt
+    Receipt,
+    Settings
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -26,6 +27,7 @@ const navItems = [
     { icon: Receipt, label: 'Expenses', path: '/expenses' },
     { icon: Users, label: 'Customers', path: '/customers' },
     { icon: BarChart3, label: 'Reports', path: '/reports' },
+    { icon: Settings, label: 'Settings', path: '/settings' },
 ];
 
 export const Sidebar = () => {
