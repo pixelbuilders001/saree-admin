@@ -20,14 +20,7 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
     const navigate = useNavigate();
-    const { isAuthenticated } = useAuthStore();
     const [showPassword, setShowPassword] = React.useState(false);
-
-    React.useEffect(() => {
-        if (isAuthenticated) {
-            navigate('/', { replace: true });
-        }
-    }, [isAuthenticated, navigate]);
 
     const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<LoginFormValues>({
         resolver: zodResolver(loginSchema),

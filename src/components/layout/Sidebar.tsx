@@ -58,15 +58,15 @@ export const Sidebar = () => {
                         />
                     </div>
 
-                    <nav className="flex-1 px-4 py-6 space-y-2">
+                    <nav className="flex-1 px-2 py-3 space-y-2">
                         {navItems.map((item) => (
                             <NavLink
                                 key={item.path}
                                 to={item.path}
                                 className={({ isActive }) => cn(
-                                    "flex items-center gap-3 px-4 py-3 rounded-lg transition-colors",
+                                    "flex items-center gap-3 px-4 py-2 rounded-lg transition-colors",
                                     isActive
-                                        ? "bg-gold text-maroon font-semibold"
+                                        ? "bg-white/80 text-maroon"
                                         : "text-white/80 hover:bg-white/10 hover:text-white"
                                 )}
                                 onClick={() => setIsOpen(false)}

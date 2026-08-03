@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, QueryCache, MutationCache } from '@tanstack/react-query';
 import { Toaster } from '@/components/ui/sonner';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -16,8 +16,33 @@ import ExpensesPage from '@/pages/Expenses';
 import SettingsPage from '@/pages/Settings';
 import { supabase } from '@/lib/supabase';
 import { Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 
-const queryClient = new QueryClient();
+const handleGlobalAuthError = (error: any) => {
+  const isAuthError =
+    error?.status === 401 ||
+    error?.statusCode === 401 ||
+    error?.code === 'PGRST301' ||
+    error?.message?.toLowerCase().includes('jwt expired') ||
+    error?.message?.toLowerCase().includes('invalid jwt') ||
+    error?.message?.toLowerCase().includes('token expired') ||
+    error?.message?.toLowerCase().includes('invalid token') ||
+    error?.message?.toLowerCase().includes('unauthorized');
+
+  if (isAuthError) {
+    toast.error('Session expired. Please log in again.');
+    useAuthStore.getState().logout();
+  }
+};
+
+const queryClient = new QueryClient({
+  queryCache: new QueryCache({
+    onError: handleGlobalAuthError
+  }),
+  mutationCache: new MutationCache({
+    onError: handleGlobalAuthError
+  })
+});
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated, isInitialized } = useAuthStore();
@@ -31,6 +56,21 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   }
 
   if (!isAuthenticated) return <Navigate to="/login" replace />;
+  return <>{children}</>;
+};
+
+const PublicRoute = ({ children }: { children: React.ReactNode }) => {
+  const { isAuthenticated, isInitialized } = useAuthStore();
+
+  if (!isInitialized) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-cream-light">
+        <Loader2 className="h-8 w-8 animate-spin text-maroon" />
+      </div>
+    );
+  }
+
+  if (isAuthenticated) return <Navigate to="/" replace />;
   return <>{children}</>;
 };
 
@@ -71,7 +111,11 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <Routes>
-          <Route path="/login" element={<LoginPage />} />
+          <Route path="/login" element={
+            <PublicRoute>
+              <LoginPage />
+            </PublicRoute>
+          } />
           <Route path="/" element={
             <ProtectedRoute>
               <AppLayout />
@@ -87,6 +131,7 @@ function App() {
             <Route path="expenses" element={<ExpensesPage />} />
             <Route path="settings" element={<SettingsPage />} />
           </Route>
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         <Toaster position="top-right" richColors />
       </BrowserRouter>
