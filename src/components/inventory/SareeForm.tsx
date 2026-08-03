@@ -32,6 +32,7 @@ const sareeSchema = z.object({
     sellingPrice: z.coerce.number().min(0, 'Must be positive'),
     stock: z.coerce.number().min(0, 'Must be positive'),
     rackNo: z.string().min(1, 'Rack number is required'),
+    status: z.enum(['active', 'inactive']).default('active'),
 });
 
 type SareeFormValues = z.infer<typeof sareeSchema>;
@@ -45,16 +46,19 @@ interface SareeFormProps {
 export function SareeForm({ initialData, onSubmit, onCancel }: SareeFormProps) {
     const form = useForm<SareeFormValues>({
         resolver: zodResolver(sareeSchema) as any,
-        defaultValues: initialData || {
-            sareeName: '',
-            category: '',
-            fabric: '',
-            color: '',
-            purchasePrice: 0,
-            sellingPrice: 0,
-            stock: 0,
-            rackNo: '',
-        },
+        defaultValues: initialData
+            ? { ...initialData, status: initialData.status || 'active' }
+            : {
+                sareeName: '',
+                category: '',
+                fabric: '',
+                color: '',
+                purchasePrice: 0,
+                sellingPrice: 0,
+                stock: 0,
+                rackNo: '',
+                status: 'active',
+            },
     });
 
     const handleFormSubmit = async (values: any) => {
@@ -180,19 +184,43 @@ export function SareeForm({ initialData, onSubmit, onCancel }: SareeFormProps) {
                             />
                         </div>
 
-                        <FormField
-                            control={form.control as any}
-                            name="stock"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel className="text-maroon font-semibold">Initial Stock</FormLabel>
-                                    <FormControl>
-                                        <Input type="number" {...field} />
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
+                        <div className="grid grid-cols-2 gap-4">
+                            <FormField
+                                control={form.control as any}
+                                name="stock"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className="text-maroon font-semibold">Initial Stock</FormLabel>
+                                        <FormControl>
+                                            <Input type="number" {...field} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+
+                            <FormField
+                                control={form.control as any}
+                                name="status"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className="text-maroon font-semibold">Status</FormLabel>
+                                        <Select onValueChange={field.onChange} defaultValue={field.value || 'active'}>
+                                            <FormControl>
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Select Status" />
+                                                </SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent>
+                                                <SelectItem value="active">Active</SelectItem>
+                                                <SelectItem value="inactive">Inactive</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                        </div>
                     </div>
                 </div>
 

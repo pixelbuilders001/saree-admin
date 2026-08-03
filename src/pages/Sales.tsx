@@ -237,6 +237,10 @@ export default function SalesPage() {
         );
 
         if (saree) {
+            if (saree.status !== 'active') {
+                toast.error(`Saree "${saree.sareeName}" is inactive and cannot be sold.`);
+                return;
+            }
             playBeep();
             handleAddToCart(saree);
             setIsScannerOpen(false);
@@ -258,7 +262,7 @@ export default function SalesPage() {
                             s.id.toLowerCase() === item.barcode.toLowerCase() ||
                             s.barcode?.toLowerCase() === item.barcode.toLowerCase()
                         );
-                        if (saree) {
+                        if (saree && saree.status === 'active') {
                             playBeep();
                             handleAddToCart(saree);
                         }
