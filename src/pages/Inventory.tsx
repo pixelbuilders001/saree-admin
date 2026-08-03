@@ -36,7 +36,7 @@ import {
     DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
     Dialog,
     DialogContent,
@@ -77,7 +77,6 @@ export default function InventoryPage() {
         onSuccess: (data) => {
             queryClient.invalidateQueries({ queryKey: ['sarees'] });
             setIsFormOpen(false);
-            // Automatically show barcode after creation
             setBarcodeToShow({ value: data.id, label: data.sareeName });
         }
     });
@@ -151,86 +150,90 @@ export default function InventoryPage() {
     };
 
     return (
-        <div className="space-y-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="space-y-3 max-w-7xl mx-auto px-2">
+            {/* High Density Header */}
+            <div className="flex items-center justify-between border-b border-gold/10 pb-2">
                 <div>
-                    <h1 className="text-3xl font-bold text-maroon">Inventory</h1>
-                    <p className="text-gray-500">Manage your saree collection and stock</p>
+                    <h1 className="text-xl font-bold font-serif text-maroon tracking-wider">SBS STOCK INVENTORY</h1>
+                    <p className="text-xs text-gray-500 font-sans">View and manage collection catalogue</p>
                 </div>
                 <Button
-                    className="bg-maroon hover:bg-maroon-dark text-gold gap-2 h-12 px-6"
+                    className="bg-maroon hover:bg-maroon-dark text-gold gap-1.5 h-8 px-3 text-xs font-bold shadow-sm"
                     onClick={() => {
                         setEditingSaree(undefined);
                         setIsFormOpen(true);
                     }}
                 >
-                    <Plus className="h-5 w-5" />
-                    Add New Saree
+                    <Plus className="h-3.5 w-3.5" />
+                    ADD NEW SAREE
                 </Button>
             </div>
 
+            {/* Controls Bar */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 bg-cream/10 p-2 border border-gold/15 rounded-md">
+                <div className="flex items-center gap-2 flex-1 max-w-md">
+                    <div className="relative w-full">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                        <Input
+                            placeholder="Search by name, category, rack..."
+                            className="pl-8 border-gold/30 h-8 text-xs focus-visible:ring-maroon bg-white"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                    </div>
+                    <Button variant="outline" className="border-gold/30 text-maroon gap-1.5 h-8 text-xs px-2.5 font-bold hover:bg-cream/10">
+                        <Filter className="h-3.5 w-3.5" />
+                        FILTER
+                    </Button>
+                </div>
+                <div className="flex items-center justify-end gap-2">
+                    <Button variant="outline" size="sm" className="border-gold/30 text-maroon gap-1.5 h-8 text-xs px-2.5 font-bold hover:bg-cream/10">
+                        <FileDown className="h-3.5 w-3.5" />
+                        EXPORT
+                    </Button>
+                </div>
+            </div>
+
+            {/* High Density Table Card */}
             <Card className="border-gold/20 shadow-md">
-                <CardHeader className="pb-3 border-b border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="flex items-center gap-2 flex-1 max-w-sm">
-                        <div className="relative w-full">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                            <Input
-                                placeholder="Search sarees, category, rack..."
-                                className="pl-10 border-gold/20 focus-visible:ring-maroon"
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                            />
-                        </div>
-                        <Button variant="outline" className="border-gold/20 text-maroon gap-2">
-                            <Filter className="h-4 w-4" />
-                            Filter
-                        </Button>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <Button variant="outline" size="sm" className="border-gold/20 text-maroon gap-2">
-                            <FileDown className="h-4 w-4" />
-                            Export
-                        </Button>
-                    </div>
-                </CardHeader>
                 <CardContent className="p-0">
                     <Table>
-                        <TableHeader className="bg-cream/30">
-                            <TableRow>
-                                <TableHead>Id</TableHead>
-                                <TableHead>Name</TableHead>
-                                <TableHead>Category</TableHead>
-                                <TableHead>Fabric</TableHead>
-                                <TableHead className="text-right">Purchase (₹)</TableHead>
-                                <TableHead className="text-right">Price (₹)</TableHead>
-                                <TableHead className="text-center">Stock</TableHead>
-                                <TableHead>Rack</TableHead>
-                                <TableHead>Status</TableHead>
-                                <TableHead className="text-right">Actions</TableHead>
+                        <TableHeader className="bg-cream/20 border-b border-gold/10">
+                            <TableRow className="hover:bg-transparent">
+                                <TableHead className="h-8 text-[10px] font-bold text-maroon py-1 px-3">Id</TableHead>
+                                <TableHead className="h-8 text-[10px] font-bold text-maroon py-1">Name</TableHead>
+                                <TableHead className="h-8 text-[10px] font-bold text-maroon py-1">Category</TableHead>
+                                <TableHead className="h-8 text-[10px] font-bold text-maroon py-1">Fabric</TableHead>
+                                <TableHead className="h-8 text-[10px] font-bold text-maroon py-1 text-right">Purchase (₹)</TableHead>
+                                <TableHead className="h-8 text-[10px] font-bold text-maroon py-1 text-right">Price (₹)</TableHead>
+                                <TableHead className="h-8 text-[10px] font-bold text-maroon py-1 text-center">Stock</TableHead>
+                                <TableHead className="h-8 text-[10px] font-bold text-maroon py-1">Rack</TableHead>
+                                <TableHead className="h-8 text-[10px] font-bold text-maroon py-1">Status</TableHead>
+                                <TableHead className="h-8 text-[10px] font-bold text-maroon py-1 text-right px-3">Actions</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {isLoading ? (
                                 <TableRow>
-                                    <TableCell colSpan={10} className="h-24 text-center text-maroon/50 italic">
-                                        <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
-                                        Loading collection...
+                                    <TableCell colSpan={10} className="h-24 text-center text-maroon/50 text-xs italic">
+                                        <Loader2 className="h-5 w-5 animate-spin mx-auto mb-1" />
+                                        Loading inventory database...
                                     </TableCell>
                                 </TableRow>
                             ) : paginatedSarees?.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={10} className="h-24 text-center">No sarees found</TableCell>
+                                    <TableCell colSpan={10} className="h-20 text-center text-xs text-gray-500 italic">No sarees match filter criteria</TableCell>
                                 </TableRow>
                             ) : (
                                 paginatedSarees?.map((saree) => (
-                                    <TableRow key={saree.id} className="hover:bg-cream/10 transition-colors">
-                                        <TableCell className="font-medium text-maroon">{saree.id}</TableCell>
-                                        <TableCell className="font-medium text-maroon">{saree.sareeName}</TableCell>
-                                        <TableCell>{saree.category}</TableCell>
-                                        <TableCell>{saree.fabric}</TableCell>
-                                        <TableCell className="text-right">
-                                            <div className="flex items-center justify-end gap-2 group">
-                                                <span className="font-medium text-gray-600">
+                                    <TableRow key={saree.id} className="hover:bg-cream/5 border-b border-gold/5 h-8">
+                                        <TableCell className="py-1 px-3 text-xs font-mono font-bold text-maroon">{saree.id}</TableCell>
+                                        <TableCell className="py-1 text-xs font-semibold text-gray-805">{saree.sareeName}</TableCell>
+                                        <TableCell className="py-1 text-xs text-gray-600">{saree.category}</TableCell>
+                                        <TableCell className="py-1 text-xs text-gray-500">{saree.fabric}</TableCell>
+                                        <TableCell className="py-1 text-xs text-right">
+                                            <div className="flex items-center justify-end gap-1 group">
+                                                <span className="font-semibold text-gray-500 font-mono text-[11px]">
                                                     {visiblePrices.has(saree.id)
                                                         ? `₹${saree.purchasePrice.toLocaleString()}`
                                                         : '••••••'}
@@ -238,7 +241,7 @@ export default function InventoryPage() {
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
-                                                    className="h-6 w-6 text-gray-400 hover:text-maroon"
+                                                    className="h-5 w-5 text-gray-400 hover:text-maroon p-0 rounded-full"
                                                     onClick={() => handleTogglePurchasePrice(saree.id)}
                                                 >
                                                     {visiblePrices.has(saree.id) ? (
@@ -249,50 +252,54 @@ export default function InventoryPage() {
                                                 </Button>
                                             </div>
                                         </TableCell>
-                                        <TableCell className="text-right font-semibold">₹{saree.sellingPrice.toLocaleString()}</TableCell>
-                                        <TableCell className="text-center">
-                                            <Badge className={cn(
-                                                "font-bold",
-                                                saree.stock < 5 ? "bg-red-500 text-white" : "bg-green-100 text-green-700"
+                                        <TableCell className="py-1 text-xs text-right font-bold text-maroon font-mono">₹{saree.sellingPrice.toLocaleString()}</TableCell>
+                                        <TableCell className="py-1 text-xs text-center">
+                                            <span className={cn(
+                                                "font-bold px-1.5 py-0.5 rounded text-[10px] border",
+                                                saree.stock < 5
+                                                    ? "bg-red-50 text-red-700 border-red-200 animate-pulse"
+                                                    : "bg-green-50 text-green-700 border-green-200"
                                             )}>
                                                 {saree.stock}
-                                            </Badge>
+                                            </span>
                                         </TableCell>
-                                        <TableCell>{saree.rackNo}</TableCell>
-                                        <TableCell>
-                                            <Badge variant="outline" className={saree.status === 'active' ? 'text-green-600 border-green-600' : 'text-gray-400 border-gray-400'}>
-                                                {saree.status}
-                                            </Badge>
+                                        <TableCell className="py-1 text-xs text-gray-600 font-semibold">{saree.rackNo}</TableCell>
+                                        <TableCell className="py-1 text-xs">
+                                            <span className={cn(
+                                                "inline-block rounded-full w-2 h-2 mr-1",
+                                                saree.status === 'active' ? 'bg-green-500' : 'bg-gray-300'
+                                            )} />
+                                            <span className="text-[10px] uppercase font-bold text-gray-500">{saree.status}</span>
                                         </TableCell>
-                                        <TableCell className="text-right">
+                                        <TableCell className="py-1 px-3 text-right">
                                             <DropdownMenu>
                                                 <DropdownMenuTrigger asChild>
-                                                    <Button variant="ghost" className="h-8 w-8 p-0">
-                                                        <MoreHorizontal className="h-4 w-4" />
+                                                    <Button variant="ghost" className="h-6 w-6 p-0 hover:bg-gold/10 rounded-full">
+                                                        <MoreHorizontal className="h-3.5 w-3.5 text-gray-505" />
                                                     </Button>
                                                 </DropdownMenuTrigger>
-                                                <DropdownMenuContent align="end" className="border-gold/20">
-                                                    <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                                <DropdownMenuContent align="end" className="border-gold/20 shadow-lg">
+                                                    <DropdownMenuLabel className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Stock Actions</DropdownMenuLabel>
                                                     <DropdownMenuItem
-                                                        className="gap-2 cursor-pointer"
+                                                        className="gap-2 cursor-pointer text-xs font-medium"
                                                         onClick={() => {
                                                             setEditingSaree(saree);
                                                             setIsFormOpen(true);
                                                         }}
                                                     >
-                                                        <Edit className="h-4 w-4" /> Edit
+                                                        <Edit className="h-3.5 w-3.5" /> Edit details
                                                     </DropdownMenuItem>
                                                     <DropdownMenuItem
-                                                        className="gap-2 cursor-pointer"
+                                                        className="gap-2 cursor-pointer text-xs font-medium"
                                                         onClick={() => setBarcodeToShow({ value: saree.id, label: saree.sareeName })}
                                                     >
-                                                        <BarcodeIcon className="h-4 w-4" /> Barcode
+                                                        <BarcodeIcon className="h-3.5 w-3.5" /> Generate Barcode
                                                     </DropdownMenuItem>
                                                     <DropdownMenuItem
-                                                        className="gap-2 text-red-600 cursor-pointer focus:text-red-600"
+                                                        className="gap-2 text-red-600 cursor-pointer focus:text-red-600 text-xs font-medium"
                                                         onClick={() => handleDelete(saree.id)}
                                                     >
-                                                        <Trash2 className="h-4 w-4" /> Delete
+                                                        <Trash2 className="h-3.5 w-3.5" /> Delete entry
                                                     </DropdownMenuItem>
                                                 </DropdownMenuContent>
                                             </DropdownMenu>
@@ -305,39 +312,39 @@ export default function InventoryPage() {
 
                     {/* Pagination */}
                     {totalPages > 1 && (
-                        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100">
-                            <p className="text-sm text-gray-500">
-                                Showing <span className="font-medium">{(currentPage - 1) * itemsPerPage + 1}</span> to{' '}
-                                <span className="font-medium">
+                        <div className="flex items-center justify-between px-4 py-2 border-t border-gold/10 bg-cream/10">
+                            <p className="text-[10px] text-gray-500">
+                                Showing <span className="font-bold">{(currentPage - 1) * itemsPerPage + 1}</span> -{' '}
+                                <span className="font-bold">
                                     {Math.min(currentPage * itemsPerPage, filteredSarees.length)}
                                 </span> of{' '}
-                                <span className="font-medium">{filteredSarees.length}</span> sarees
+                                <span className="font-bold">{filteredSarees.length}</span> items
                             </p>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1">
                                 <Button
                                     variant="outline"
                                     size="sm"
-                                    className="border-gold/20 text-maroon h-8 w-8 p-0"
+                                    className="border-gold/30 text-maroon h-6 w-6 p-0 hover:bg-cream/20"
                                     onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                                     disabled={currentPage === 1}
                                 >
-                                    <ChevronLeft className="h-4 w-4" />
+                                    <ChevronLeft className="h-3.5 w-3.5" />
                                 </Button>
                                 {Array.from({ length: totalPages }, (_, i) => i + 1)
                                     .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
                                     .map((page, i, arr) => (
                                         <React.Fragment key={page}>
                                             {i > 0 && arr[i - 1] !== page - 1 && (
-                                                <span className="text-gray-400">...</span>
+                                                <span className="text-gray-400 text-xs px-0.5">...</span>
                                             )}
                                             <Button
                                                 variant={currentPage === page ? "default" : "outline"}
                                                 size="sm"
                                                 className={cn(
-                                                    "h-8 w-8 p-0",
+                                                    "h-6 w-6 p-0 text-[10px] font-bold",
                                                     currentPage === page
                                                         ? "bg-maroon text-gold hover:bg-maroon-dark"
-                                                        : "border-gold/20 text-maroon"
+                                                        : "border-gold/30 text-maroon hover:bg-cream/20"
                                                 )}
                                                 onClick={() => setCurrentPage(page)}
                                             >
@@ -348,11 +355,11 @@ export default function InventoryPage() {
                                 <Button
                                     variant="outline"
                                     size="sm"
-                                    className="border-gold/20 text-maroon h-8 w-8 p-0"
+                                    className="border-gold/30 text-maroon h-6 w-6 p-0 hover:bg-cream/20"
                                     onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                                     disabled={currentPage === totalPages}
                                 >
-                                    <ChevronRight className="h-4 w-4" />
+                                    <ChevronRight className="h-3.5 w-3.5" />
                                 </Button>
                             </div>
                         </div>
@@ -361,35 +368,38 @@ export default function InventoryPage() {
             </Card>
 
             <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto border-gold/20">
-                    <DialogHeader>
-                        <DialogTitle className="text-2xl font-bold text-maroon">
-                            {editingSaree ? 'Edit Saree' : 'Add New Saree'}
+                <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto border-gold/20 shadow-2xl p-4">
+                    <DialogHeader className="border-b border-gold/15 pb-2">
+                        <DialogTitle className="text-lg font-bold font-serif text-maroon">
+                            {editingSaree ? 'EDIT SAREE REGISTER' : 'REGISTER NEW SAREE'}
                         </DialogTitle>
                     </DialogHeader>
-                    <SareeForm
-                        initialData={editingSaree}
-                        onSubmit={handleFormSubmit}
-                        onCancel={() => setIsFormOpen(false)}
-                    />
+                    <div className="pt-2">
+                        <SareeForm
+                            initialData={editingSaree}
+                            onSubmit={handleFormSubmit}
+                            onCancel={() => setIsFormOpen(false)}
+                        />
+                    </div>
                 </DialogContent>
             </Dialog>
 
             <Dialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>
-                <DialogContent className="sm:max-w-md border-gold/20">
-                    <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2 text-maroon">
-                            <Lock className="h-5 w-5" />
-                            Admin Access Required
+                <DialogContent className="sm:max-w-sm border-gold/25 shadow-xl p-4">
+                    <DialogHeader className="border-b border-gold/10 pb-2">
+                        <DialogTitle className="flex items-center gap-1.5 text-maroon font-bold text-sm">
+                            <Lock className="h-4 w-4" />
+                            ADMIN ACCESS PERMISSION
                         </DialogTitle>
                     </DialogHeader>
-                    <div className="space-y-4 py-4">
-                        <p className="text-sm text-gray-500">
-                            Please enter the administrator password to view purchase prices.
+                    <div className="space-y-3 pt-2">
+                        <p className="text-xs text-gray-500 leading-normal">
+                            Enter the administrative security PIN to expose original purchase prices.
                         </p>
                         <Input
                             type="password"
-                            placeholder="Enter password"
+                            placeholder="Security Pin"
+                            className="border-gold/30 h-8 text-xs font-mono"
                             value={passwordInput}
                             onChange={(e) => setPasswordInput(e.target.value)}
                             onKeyDown={(e) => {
@@ -399,15 +409,15 @@ export default function InventoryPage() {
                             }}
                             autoFocus
                         />
-                        <div className="flex justify-end gap-3">
-                            <Button variant="ghost" onClick={() => setIsPasswordDialogOpen(false)}>
+                        <div className="flex justify-end gap-2 pt-1">
+                            <Button variant="ghost" className="h-8 text-xs hover:bg-gray-100" onClick={() => setIsPasswordDialogOpen(false)}>
                                 Cancel
                             </Button>
                             <Button
-                                className="bg-maroon hover:bg-maroon-dark text-gold"
+                                className="bg-maroon hover:bg-maroon-dark text-gold h-8 text-xs font-bold"
                                 onClick={verifyPassword}
                             >
-                                Verify
+                                VERIFY PIN
                             </Button>
                         </div>
                     </div>

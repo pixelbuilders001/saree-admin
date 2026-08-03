@@ -24,7 +24,7 @@ export const receiptService = {
         // Use Helvetica as default for better reliability
         doc.setFont('helvetica');
 
-        const shopName = "Kasturi Sarees";
+        const shopName = "Shree Banarasi Sarees";
         const shopAddress = "Near City Center, Main Market";
         const shopContact = "+91 XXXXX XXXXX";
 
@@ -126,7 +126,7 @@ export const receiptService = {
         doc.addFont('NotoSansDevanagari-Regular.ttf', 'NotoSansDevanagari', 'normal');
         doc.setFont('helvetica');
 
-        const shopName = "Kasturi Sarees";
+        const shopName = "Shree Banarasi Sarees";
         const shopAddress = "Near City Center, Main Market";
         const shopContact = "+91 XXXXX XXXXX";
 
@@ -259,18 +259,18 @@ export const receiptService = {
 
     downloadPDF: (sale: Sale) => {
         const doc = receiptService.generatePDF(sale);
-        doc.save(`Kasturi_Sarees_Receipt_${sale.saleId}.pdf`);
+        doc.save(`Shree_Banarasi_Sarees_Receipt_${sale.saleId}.pdf`);
     },
 
     downloadExchangePDF: (data: ExchangeReceiptData) => {
         const doc = receiptService.generateExchangePDF(data);
-        doc.save(`Kasturi_Sarees_Exchange_${data.exchangeId}.pdf`);
+        doc.save(`Shree_Banarasi_Sarees_Exchange_${data.exchangeId}.pdf`);
     },
 
     sharePDF: async (sale: Sale) => {
         const doc = receiptService.generatePDF(sale);
         const pdfBlob = doc.output('blob');
-        const fileName = `Kasturi_Sarees_Receipt_${sale.saleId}.pdf`;
+        const fileName = `Shree_Banarasi_Sarees_Receipt_${sale.saleId}.pdf`;
         const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
 
         if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -278,7 +278,7 @@ export const receiptService = {
                 await navigator.share({
                     files: [file],
                     title: 'Sale Receipt',
-                    text: `Receipt from Kasturi Sarees for Bill No: ${sale.saleId}`,
+                    text: `Receipt from Shree Banarasi Sarees for Bill No: ${sale.saleId}`,
                 });
                 return true;
             } catch (error) {
@@ -294,7 +294,7 @@ export const receiptService = {
 
     // Keeping this for reference or simple text share if needed
     generateWhatsAppTextMessage: (sale: Sale) => {
-        let message = `*Receipt from Kasturi Sarees*\n`;
+        let message = `*Receipt from Shree Banarasi Sarees*\n`;
         // ... (rest of message logic)
         return message;
     }

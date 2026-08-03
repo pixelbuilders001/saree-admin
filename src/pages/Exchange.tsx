@@ -5,16 +5,13 @@ import { salesService, type SaleReportItem } from '@/services/salesService';
 import {
     ArrowLeftRight,
     Search,
-    Plus,
     Trash2,
     CheckCircle2,
     AlertCircle,
     Loader2,
-    Calendar,
     ArrowDownLeft,
     ArrowUpRight,
     SearchCode,
-    Download
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -34,7 +31,6 @@ import { receiptService } from '@/services/receiptService';
 export default function ExchangePage() {
     const [originalSaleId, setOriginalSaleId] = React.useState('');
     const [sareeSearchTerm, setSareeSearchTerm] = React.useState('');
-    const [highlightedIndex, setHighlightedIndex] = React.useState(0);
 
     const [returnItems, setReturnItems] = React.useState<SaleReportItem[]>([]);
     const [replaceItems, setReplaceItems] = React.useState<any[]>([]);
@@ -58,7 +54,6 @@ export default function ExchangePage() {
             queryClient.invalidateQueries({ queryKey: ['sarees'] });
             queryClient.invalidateQueries({ queryKey: ['dashboardStats'] });
 
-            // Download Receipt
             receiptService.downloadExchangePDF({
                 exchangeId: data.exchangeId,
                 customerName: returnItems[0]?.customerName || 'N/A',
@@ -117,15 +112,10 @@ export default function ExchangePage() {
         return sarees.filter(s =>
             s.status === 'active' && (
                 s.sareeName.toLowerCase().includes(sareeSearchTerm.toLowerCase()) ||
-                s.id.toLowerCase().includes(sareeSearchTerm.toLowerCase()) ||
-                s.barcode?.toLowerCase().includes(sareeSearchTerm.toLowerCase())
+                s.id.toLowerCase().includes(sareeSearchTerm.toLowerCase())
             )
         ).slice(0, 8);
     }, [sarees, sareeSearchTerm]);
-
-    React.useEffect(() => {
-        setHighlightedIndex(0);
-    }, [filteredSarees.length]);
 
     const handleAddReplacement = (saree: Saree) => {
         const existing = replaceItems.find(i => i.sareeId === saree.id);
@@ -175,88 +165,86 @@ export default function ExchangePage() {
                 sellingPrice: i.sellingPrice
             })),
             replaceItems,
-            customerName: returnItems[0].customerName, // Use original customer info
+            customerName: returnItems[0].customerName,
             customerMobile: returnItems[0].customerMobile
         });
     };
 
     return (
-        <div className="space-y-6">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-3xl font-bold text-maroon flex items-center gap-2">
-                        <ArrowLeftRight className="h-8 w-8" />
-                        Item Exchange
-                    </h1>
-                    <p className="text-gray-500">Fast 7-day exchange window processing</p>
+        <div className="flex flex-col h-[calc(100vh-100px)] overflow-hidden max-w-7xl mx-auto px-2 space-y-3">
+            <div className="flex items-center justify-between border-b border-gold/10 pb-2">
+                <div className="flex items-center gap-2">
+                    <ArrowLeftRight className="h-5 w-5 text-maroon" />
+                    <div>
+                        <h1 className="text-xl font-bold font-serif text-maroon tracking-wider">SBS EXCHANGE DESK</h1>
+                        <p className="text-xs text-gray-500 font-sans">Strict 7-day customer exchange portal</p>
+                    </div>
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 space-y-6">
-                    {/* Step 1: Lookup Original Sale */}
-                    <Card className="border-gold/20 shadow-md">
-                        <CardHeader className="bg-cream/20 border-b border-gold/10">
-                            <CardTitle className="text-lg text-maroon flex items-center gap-2">
-                                <SearchCode className="h-5 w-5" />
-                                1. Find Original Sale
+            <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-3 overflow-hidden">
+                <div className="lg:col-span-2 flex flex-col space-y-3 overflow-y-auto pr-1">
+                    <Card className="border-gold/20 shadow-sm">
+                        <CardHeader className="bg-cream/20 border-b border-gold/10 p-2.5">
+                            <CardTitle className="text-xs font-bold text-maroon flex items-center gap-1.5 uppercase">
+                                <SearchCode className="h-3.5 w-3.5" />
+                                1. Find Original Invoice
                             </CardTitle>
                         </CardHeader>
-                        <CardContent className="pt-6">
+                        <CardContent className="p-3">
                             <div className="flex gap-2">
                                 <div className="relative flex-1">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
                                     <Input
-                                        placeholder="Enter Sale ID (e.g. SL-1234)"
-                                        className="pl-10 border-gold/30"
+                                        placeholder="Enter Sale ID (e.g. SL-1002)"
+                                        className="pl-8 border-gold/30 h-8 text-xs font-mono"
                                         value={originalSaleId}
                                         onChange={(e) => setOriginalSaleId(e.target.value.toUpperCase())}
                                         onKeyDown={(e) => e.key === 'Enter' && handleLookupSale()}
                                     />
                                 </div>
-                                <Button className="bg-maroon hover:bg-maroon-dark text-gold" onClick={handleLookupSale} disabled={isLoadingSales}>
-                                    Find Sale
+                                <Button className="bg-maroon hover:bg-maroon-dark text-gold h-8 text-xs font-bold shadow-sm" onClick={handleLookupSale} disabled={isLoadingSales}>
+                                    {isLoadingSales ? <Loader2 className="h-3 w-3 animate-spin" /> : 'FIND'}
                                 </Button>
                             </div>
                         </CardContent>
                     </Card>
 
-                    {/* Step 2: Items being Returned */}
                     {returnItems.length > 0 && (
-                        <Card className="border-red-100 shadow-md">
-                            <CardHeader className="bg-red-50/50 border-b border-red-100">
-                                <CardTitle className="text-lg text-red-800 flex items-center gap-2">
-                                    <ArrowDownLeft className="h-5 w-5" />
-                                    2. Items being Returned
+                        <Card className="border-red-100 shadow-sm">
+                            <CardHeader className="bg-red-50/50 border-b border-red-100 p-2.5">
+                                <CardTitle className="text-xs font-bold text-red-800 flex items-center gap-1.5 uppercase">
+                                    <ArrowDownLeft className="h-3.5 w-3.5" />
+                                    2. Return Item Registry
                                 </CardTitle>
                             </CardHeader>
                             <CardContent className="p-0">
                                 <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>Item</TableHead>
-                                            <TableHead className="text-center">Qty</TableHead>
-                                            <TableHead className="text-right">Amount</TableHead>
-                                            <TableHead></TableHead>
+                                    <TableHeader className="bg-red-50/20">
+                                        <TableRow className="border-b border-red-100 hover:bg-transparent">
+                                            <TableHead className="h-7 text-[10px] font-bold text-red-800 py-1">Item Title</TableHead>
+                                            <TableHead className="h-7 text-[10px] font-bold text-red-800 text-center py-1">Qty</TableHead>
+                                            <TableHead className="h-7 text-[10px] font-bold text-red-800 text-right py-1">Value Amount</TableHead>
+                                            <TableHead className="h-7 text-[10px] font-bold text-red-800 text-right py-1 px-3"></TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                         {returnItems.map((item, idx) => (
-                                            <TableRow key={idx}>
-                                                <TableCell className="font-medium">
-                                                    <div>{item.sareeName}</div>
-                                                    <div className="text-xs text-gray-400">{item.sareeId}</div>
+                                            <TableRow key={idx} className="border-b border-red-50 hover:bg-red-50/20 h-8">
+                                                <TableCell className="py-1 text-xs">
+                                                    <div className="font-semibold text-gray-805">{item.sareeName}</div>
+                                                    <div className="text-[10px] font-mono text-gray-400">{item.sareeId}</div>
                                                 </TableCell>
-                                                <TableCell className="text-center">{item.quantity}</TableCell>
-                                                <TableCell className="text-right">₹{item.totalAmount.toLocaleString()}</TableCell>
-                                                <TableCell className="text-right">
+                                                <TableCell className="py-1 text-center text-xs font-semibold">{item.quantity}</TableCell>
+                                                <TableCell className="py-1 text-right text-xs font-bold text-red-750 font-mono">₹{item.totalAmount.toLocaleString()}</TableCell>
+                                                <TableCell className="py-1 text-right px-3">
                                                     <Button
                                                         variant="ghost"
-                                                        size="sm"
-                                                        className="text-gray-400 hover:text-red-500"
+                                                        size="icon"
+                                                        className="h-6 w-6 text-red-400 hover:text-red-650 hover:bg-red-100 rounded-full"
                                                         onClick={() => handleRemoveReturn(idx)}
                                                     >
-                                                        <Trash2 className="h-4 w-4" />
+                                                        <Trash2 className="h-3.5 w-3.5" />
                                                     </Button>
                                                 </TableCell>
                                             </TableRow>
@@ -267,43 +255,42 @@ export default function ExchangePage() {
                         </Card>
                     )}
 
-                    {/* Step 3: Replacement Items */}
                     {returnItems.length > 0 && (
-                        <Card className="border-green-100 shadow-md">
-                            <CardHeader className="bg-green-50/50 border-b border-green-100">
-                                <CardTitle className="text-lg text-green-800 flex items-center gap-2">
-                                    <ArrowUpRight className="h-5 w-5" />
-                                    3. New Replacement Items
+                        <Card className="border-green-150 shadow-sm flex-1">
+                            <CardHeader className="bg-green-50/50 border-b border-green-100 p-2.5">
+                                <CardTitle className="text-xs font-bold text-green-800 flex items-center gap-1.5 uppercase">
+                                    <ArrowUpRight className="h-3.5 w-3.5" />
+                                    3. New Selection Registry
                                 </CardTitle>
                             </CardHeader>
-                            <CardContent className="pt-6 space-y-4">
+                            <CardContent className="p-3 space-y-2">
                                 <div className="relative">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
                                     <Input
-                                        placeholder="Search new saree by name or barcode..."
-                                        className="pl-10 border-gold/30"
+                                        placeholder="Scan barcode or type matching Saree name..."
+                                        className="pl-8 border-gold/30 h-8 text-xs bg-white"
                                         value={sareeSearchTerm}
                                         onChange={(e) => setSareeSearchTerm(e.target.value)}
                                     />
                                     {sareeSearchTerm && (
-                                        <Card className="absolute z-50 w-full mt-1 border-gold/20 shadow-xl max-h-[300px] overflow-y-auto">
+                                        <Card className="absolute z-50 w-full mt-1 border-gold/20 shadow-2xl max-h-[180px] overflow-y-auto">
                                             <CardContent className="p-0">
                                                 {filteredSarees.length > 0 ? (
-                                                    filteredSarees.map((saree, idx) => (
+                                                    filteredSarees.map((saree) => (
                                                         <div
                                                             key={saree.id}
-                                                            className="p-3 hover:bg-cream/20 cursor-pointer border-b border-gray-50 last:border-0 flex justify-between items-center"
+                                                            className="p-2 hover:bg-cream/20 cursor-pointer border-b border-gray-150 last:border-0 flex justify-between items-center text-xs"
                                                             onClick={() => handleAddReplacement(saree)}
                                                         >
                                                             <div>
                                                                 <div className="font-bold text-maroon">{saree.sareeName}</div>
-                                                                <div className="text-xs text-gray-500">{saree.id} | Stock: {saree.stock}</div>
+                                                                <div className="text-[10px] text-gray-405">{saree.id} | Available: {saree.stock}</div>
                                                             </div>
-                                                            <div className="font-bold text-maroon">₹{saree.sellingPrice.toLocaleString()}</div>
+                                                            <div className="font-bold text-maroon font-mono">₹{saree.sellingPrice.toLocaleString()}</div>
                                                         </div>
                                                     ))
                                                 ) : (
-                                                    <div className="p-4 text-center text-gray-500 italic">No sarees match your search</div>
+                                                    <div className="p-3 text-center text-xs text-gray-405 italic">No matching sarees found</div>
                                                 )}
                                             </CardContent>
                                         </Card>
@@ -312,28 +299,31 @@ export default function ExchangePage() {
 
                                 {replaceItems.length > 0 && (
                                     <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead>Item</TableHead>
-                                                <TableHead className="text-center">Qty</TableHead>
-                                                <TableHead className="text-right">Price</TableHead>
-                                                <TableHead></TableHead>
+                                        <TableHeader className="bg-green-50/20">
+                                            <TableRow className="border-b border-green-100 hover:bg-transparent">
+                                                <TableHead className="h-7 text-[10px] font-bold text-green-800 py-1">Item Title</TableHead>
+                                                <TableHead className="h-7 text-[10px] font-bold text-green-800 text-center py-1">Qty</TableHead>
+                                                <TableHead className="h-7 text-[10px] font-bold text-green-800 text-right py-1">Unit Price</TableHead>
+                                                <TableHead className="h-7 text-[10px] font-bold text-green-800 text-right py-1 px-3"></TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
                                             {replaceItems.map((item, idx) => (
-                                                <TableRow key={idx}>
-                                                    <TableCell className="font-medium text-maroon">{item.sareeName}</TableCell>
-                                                    <TableCell className="text-center">{item.quantity}</TableCell>
-                                                    <TableCell className="text-right">₹{item.sellingPrice.toLocaleString()}</TableCell>
-                                                    <TableCell className="text-right">
+                                                <TableRow key={idx} className="border-b border-green-50 hover:bg-green-50/20 h-8">
+                                                    <TableCell className="py-1 text-xs">
+                                                        <div className="font-semibold text-gray-805">{item.sareeName}</div>
+                                                        <div className="text-[10px] font-mono text-gray-405">{item.sareeId}</div>
+                                                    </TableCell>
+                                                    <TableCell className="py-1 text-center text-xs font-semibold">{item.quantity}</TableCell>
+                                                    <TableCell className="py-1 text-right text-xs font-bold text-green-750 font-mono">₹{item.sellingPrice.toLocaleString()}</TableCell>
+                                                    <TableCell className="py-1 text-right px-3">
                                                         <Button
                                                             variant="ghost"
-                                                            size="sm"
-                                                            className="text-red-500 p-0 h-auto"
+                                                            size="icon"
+                                                            className="h-6 w-6 text-red-500 hover:text-red-600 hover:bg-red-50 rounded-full"
                                                             onClick={() => handleRemoveReplacement(idx)}
                                                         >
-                                                            <Trash2 className="h-4 w-4" />
+                                                            <Trash2 className="h-3.5 w-3.5" />
                                                         </Button>
                                                     </TableCell>
                                                 </TableRow>
@@ -346,70 +336,63 @@ export default function ExchangePage() {
                     )}
                 </div>
 
-                {/* Summary & Checkout */}
-                <div className="space-y-6">
-                    <Card className="border-gold/30 shadow-xl overflow-hidden sticky top-6">
-                        <div className="bg-maroon p-6 text-gold">
-                            <h3 className="text-lg font-bold mb-1 uppercase tracking-wider">Exchange Summary</h3>
-                            <p className="text-gold/60 text-xs">Calculated based on item values</p>
+                <div className="flex flex-col space-y-3 overflow-hidden">
+                    <Card className="border-gold/30 shadow-xl overflow-hidden flex flex-col flex-1">
+                        <div className="bg-maroon p-3.5 text-gold flex-shrink-0">
+                            <h3 className="text-xs font-bold uppercase tracking-widest">Exchange Terminal Summary</h3>
+                            <p className="text-gold/60 text-[10px] mt-0.5">Calculated difference matrix</p>
                         </div>
-                        <CardContent className="p-6 space-y-4">
-                            <div className="flex justify-between items-center text-red-600">
-                                <span className="text-sm font-medium">Return Value</span>
-                                <span className="font-bold">₹{returnTotal.toLocaleString()}</span>
-                            </div>
-                            <div className="flex justify-between items-center text-green-700">
-                                <span className="text-sm font-medium">Replacement Value</span>
-                                <span className="font-bold">₹{replaceTotal.toLocaleString()}</span>
+                        <CardContent className="p-4 space-y-3 flex-1 overflow-y-auto">
+                            {returnItems.length > 0 && (
+                                <div className="border border-gold/20 bg-cream/15 p-2 rounded-md space-y-1">
+                                    <div className="text-[9px] font-bold text-maroon opacity-75 uppercase tracking-wider flex items-center gap-1">
+                                        <AlertCircle className="h-3 w-3" />
+                                        Customer Identity
+                                    </div>
+                                    <div className="text-xs font-bold text-gray-800">{returnItems[0].customerName || 'Walk-in Customer'}</div>
+                                    <div className="text-xs text-gray-500 font-mono">{returnItems[0].customerMobile || 'No contact provided'}</div>
+                                </div>
+                            )}
+
+                            <div className="space-y-2 pt-2 border-t border-gold/10">
+                                <div className="flex justify-between items-center text-xs text-red-650">
+                                    <span className="font-semibold uppercase tracking-wider">(-) Total Returned Value</span>
+                                    <span className="font-bold font-mono">₹{returnTotal.toLocaleString()}</span>
+                                </div>
+                                <div className="flex justify-between items-center text-xs text-green-755">
+                                    <span className="font-semibold uppercase tracking-wider">(+) Total Replacement Value</span>
+                                    <span className="font-bold font-mono">₹{replaceTotal.toLocaleString()}</span>
+                                </div>
                             </div>
 
-                            <div className="border-t border-gold/20 pt-4">
-                                <div className="flex justify-between items-center mb-1">
-                                    <span className="text-lg font-bold text-maroon">Net Difference</span>
+                            <div className="border-t border-gold/25 pt-3">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-sm font-bold text-maroon uppercase tracking-widest">Net Payable Diff</span>
                                     <span className={cn(
-                                        "text-2xl font-black",
-                                        netDifference > 0 ? "text-green-700" : "text-gray-500"
+                                        "text-xl font-black font-mono",
+                                        netDifference > 0 ? "text-green-700 font-sans" : "text-gray-500"
                                     )}>
                                         ₹{Math.max(0, netDifference).toLocaleString()}
                                     </span>
                                 </div>
                                 {netDifference < 0 && (
-                                    <p className="text-[10px] text-gray-400 italic">Note: Difference is negative, no refund will be provided.</p>
+                                    <p className="text-[9px] text-gray-400 italic mt-1 leading-normal">
+                                        * Note: The replacement value is lower than original sale value. Under business policy, negative differences are not refunded.
+                                    </p>
                                 )}
                             </div>
                         </CardContent>
-                        <CardFooter className="pb-6 px-6">
+                        <CardFooter className="p-3 border-t border-gold/10 flex-shrink-0 bg-cream/10">
                             <Button
-                                className="w-full bg-maroon hover:bg-maroon-dark text-gold h-14 text-lg font-bold gap-2"
+                                className="w-full bg-maroon hover:bg-maroon-dark text-gold h-10 text-sm font-black tracking-widest gap-2 rounded-md shadow-md"
                                 disabled={returnItems.length === 0 || replaceItems.length === 0 || exchangeMutation.isPending}
                                 onClick={handleProcessExchange}
                             >
-                                {exchangeMutation.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <CheckCircle2 className="h-5 w-5" />}
-                                Complete Exchange
+                                {exchangeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <CheckCircle2 className="h-4 w-4 mr-1" />}
+                                COMPLETE EXCHANGE
                             </Button>
                         </CardFooter>
                     </Card>
-
-                    {returnItems.length > 0 && (
-                        <Card className="border-gold/10 bg-cream/5 shadow-sm">
-                            <CardContent className="p-4 space-y-2">
-                                <h4 className="font-bold text-maroon text-sm flex items-center gap-2">
-                                    <AlertCircle className="h-4 w-4" />
-                                    Customer Info
-                                </h4>
-                                <div className="text-sm space-y-1">
-                                    <div className="flex justify-between">
-                                        <span className="text-gray-500">Name:</span>
-                                        <span className="font-medium">{returnItems[0].customerName || 'N/A'}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span className="text-gray-500">Mobile:</span>
-                                        <span className="font-medium">{returnItems[0].customerMobile || 'N/A'}</span>
-                                    </div>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    )}
                 </div>
             </div>
         </div>

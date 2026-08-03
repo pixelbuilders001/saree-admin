@@ -1,4 +1,4 @@
-import { gsRequest } from './api';
+import { supabase } from '@/lib/supabase';
 
 export interface Expense {
     expenseId: string;
@@ -10,10 +10,41 @@ export interface Expense {
 
 export const expenseService = {
     getExpenses: async (): Promise<Expense[]> => {
-        return gsRequest('getExpenses');
+        const { data, error } = await supabase
+            .from('expenses')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        return (data || []).map((x: any) => ({
+            expenseId: x.id,
+            category: x.category as any,
+            amount: Number(x.amount),
+            description: x.description || '',
+            date: x.created_at,
+        }));
     },
 
     createExpense: async (expense: Omit<Expense, 'expenseId' | 'date'>): Promise<Expense> => {
-        return gsRequest('createExpense', { expense });
+        const { data, error } = await supabase
+            .from('expenses')
+            .insert([{
+                category: expense.category,
+                amount: expense.amount,
+                description: expense.description,
+            }])
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        return {
+            expenseId: data.id,
+            category: data.category as any,
+            amount: Number(data.amount),
+            description: data.description || '',
+            date: data.created_at,
+        };
     },
 };

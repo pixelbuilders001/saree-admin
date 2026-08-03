@@ -2,33 +2,14 @@ import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { expenseService, type Expense } from '@/services/expenseService';
 import {
-    Receipt,
     Plus,
-    Calendar,
-    Filter,
-    IndianRupee,
-    Tag,
-    FileText,
     Loader2,
-    Search
+    Receipt,
+    Filter,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    DialogTrigger,
-} from "@/components/ui/dialog";
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select";
 import {
     Table,
     TableBody,
@@ -37,20 +18,19 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 import { toast } from 'sonner';
-import { cn } from '@/lib/utils';
 
 export default function ExpensesPage() {
-    const [isAddOpen, setIsAddOpen] = React.useState(false);
-    const [searchTerm, setSearchTerm] = React.useState('');
-    const [categoryFilter, setCategoryFilter] = React.useState('all');
-
-    // Form State
-    const [newExpense, setNewExpense] = React.useState({
-        category: 'Rent' as any,
-        amount: '',
-        description: ''
-    });
+    const [category, setCategory] = React.useState<Expense['category']>('Rent');
+    const [amount, setAmount] = React.useState('');
+    const [description, setDescription] = React.useState('');
 
     const queryClient = useQueryClient();
 
@@ -64,239 +44,153 @@ export default function ExpensesPage() {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['expenses'] });
             queryClient.invalidateQueries({ queryKey: ['dashboardStats'] });
+            setAmount('');
+            setDescription('');
             toast.success('Expense recorded successfully');
-            setIsAddOpen(false);
-            setNewExpense({ category: 'Rent', amount: '', description: '' });
         },
-        onError: (error: any) => {
-            toast.error(error.message || 'Failed to record expense');
+        onError: (err: any) => {
+            toast.error(err.message || 'Failed to record expense');
         }
     });
 
-    const filteredExpenses = React.useMemo(() => {
-        if (!expenses) return [];
-        return expenses.filter(e => {
-            const matchesSearch = e.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                e.category.toLowerCase().includes(searchTerm.toLowerCase());
-            const matchesCategory = categoryFilter === 'all' || e.category === categoryFilter;
-            return matchesSearch && matchesCategory;
-        }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    }, [expenses, searchTerm, categoryFilter]);
-
-    const totalExpenseAmount = React.useMemo(() => {
-        return filteredExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-    }, [filteredExpenses]);
-
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!newExpense.amount || Number(newExpense.amount) <= 0) {
+        if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
             toast.error('Please enter a valid amount');
             return;
         }
+
         createMutation.mutate({
-            category: newExpense.category,
-            amount: Number(newExpense.amount),
-            description: newExpense.description
+            category,
+            amount: Number(amount),
+            description,
         });
     };
 
-    if (isLoading) {
-        return (
-            <div className="flex items-center justify-center h-64">
-                <Loader2 className="h-8 w-8 animate-spin text-maroon" />
-            </div>
-        );
-    }
-
     return (
-        <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div>
-                    <h1 className="text-3xl font-bold text-maroon flex items-center gap-2">
-                        <Receipt className="h-8 w-8" />
-                        Expenses
-                    </h1>
-                    <p className="text-gray-500">Track your business overheads and bills</p>
+        <div className="space-y-3 max-w-7xl mx-auto px-2">
+            {/* Minimal Header */}
+            <div className="flex items-center justify-between border-b border-gold/10 pb-2">
+                <div className="flex items-center gap-2">
+                    <Receipt className="h-5 w-5 text-maroon" />
+                    <div>
+                        <h1 className="text-xl font-bold font-serif text-maroon tracking-wider">SBS OPERATIONAL EXPENSES</h1>
+                        <p className="text-xs text-gray-500 font-sans">Overhead & operational expense log</p>
+                    </div>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                {/* Form column */}
+                <div className="lg:col-span-1">
+                    <Card className="border-gold/20 shadow-md">
+                        <CardHeader className="bg-cream/20 border-b border-gold/10 p-2.5">
+                            <CardTitle className="text-xs font-bold text-maroon uppercase tracking-wider">Debit Expense</CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-3">
+                            <form onSubmit={handleSubmit} className="space-y-2.5">
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-gray-500 uppercase">Expense Category</label>
+                                    <Select value={category} onValueChange={(val: any) => setCategory(val)}>
+                                        <SelectTrigger className="h-8 text-xs border-gold/30">
+                                            <SelectValue placeholder="Select type" />
+                                        </SelectTrigger>
+                                        <SelectContent className="border-gold/20">
+                                            <SelectItem className="text-xs" value="Rent">Rent & Maintenance</SelectItem>
+                                            <SelectItem className="text-xs" value="Electricity">Electricity & Utility</SelectItem>
+                                            <SelectItem className="text-xs" value="Salary">Staff Salary</SelectItem>
+                                            <SelectItem className="text-xs" value="Marketing">Marketing & Ads</SelectItem>
+                                            <SelectItem className="text-xs" value="Other">Other Expenses</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-gray-500 uppercase">Debit Amount (₹)</label>
+                                    <Input
+                                        type="number"
+                                        placeholder="0.00"
+                                        required
+                                        className="h-8 text-xs border-gold/30"
+                                        value={amount}
+                                        onChange={(e) => setAmount(e.target.value)}
+                                    />
+                                </div>
+
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-gray-500 uppercase">Remarks/Notes</label>
+                                    <textarea
+                                        placeholder="Description..."
+                                        className="flex w-full rounded-md border border-gold/30 bg-transparent px-3 py-2 text-xs shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring min-h-[50px] resize-none"
+                                        value={description}
+                                        onChange={(e) => setDescription(e.target.value)}
+                                    />
+                                </div>
+
+                                <Button
+                                    type="submit"
+                                    className="w-full bg-maroon hover:bg-maroon-dark text-gold h-8 text-xs font-bold shadow-sm uppercase tracking-wider"
+                                    disabled={createMutation.isPending}
+                                >
+                                    {createMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> : <Plus className="h-3.5 w-3.5 mr-1.5" />}
+                                    LOG EXPENSE
+                                </Button>
+                            </form>
+                        </CardContent>
+                    </Card>
                 </div>
 
-                <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-                    <DialogTrigger asChild>
-                        <Button className="bg-maroon hover:bg-maroon-dark text-gold gap-2 h-12 px-6">
-                            <Plus className="h-5 w-5" />
-                            Record Expense
-                        </Button>
-                    </DialogTrigger>
-                    <DialogContent className="border-gold/20">
-                        <DialogHeader>
-                            <DialogTitle className="text-maroon">Record New Expense</DialogTitle>
-                        </DialogHeader>
-                        <form onSubmit={handleSubmit} className="space-y-4 pt-4">
-                            <div className="space-y-2">
-                                <label className="text-sm font-semibold">Category</label>
-                                <Select
-                                    value={newExpense.category}
-                                    onValueChange={(val) => setNewExpense({ ...newExpense, category: val as any })}
-                                >
-                                    <SelectTrigger className="border-gold/30">
-                                        <SelectValue placeholder="Select category" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="Rent">Rent</SelectItem>
-                                        <SelectItem value="Electricity">Electricity</SelectItem>
-                                        <SelectItem value="Salary">Salary</SelectItem>
-                                        <SelectItem value="Marketing">Marketing</SelectItem>
-                                        <SelectItem value="Other">Other</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-sm font-semibold">Amount (₹)</label>
-                                <Input
-                                    type="number"
-                                    placeholder="0.00"
-                                    className="border-gold/30"
-                                    value={newExpense.amount}
-                                    onChange={(e) => setNewExpense({ ...newExpense, amount: e.target.value })}
-                                    required
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-sm font-semibold">Description</label>
-                                <Input
-                                    placeholder="e.g. Shop rent for June"
-                                    className="border-gold/30"
-                                    value={newExpense.description}
-                                    onChange={(e) => setNewExpense({ ...newExpense, description: e.target.value })}
-                                    required
-                                />
-                            </div>
-                            <Button
-                                type="submit"
-                                className="w-full bg-maroon hover:bg-maroon-dark text-gold"
-                                disabled={createMutation.isPending}
-                            >
-                                {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                                Save Expense
+                {/* List column */}
+                <div className="lg:col-span-2">
+                    <Card className="border-gold/20 shadow-md">
+                        <CardHeader className="bg-cream/20 border-b border-gold/10 p-2.5 flex flex-row items-center justify-between">
+                            <CardTitle className="text-xs font-bold text-maroon uppercase tracking-wider">Operational Expense Registry</CardTitle>
+                            <Button variant="outline" size="sm" className="h-7 text-[10px] border-gold/30 text-maroon gap-1 hover:bg-cream/10 px-2 font-bold">
+                                <Filter className="h-3 w-3" /> FILTER
                             </Button>
-                        </form>
-                    </DialogContent>
-                </Dialog>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card className="border-gold/20 shadow-md">
-                    <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <CardTitle className="text-sm font-medium text-gray-500 uppercase tracking-wider">Total Expenses</CardTitle>
-                        <IndianRupee className="h-4 w-4 text-maroon" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold text-maroon">₹{totalExpenseAmount.toLocaleString()}</div>
-                        <p className="text-xs text-gray-400 mt-1">For currently filtered period</p>
-                    </CardContent>
-                </Card>
-                <Card className="border-gold/20 shadow-md">
-                    <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <CardTitle className="text-sm font-medium text-gray-500 uppercase tracking-wider">Categories</CardTitle>
-                        <Tag className="h-4 w-4 text-gold" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold text-maroon">5 Categories</div>
-                        <p className="text-xs text-gray-400 mt-1">Rent, Utilities, Staff, Ads</p>
-                    </CardContent>
-                </Card>
-                <Card className="border-gold/20 shadow-md">
-                    <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <CardTitle className="text-sm font-medium text-gray-500 uppercase tracking-wider">Total Entries</CardTitle>
-                        <FileText className="h-4 w-4 text-maroon/60" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold text-maroon">{filteredExpenses.length} Records</div>
-                        <p className="text-xs text-gray-400 mt-1">Recorded in system</p>
-                    </CardContent>
-                </Card>
-            </div>
-
-            <Card className="border-gold/10 shadow-lg">
-                <CardHeader className="bg-cream/20 border-b border-gold/10 pb-6 pt-6">
-                    <div className="flex flex-col md:flex-row gap-4 md:items-center">
-                        <div className="relative flex-1">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                            <Input
-                                placeholder="Search by description..."
-                                className="pl-10 border-gold/30"
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                            />
-                        </div>
-                        <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                            <SelectTrigger className="w-[180px] border-gold/30">
-                                <div className="flex items-center gap-2">
-                                    <Filter className="h-4 w-4" />
-                                    <span>{categoryFilter === 'all' ? 'All Categories' : categoryFilter}</span>
-                                </div>
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">All Categories</SelectItem>
-                                <SelectItem value="Rent">Rent</SelectItem>
-                                <SelectItem value="Electricity">Electricity</SelectItem>
-                                <SelectItem value="Salary">Salary</SelectItem>
-                                <SelectItem value="Marketing">Marketing</SelectItem>
-                                <SelectItem value="Other">Other</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-                </CardHeader>
-                <CardContent className="p-0">
-                    <div className="overflow-x-auto">
-                        <Table>
-                            <TableHeader className="bg-cream/10">
-                                <TableRow>
-                                    <TableHead className="w-[150px]">Date</TableHead>
-                                    <TableHead>Description</TableHead>
-                                    <TableHead>Category</TableHead>
-                                    <TableHead className="text-right">Amount</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {filteredExpenses.length > 0 ? (
-                                    filteredExpenses.map((expense) => (
-                                        <TableRow key={expense.expenseId} className="hover:bg-cream/5">
-                                            <TableCell className="font-medium">
-                                                <div className="flex items-center gap-2">
-                                                    <Calendar className="h-3 w-3 text-gray-400" />
-                                                    {new Date(expense.date).toLocaleDateString()}
-                                                </div>
-                                            </TableCell>
-                                            <TableCell className="text-maroon font-medium">{expense.description}</TableCell>
-                                            <TableCell>
-                                                <span className={cn(
-                                                    "px-2 py-1 rounded-full text-xs font-semibold",
-                                                    expense.category === 'Rent' && "bg-blue-100 text-blue-800",
-                                                    expense.category === 'Electricity' && "bg-yellow-100 text-yellow-800",
-                                                    expense.category === 'Salary' && "bg-green-100 text-green-800",
-                                                    expense.category === 'Marketing' && "bg-purple-100 text-purple-800",
-                                                    expense.category === 'Other' && "bg-gray-100 text-gray-800"
-                                                )}>
-                                                    {expense.category}
-                                                </span>
-                                            </TableCell>
-                                            <TableCell className="text-right font-bold text-maroon">
-                                                ₹{Number(expense.amount).toLocaleString()}
+                        </CardHeader>
+                        <CardContent className="p-0">
+                            <Table>
+                                <TableHeader className="bg-cream/10">
+                                    <TableRow className="border-b border-gold/10 hover:bg-transparent">
+                                        <TableHead className="h-8 text-[10px] font-bold text-maroon py-1">Date</TableHead>
+                                        <TableHead className="h-8 text-[10px] font-bold text-maroon py-1">Category</TableHead>
+                                        <TableHead className="h-8 text-[10px] font-bold text-maroon py-1">Remarks</TableHead>
+                                        <TableHead className="h-8 text-[10px] font-bold text-maroon py-1 text-right">Amount (₹)</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {isLoading ? (
+                                        <TableRow>
+                                            <TableCell colSpan={4} className="h-24 text-center text-maroon/50 text-xs italic">
+                                                <Loader2 className="h-5 w-5 animate-spin mx-auto mb-1" />
+                                                Loading expense logs...
                                             </TableCell>
                                         </TableRow>
-                                    ))
-                                ) : (
-                                    <TableRow>
-                                        <TableCell colSpan={4} className="h-24 text-center text-gray-500 italic">
-                                            No expenses found matching your filters
-                                        </TableCell>
-                                    </TableRow>
-                                )}
-                            </TableBody>
-                        </Table>
-                    </div>
-                </CardContent>
-            </Card>
+                                    ) : !expenses || expenses.length === 0 ? (
+                                        <TableRow>
+                                            <TableCell colSpan={4} className="h-20 text-center text-xs text-gray-500 italic">No expenses recorded yet</TableCell>
+                                        </TableRow>
+                                    ) : (
+                                        expenses.map((expense: Expense) => (
+                                            <TableRow key={expense.expenseId} className="hover:bg-cream/5 border-b border-gold/5 h-8">
+                                                <TableCell className="py-1 text-xs font-mono text-gray-500">{new Date(expense.date).toLocaleDateString()}</TableCell>
+                                                <TableCell className="py-1 text-xs">
+                                                    <span className="font-bold text-[10px] px-1.5 py-0.5 rounded border bg-gold/5 text-maroon border-gold/20">
+                                                        {expense.category}
+                                                    </span>
+                                                </TableCell>
+                                                <TableCell className="py-1 text-xs text-gray-700 truncate max-w-[200px]">{expense.description || '-'}</TableCell>
+                                                <TableCell className="py-1 text-xs font-bold text-right text-maroon font-mono flex-1">₹{expense.amount.toLocaleString()}</TableCell>
+                                            </TableRow>
+                                        ))
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </CardContent>
+                    </Card>
+                </div>
+            </div>
         </div>
     );
 }

@@ -1,4 +1,4 @@
-import { gsRequest } from './api';
+import { supabase } from '@/lib/supabase';
 
 export interface Saree {
     id: string;
@@ -17,22 +17,140 @@ export interface Saree {
 
 export const inventoryService = {
     getSarees: async (): Promise<Saree[]> => {
-        return gsRequest('getSarees');
+        const { data, error } = await supabase
+            .from('inventory')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        return (data || []).map((item: any) => ({
+            id: item.id,
+            sareeName: item.saree_name,
+            category: item.category,
+            fabric: item.fabric,
+            color: item.color,
+            purchasePrice: Number(item.purchase_price),
+            sellingPrice: Number(item.selling_price),
+            stock: Number(item.stock),
+            rackNo: item.rack_no || '',
+            barcode: item.barcode || '',
+            addedDate: item.created_at,
+            status: item.status as 'active' | 'inactive',
+        }));
     },
 
     getSareeById: async (id: string): Promise<Saree> => {
-        return gsRequest('getSareeById', { id });
+        const { data, error } = await supabase
+            .from('inventory')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        if (error) throw error;
+        if (!data) throw new Error('Saree not found');
+
+        return {
+            id: data.id,
+            sareeName: data.saree_name,
+            category: data.category,
+            fabric: data.fabric,
+            color: data.color,
+            purchasePrice: Number(data.purchase_price),
+            sellingPrice: Number(data.selling_price),
+            stock: Number(data.stock),
+            rackNo: data.rack_no || '',
+            barcode: data.barcode || '',
+            addedDate: data.created_at,
+            status: data.status as 'active' | 'inactive',
+        };
     },
 
     createSaree: async (saree: Omit<Saree, 'id' | 'addedDate'>): Promise<Saree> => {
-        return gsRequest('createSaree', { saree });
+        // Generate a random ID (e.g. S-XXXX) for standard inventory item
+        const randId = 'S' + Math.floor(1000 + Math.random() * 9000);
+        const newSaree = {
+            id: randId,
+            saree_name: saree.sareeName,
+            category: saree.category,
+            fabric: saree.fabric,
+            color: saree.color,
+            purchase_price: saree.purchasePrice,
+            selling_price: saree.sellingPrice,
+            stock: saree.stock,
+            rack_no: saree.rackNo,
+            barcode: saree.barcode || randId,
+            status: saree.status || 'active',
+        };
+
+        const { data, error } = await supabase
+            .from('inventory')
+            .insert([newSaree])
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        return {
+            id: data.id,
+            sareeName: data.saree_name,
+            category: data.category,
+            fabric: data.fabric,
+            color: data.color,
+            purchasePrice: Number(data.purchase_price),
+            sellingPrice: Number(data.selling_price),
+            stock: Number(data.stock),
+            rackNo: data.rack_no || '',
+            barcode: data.barcode || '',
+            addedDate: data.created_at,
+            status: data.status as 'active' | 'inactive',
+        };
     },
 
     updateSaree: async (id: string, saree: Partial<Saree>): Promise<Saree> => {
-        return gsRequest('updateSaree', { id, saree });
+        const updateData: any = {};
+        if (saree.sareeName !== undefined) updateData.saree_name = saree.sareeName;
+        if (saree.category !== undefined) updateData.category = saree.category;
+        if (saree.fabric !== undefined) updateData.fabric = saree.fabric;
+        if (saree.color !== undefined) updateData.color = saree.color;
+        if (saree.purchasePrice !== undefined) updateData.purchase_price = saree.purchasePrice;
+        if (saree.sellingPrice !== undefined) updateData.selling_price = saree.sellingPrice;
+        if (saree.stock !== undefined) updateData.stock = saree.stock;
+        if (saree.rackNo !== undefined) updateData.rack_no = saree.rackNo;
+        if (saree.barcode !== undefined) updateData.barcode = saree.barcode;
+        if (saree.status !== undefined) updateData.status = saree.status;
+
+        const { data, error } = await supabase
+            .from('inventory')
+            .update(updateData)
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        return {
+            id: data.id,
+            sareeName: data.saree_name,
+            category: data.category,
+            fabric: data.fabric,
+            color: data.color,
+            purchasePrice: Number(data.purchase_price),
+            sellingPrice: Number(data.selling_price),
+            stock: Number(data.stock),
+            rackNo: data.rack_no || '',
+            barcode: data.barcode || '',
+            addedDate: data.created_at,
+            status: data.status as 'active' | 'inactive',
+        };
     },
 
     deleteSaree: async (id: string): Promise<void> => {
-        return gsRequest('deleteSaree', { id });
+        const { error } = await supabase
+            .from('inventory')
+            .delete()
+            .eq('id', id);
+
+        if (error) throw error;
     },
 };

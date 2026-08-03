@@ -48,11 +48,12 @@ export const Sidebar = () => {
                 isOpen ? "translate-x-0" : "-translate-x-full"
             )}>
                 <div className="flex flex-col h-full">
-                    <div className="p-6 border-b border-gold/20">
-                        <h1 className="text-xl font-bold text-gold flex items-center gap-2">
-                            <span className="bg-gold text-maroon p-1 rounded">KS</span>
-                            Kasturi Sarees
-                        </h1>
+                    <div className="p-4 border-b border-gold/20 flex justify-center items-center">
+                        <img
+                            src="/logo.png"
+                            alt="Logo"
+                            className="h-10 w-auto object-contain"
+                        />
                     </div>
 
                     <nav className="flex-1 px-4 py-6 space-y-2">

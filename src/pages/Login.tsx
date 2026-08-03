@@ -48,12 +48,15 @@ export default function LoginPage() {
             <div className="absolute bottom-[-10%] left-[-10%] w-96 h-96 bg-gold/10 rounded-full blur-3xl" />
 
             <Card className="w-full max-w-md border-gold/20 shadow-2xl z-10">
-                <CardHeader className="text-center space-y-1">
-                    <div className="mx-auto w-16 h-16 bg-maroon rounded-full flex items-center justify-center mb-4 border-2 border-gold shadow-lg">
-                        <span className="text-2xl font-bold text-gold">K</span>
+                <CardHeader className="text-center space-y-1 pb-3">
+                    <div className="flex justify-center mb-2">
+                        <img
+                            src="/logo.png"
+                            alt="Logo"
+                            className="h-12 w-auto object-contain"
+                        />
                     </div>
-                    <CardTitle className="text-3xl font-bold text-maroon">Kasturi Sarees Admin</CardTitle>
-                    <CardDescription className="text-gray-500 font-medium">Secure Inventory Management System</CardDescription>
+                    <CardDescription className="text-gray-505 font-medium pt-1">Secure Inventory Management System</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -86,7 +89,7 @@ export default function LoginPage() {
                     </form>
                 </CardContent>
                 <CardFooter className="flex flex-col items-center">
-                    <p className="text-xs text-gray-400">© 2026 Kasturi Sarees Admin portal</p>
+                    <p className="text-xs text-gray-400">© 2026 Shree Banarasi Sarees Admin portal</p>
                 </CardFooter>
             </Card>
         </div>

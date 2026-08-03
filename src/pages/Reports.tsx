@@ -12,6 +12,7 @@ import {
     Filter,
     ChevronLeft,
     ChevronRight,
+    Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -36,7 +37,7 @@ export default function ReportsPage() {
     const [startDate, setStartDate] = React.useState(firstDay);
     const [endDate, setEndDate] = React.useState(lastDay);
     const [currentPage, setCurrentPage] = React.useState(1);
-    const itemsPerPage = 10;
+    const itemsPerPage = 12; // more compact density rows
 
     const { data: sales, isLoading: isLoadingSales } = useQuery<SaleReportItem[]>({
         queryKey: ['sales'],
@@ -108,105 +109,103 @@ export default function ReportsPage() {
     };
 
     return (
-        <div className="space-y-6">
-            {/* Header */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                    <h1 className="text-3xl font-bold text-maroon">Sales Reports</h1>
-                    <p className="text-gray-500">Detailed transaction history and financial analysis</p>
+        <div className="space-y-3 max-w-7xl mx-auto px-2">
+            {/* Header section with brand accent */}
+            <div className="flex items-center justify-between border-b border-gold/10 pb-2">
+                <div className="flex items-center gap-2">
+                    <FileText className="h-5 w-5 text-maroon" />
+                    <div>
+                        <h1 className="text-xl font-bold font-serif text-maroon tracking-wider">SBS SALES REPORTS & AUDITS</h1>
+                        <p className="text-xs text-gray-500 font-sans">Detailed transaction log & net margin audits</p>
+                    </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex items-center gap-1.5">
                     <Button
                         variant="outline"
-                        className="border-gold text-maroon hover:bg-gold/10 gap-2"
+                        className="h-8 text-xs border-gold/20 text-maroon hover:bg-gold/5 font-bold uppercase tracking-wider px-3"
                         onClick={() => toast.info('PDF export coming soon')}
                     >
-                        <FileText className="h-4 w-4" />
-                        Export PDF
+                        <FileText className="h-3.5 w-3.5 mr-1" />
+                        PDF
                     </Button>
                     <Button
-                        className="bg-maroon hover:bg-maroon-dark text-gold gap-2"
+                        className="bg-maroon hover:bg-maroon-dark text-gold font-bold h-8 text-xs gap-1 px-3 uppercase tracking-wider"
                         onClick={exportToCSV}
                     >
-                        <Download className="h-4 w-4" />
-                        Export CSV
+                        <Download className="h-3.5 w-3.5" />
+                        EXPORT CSV
                     </Button>
                 </div>
             </div>
 
             {/* Filter Controls & Summary */}
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
                 <Card className="lg:col-span-1 border-gold/20 shadow-sm bg-cream/5">
-                    <CardHeader className="pb-3">
-                        <CardTitle className="text-lg text-maroon flex items-center gap-2">
-                            <Filter className="h-4 w-4" />
-                            Filter Period
+                    <CardHeader className="bg-cream/20 border-b border-gold/10 p-2.5">
+                        <CardTitle className="text-xs font-bold text-maroon uppercase tracking-wider flex items-center gap-1.5">
+                            <Filter className="h-3.5 w-3.5" />
+                            Filter Range
                         </CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="space-y-2">
-                            <label className="text-xs font-semibold text-gray-500 uppercase">From Date</label>
+                    <CardContent className="p-3 space-y-2">
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-gray-550 uppercase">From Date</label>
                             <Input
                                 type="date"
                                 value={startDate}
                                 onChange={(e) => setStartDate(e.target.value)}
-                                className="border-gold/30 focus-visible:ring-maroon"
+                                className="h-8 text-xs border-gold/30 focus-visible:ring-maroon font-mono"
                             />
                         </div>
-                        <div className="space-y-2">
-                            <label className="text-xs font-semibold text-gray-500 uppercase">To Date</label>
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-gray-550 uppercase">To Date</label>
                             <Input
                                 type="date"
                                 value={endDate}
                                 onChange={(e) => setEndDate(e.target.value)}
-                                className="border-gold/30 focus-visible:ring-maroon"
+                                className="h-8 text-xs border-gold/30 focus-visible:ring-maroon font-mono"
                             />
-                        </div>
-                        <div className="pt-2">
-                            <p className="text-[10px] text-gray-400 leading-tight">
-                                Showing records between these dates. Data is fetched automatically.
-                            </p>
                         </div>
                     </CardContent>
                 </Card>
 
-                <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-3">
                     <Card className="border-gold/20 shadow-sm overflow-hidden relative group">
-                        <div className="absolute top-0 right-0 p-3 text-gold/20 group-hover:text-gold/40 transition-colors">
-                            <IndianRupee className="h-12 w-12" />
+                        <div className="absolute top-0 right-0 p-2 text-gold/10 group-hover:text-gold/20 transition-colors">
+                            <IndianRupee className="h-10 w-10" />
                         </div>
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium text-gray-500 uppercase">Period Revenue</CardTitle>
+                        <CardHeader className="pb-1 p-2.5">
+                            <CardTitle className="text-[10px] font-bold text-gray-500 uppercase">Period Revenue</CardTitle>
                         </CardHeader>
-                        <CardContent>
-                            <div className="text-3xl font-bold text-maroon">₹{stats.revenue.toLocaleString()}</div>
-                            <p className="text-xs text-gray-400 mt-1 whitespace-nowrap">Total billing in selected range</p>
+                        <CardContent className="px-2.5 pb-2">
+                            <div className="text-xl font-bold font-mono text-maroon">₹{stats.revenue.toLocaleString()}</div>
+                            <p className="text-[10px] text-gray-400 mt-0.5 whitespace-nowrap">Total gross sales billing</p>
                         </CardContent>
                     </Card>
 
                     <Card className="border-gold/20 shadow-sm overflow-hidden relative group">
-                        <div className="absolute top-0 right-0 p-3 text-green-100 group-hover:text-green-200 transition-colors">
-                            <TrendingUp className="h-12 w-12" />
+                        <div className="absolute top-0 right-0 p-2 text-green-100/30 group-hover:text-green-100/50 transition-colors">
+                            <TrendingUp className="h-10 w-10" />
                         </div>
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium text-gray-500 uppercase">Period Profit</CardTitle>
+                        <CardHeader className="pb-1 p-2.5">
+                            <CardTitle className="text-[10px] font-bold text-gray-500 uppercase">Period Net Profit</CardTitle>
                         </CardHeader>
-                        <CardContent>
-                            <div className="text-3xl font-bold text-green-700">₹{stats.profit.toLocaleString()}</div>
-                            <p className="text-xs text-gray-400 mt-1 whitespace-nowrap">Net earnings after cost deduction</p>
+                        <CardContent className="px-2.5 pb-2">
+                            <div className="text-xl font-bold font-mono text-green-700">₹{stats.profit.toLocaleString()}</div>
+                            <p className="text-[10px] text-gray-400 mt-0.5 whitespace-nowrap">Gross margin minus purchase costs</p>
                         </CardContent>
                     </Card>
 
                     <Card className="border-gold/20 shadow-sm overflow-hidden relative group">
-                        <div className="absolute top-0 right-0 p-3 text-gold/20 group-hover:text-gold/40 transition-colors">
-                            <ShoppingCart className="h-12 w-12" />
+                        <div className="absolute top-0 right-0 p-2 text-gold/10 group-hover:text-gold/20 transition-colors">
+                            <ShoppingCart className="h-10 w-10" />
                         </div>
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium text-gray-500 uppercase">Items Sold</CardTitle>
+                        <CardHeader className="pb-1 p-2.5">
+                            <CardTitle className="text-[10px] font-bold text-gray-500 uppercase">Quantity Sold</CardTitle>
                         </CardHeader>
-                        <CardContent>
-                            <div className="text-3xl font-bold text-maroon">{stats.count}</div>
-                            <p className="text-xs text-gray-400 mt-1 whitespace-nowrap">Total item count in range</p>
+                        <CardContent className="px-2.5 pb-2">
+                            <div className="text-xl font-bold font-mono text-maroon">{stats.count} units</div>
+                            <p className="text-[10px] text-gray-400 mt-0.5 whitespace-nowrap">Total items sold in range</p>
                         </CardContent>
                     </Card>
                 </div>
@@ -214,49 +213,56 @@ export default function ReportsPage() {
 
             {/* Transactions Table */}
             <Card className="border-gold/20 shadow-md">
-                <CardHeader className="bg-cream/20 border-b border-gold/10">
-                    <CardTitle className="text-xl text-maroon flex items-center gap-2">
-                        <ArrowUpDown className="h-5 w-5" />
-                        Detailed Transaction Log
+                <CardHeader className="bg-cream/20 border-b border-gold/10 p-2.5">
+                    <CardTitle className="text-xs font-bold text-maroon uppercase tracking-wider flex items-center gap-1.5">
+                        <ArrowUpDown className="h-4 w-4" />
+                        Detailed Transaction Ledger
                     </CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
                     <div className="overflow-x-auto">
                         <Table>
-                            <TableHeader className="bg-gray-50">
-                                <TableRow>
-                                    <TableHead className="font-bold text-maroon">Date</TableHead>
-                                    <TableHead className="font-bold text-maroon">ID</TableHead>
-                                    <TableHead className="font-bold text-maroon">Saree Name</TableHead>
-                                    <TableHead className="text-right font-bold text-maroon">Qty</TableHead>
-                                    <TableHead className="text-right font-bold text-maroon">Total</TableHead>
-                                    <TableHead className="text-right font-bold text-maroon">Profit</TableHead>
-                                    <TableHead className="font-bold text-maroon">Customer</TableHead>
+                            <TableHeader className="bg-cream/10">
+                                <TableRow className="border-b border-gold/10 hover:bg-transparent">
+                                    <TableHead className="h-8 text-[10px] font-bold text-maroon py-1">Date</TableHead>
+                                    <TableHead className="h-8 text-[10px] font-bold text-maroon py-1">ID</TableHead>
+                                    <TableHead className="h-8 text-[10px] font-bold text-maroon py-1">Saree Name</TableHead>
+                                    <TableHead className="h-8 text-[10px] font-bold text-maroon py-1 text-right">Qty</TableHead>
+                                    <TableHead className="h-8 text-[10px] font-bold text-maroon py-1 text-right">Total Net (₹)</TableHead>
+                                    <TableHead className="h-8 text-[10px] font-bold text-maroon py-1 text-right">Profit Margin (₹)</TableHead>
+                                    <TableHead className="h-8 text-[10px] font-bold text-maroon py-1">Customer Profile</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {isLoadingSales ? (
-                                    <TableRow><TableCell colSpan={7} className="h-24 text-center">Loading transactions...</TableCell></TableRow>
+                                    <TableRow>
+                                        <TableCell colSpan={7} className="h-24 text-center text-maroon/50 text-xs italic">
+                                            <Loader2 className="h-5 w-5 animate-spin mx-auto mb-1 inline" />
+                                            Fetching transaction audit data...
+                                        </TableCell>
+                                    </TableRow>
                                 ) : paginatedSales.length === 0 ? (
-                                    <TableRow><TableCell colSpan={7} className="h-48 text-center bg-gray-50/50">
-                                        <div className="flex flex-col items-center justify-center text-gray-400 space-y-2">
-                                            <Calendar className="h-12 w-12 opacity-20" />
-                                            <p>No sales recorded between {new Date(startDate).toLocaleDateString()} and {new Date(endDate).toLocaleDateString()}</p>
-                                        </div>
-                                    </TableCell></TableRow>
+                                    <TableRow>
+                                        <TableCell colSpan={7} className="h-32 text-center bg-gray-50/20">
+                                            <div className="flex flex-col items-center justify-center text-gray-400 space-y-1">
+                                                <Calendar className="h-8 w-8 opacity-20" />
+                                                <p className="text-xs">No transactions recorded between {new Date(startDate).toLocaleDateString()} and {new Date(endDate).toLocaleDateString()}</p>
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
                                 ) : (
                                     paginatedSales.map((sale) => (
-                                        <TableRow key={`${sale.saleId}-${sale.sareeId}`} className="hover:bg-cream/5 transition-colors">
-                                            <TableCell className="whitespace-nowrap">{new Date(sale.date).toLocaleDateString()}</TableCell>
-                                            <TableCell className="text-xs font-mono text-gray-500">{sale.saleId}</TableCell>
-                                            <TableCell className="font-bold text-maroon">{sale.sareeName}</TableCell>
-                                            <TableCell className="text-right font-semibold">{sale.quantity}</TableCell>
-                                            <TableCell className="text-right font-bold">₹{sale.totalAmount?.toLocaleString()}</TableCell>
-                                            <TableCell className="text-right text-green-700 font-bold">₹{sale.profit?.toLocaleString()}</TableCell>
-                                            <TableCell>
+                                        <TableRow key={`${sale.saleId}-${sale.sareeId}`} className="hover:bg-cream/5 border-b border-gold/5 h-8">
+                                            <TableCell className="py-1 text-xs font-mono text-gray-500">{new Date(sale.date).toLocaleDateString()}</TableCell>
+                                            <TableCell className="py-1 text-[10px] font-mono text-gray-500 truncate max-w-[80px]">{sale.saleId}</TableCell>
+                                            <TableCell className="py-1 text-xs font-bold text-maroon">{sale.sareeName}</TableCell>
+                                            <TableCell className="py-1 text-xs text-right font-semibold font-mono text-gray-800">{sale.quantity}</TableCell>
+                                            <TableCell className="py-1 text-xs text-right font-bold font-mono text-maroon">₹{sale.totalAmount?.toLocaleString()}</TableCell>
+                                            <TableCell className="py-1 text-xs text-right text-green-700 font-bold font-mono">₹{sale.profit?.toLocaleString()}</TableCell>
+                                            <TableCell className="py-1 text-xs">
                                                 <div className="flex flex-col">
-                                                    <span className="text-sm font-medium">{sale.customerName || 'N/A'}</span>
-                                                    <span className="text-[10px] text-gray-400">{sale.customerMobile || 'Walk-in'}</span>
+                                                    <span className="font-semibold text-gray-700">{sale.customerName || 'N/A'}</span>
+                                                    <span className="text-[9px] text-gray-400 font-mono">{sale.customerMobile || 'Walk-in'}</span>
                                                 </div>
                                             </TableCell>
                                         </TableRow>
@@ -268,38 +274,38 @@ export default function ReportsPage() {
 
                     {/* Pagination */}
                     {totalPages > 1 && (
-                        <div className="flex items-center justify-between px-6 py-4 border-t border-gold/10 bg-cream/5">
-                            <p className="text-sm text-gray-500">
-                                Showing <span className="font-medium">{(currentPage - 1) * itemsPerPage + 1}</span> to{' '}
-                                <span className="font-medium">
+                        <div className="flex items-center justify-between px-3 py-2 border-t border-gold/10 bg-cream/5">
+                            <p className="text-[10px] text-gray-500">
+                                Trans. <span className="font-bold">{(currentPage - 1) * itemsPerPage + 1}</span> to{' '}
+                                <span className="font-bold">
                                     {Math.min(currentPage * itemsPerPage, filteredSales.length)}
                                 </span> of{' '}
-                                <span className="font-medium">{filteredSales.length}</span> transactions
+                                <span className="font-bold">{filteredSales.length}</span>
                             </p>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1.5">
                                 <Button
                                     variant="outline"
                                     size="sm"
-                                    className="border-gold/20 text-maroon h-8 w-8 p-0"
+                                    className="border-gold/20 text-maroon h-7 w-7 p-0"
                                     onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                                     disabled={currentPage === 1}
                                 >
-                                    <ChevronLeft className="h-4 w-4" />
+                                    <ChevronLeft className="h-3.5 w-3.5" />
                                 </Button>
                                 {Array.from({ length: totalPages }, (_, i) => i + 1)
                                     .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
                                     .map((page, i, arr) => (
                                         <React.Fragment key={page}>
                                             {i > 0 && arr[i - 1] !== page - 1 && (
-                                                <span className="text-gray-400">...</span>
+                                                <span className="text-gray-400 text-xs">...</span>
                                             )}
                                             <Button
                                                 variant={currentPage === page ? "default" : "outline"}
                                                 size="sm"
                                                 className={cn(
-                                                    "h-8 w-8 p-0",
+                                                    "h-7 w-7 p-0 text-xs",
                                                     currentPage === page
-                                                        ? "bg-maroon text-gold hover:bg-maroon-dark"
+                                                        ? "bg-maroon text-gold hover:bg-maroon-dark font-bold"
                                                         : "border-gold/20 text-maroon"
                                                 )}
                                                 onClick={() => setCurrentPage(page)}
@@ -311,11 +317,11 @@ export default function ReportsPage() {
                                 <Button
                                     variant="outline"
                                     size="sm"
-                                    className="border-gold/20 text-maroon h-8 w-8 p-0"
+                                    className="border-gold/20 text-maroon h-7 w-7 p-0"
                                     onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                                     disabled={currentPage === totalPages}
                                 >
-                                    <ChevronRight className="h-4 w-4" />
+                                    <ChevronRight className="h-3.5 w-3.5" />
                                 </Button>
                             </div>
                         </div>
