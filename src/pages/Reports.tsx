@@ -13,6 +13,7 @@ import {
     ChevronLeft,
     ChevronRight,
     Loader2,
+    Users,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -71,6 +72,45 @@ export default function ReportsPage() {
             profit: acc.profit + (s.profit || 0),
             count: acc.count + 1
         }), { revenue: 0, profit: 0, count: 0 });
+    }, [filteredSales]);
+
+    // Aggregate commission ledger per salesperson
+    const commissionLedger = React.useMemo(() => {
+        // getSales() returns one row per sale_item, so a single sale with N items
+        // produces N rows all sharing the same saleId. We must SUM each item's
+        // totalAmount across all rows for the same saleId, and read commissionEarned
+        // only once (it's a sale-level field duplicated on every item row).
+        const saleMap = new Map<string, { salesperson: string; total: number; commission: number; seen: boolean }>();
+
+        filteredSales.forEach(s => {
+            if (!s.salespersonName) return;
+            const key = s.saleId;
+            if (!saleMap.has(key)) {
+                saleMap.set(key, {
+                    salesperson: s.salespersonName,
+                    total: 0,
+                    commission: s.commissionEarned || 0, // record once
+                    seen: false,
+                });
+            }
+            // Always accumulate item-level amounts
+            const entry = saleMap.get(key)!;
+            entry.total += s.totalAmount || 0;
+        });
+
+        const ledger: Record<string, { bills: number; revenue: number; commission: number }> = {};
+        saleMap.forEach(({ salesperson, total, commission }) => {
+            if (!ledger[salesperson]) {
+                ledger[salesperson] = { bills: 0, revenue: 0, commission: 0 };
+            }
+            ledger[salesperson].bills += 1;
+            ledger[salesperson].revenue += total;
+            ledger[salesperson].commission += commission;
+        });
+
+        return Object.entries(ledger)
+            .map(([name, data]) => ({ name, ...data }))
+            .sort((a, b) => b.revenue - a.revenue);
     }, [filteredSales]);
 
     const exportToCSV = () => {
@@ -328,6 +368,82 @@ export default function ReportsPage() {
                                     <ChevronRight className="h-3.5 w-3.5" />
                                 </Button>
                             </div>
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+
+            {/* Staff Commission Ledger */}
+            <Card className="border-gold/20 shadow-md">
+                <CardHeader className="bg-cream/20 border-b border-gold/10 p-2.5">
+                    <CardTitle className="text-xs font-bold text-maroon uppercase tracking-wider flex items-center gap-1.5">
+                        <Users className="h-4 w-4" />
+                        Staff Commission Ledger
+                        <span className="ml-auto text-[10px] font-normal text-gray-400 normal-case tracking-normal">
+                            {startDate} → {endDate}
+                        </span>
+                    </CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                    {commissionLedger.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-10 text-gray-400 space-y-1">
+                            <Users className="h-7 w-7 opacity-20" />
+                            <p className="text-xs">No staff-attributed sales in this period</p>
+                        </div>
+                    ) : (
+                        <div className="overflow-x-auto">
+                            <Table>
+                                <TableHeader className="bg-cream/10">
+                                    <TableRow className="border-b border-gold/10 hover:bg-transparent">
+                                        <TableHead className="h-8 text-[10px] font-bold text-maroon py-1">Agent Name</TableHead>
+                                        <TableHead className="h-8 text-[10px] font-bold text-maroon py-1 text-right">Total Bills</TableHead>
+                                        <TableHead className="h-8 text-[10px] font-bold text-maroon py-1 text-right">Revenue Generated (₹)</TableHead>
+                                        <TableHead className="h-8 text-[10px] font-bold text-maroon py-1 text-right">Commission Payable (₹)</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {commissionLedger.map((row) => (
+                                        <TableRow key={row.name} className="hover:bg-cream/5 border-b border-gold/5 h-9">
+                                            <TableCell className="py-1.5 text-xs font-semibold text-gray-800">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="h-6 w-6 rounded-full bg-maroon/10 flex items-center justify-center text-maroon font-bold text-[10px]">
+                                                        {row.name.charAt(0).toUpperCase()}
+                                                    </div>
+                                                    {row.name}
+                                                </div>
+                                            </TableCell>
+                                            <TableCell className="py-1.5 text-xs text-right font-mono font-semibold text-gray-700">
+                                                {row.bills}
+                                            </TableCell>
+                                            <TableCell className="py-1.5 text-xs text-right font-bold font-mono text-maroon">
+                                                ₹{row.revenue.toLocaleString()}
+                                            </TableCell>
+                                            <TableCell className="py-1.5 text-right">
+                                                <span className="inline-block bg-green-50 text-green-700 font-bold font-mono text-xs px-2 py-0.5 rounded">
+                                                    ₹{row.commission.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                </span>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                                {/* Totals row */}
+                                <tfoot>
+                                    <tr className="border-t-2 border-gold/20 bg-cream/10">
+                                        <td className="py-1.5 px-4 text-[10px] font-bold text-maroon uppercase tracking-wider">Total</td>
+                                        <td className="py-1.5 px-4 text-xs text-right font-bold font-mono text-gray-800">
+                                            {commissionLedger.reduce((s, r) => s + r.bills, 0)}
+                                        </td>
+                                        <td className="py-1.5 px-4 text-xs text-right font-bold font-mono text-maroon">
+                                            ₹{commissionLedger.reduce((s, r) => s + r.revenue, 0).toLocaleString()}
+                                        </td>
+                                        <td className="py-1.5 px-4 text-right">
+                                            <span className="inline-block bg-green-100 text-green-800 font-bold font-mono text-xs px-2 py-0.5 rounded">
+                                                ₹{commissionLedger.reduce((s, r) => s + r.commission, 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                </tfoot>
+                            </Table>
                         </div>
                     )}
                 </CardContent>

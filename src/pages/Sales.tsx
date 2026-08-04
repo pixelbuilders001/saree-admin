@@ -17,7 +17,8 @@ import {
     User,
     Coins,
     CreditCard,
-    QrCode
+    QrCode,
+    UserCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -30,10 +31,19 @@ import { RemoteScannerLink } from '@/components/sales/RemoteScannerLink';
 import { syncService } from '@/services/syncService';
 import { playBeep } from '@/lib/audio';
 import type { Sale } from '@/services/salesService';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import QRCode from 'react-qr-code';
+import { settingsService, type UpiSetting } from '@/services/settingsService';
+import { staffService, type Staff } from '@/services/staffService';
 
 export default function SalesPage() {
+    const customerNameInputRef = React.useRef<HTMLInputElement>(null);
     const [customerName, setCustomerName] = React.useState<string>('');
     const [customerMobile, setCustomerMobile] = React.useState<string>('');
+    const [isUPIModalOpen, setIsUPIModalOpen] = React.useState(false);
+    const [currentTxnNote, setCurrentTxnNote] = React.useState('');
+    const [selectedUpiId, setSelectedUpiId] = React.useState<string>('');
+    const [selectedStaffId, setSelectedStaffId] = React.useState<string>('');
     const [sareeSearchTerm, setSareeSearchTerm] = React.useState<string>('');
     const [selectedCategory, setSelectedCategory] = React.useState<string>('All');
     const [paymentMode, setPaymentMode] = React.useState<'cash' | 'card' | 'upi'>('cash');
@@ -76,6 +86,23 @@ export default function SalesPage() {
         queryKey: ['customers'],
         queryFn: customerService.getCustomers
     });
+
+    const { data: upiSettings = [] } = useQuery<UpiSetting[]>({
+        queryKey: ['upiSettings'],
+        queryFn: settingsService.getUpiSettings,
+        staleTime: 60_000,
+    });
+
+    const { data: activeStaff = [] } = useQuery<Staff[]>({
+        queryKey: ['activeStaff'],
+        queryFn: staffService.getActiveStaff,
+        staleTime: 60_000,
+    });
+
+    const activeUpiSettings = React.useMemo(
+        () => upiSettings.filter(u => u.is_active),
+        [upiSettings]
+    );
 
     const createSaleMutation = useMutation({
         mutationFn: salesService.createSale,
@@ -165,6 +192,7 @@ export default function SalesPage() {
     React.useEffect(() => {
         if (customerMobile.length === 10) {
             handleCustomerSearch(customerMobile);
+            customerNameInputRef.current?.focus();
         }
     }, [customerMobile, customers]);
 
@@ -281,13 +309,47 @@ export default function SalesPage() {
             toast.error('Cart is empty');
             return;
         }
+        if (!selectedStaffId) {
+            toast.error('Please assign a salesperson before checkout');
+            return;
+        }
+
+        const staffMember = activeStaff.find(s => s.id === selectedStaffId);
+        const commissionEarned = staffMember
+            ? parseFloat(((cartTotal * staffMember.commission_rate) / 100).toFixed(2))
+            : 0;
 
         createSaleMutation.mutate({
             items: cart.map(({ purchasePrice: _, ...item }) => item),
             customerName,
             customerMobile,
+            salespersonId: selectedStaffId,
+            commissionEarned,
         });
     };
+
+    const handleCheckoutClick = () => {
+        if (cart.length === 0) {
+            toast.error('Cart is empty');
+            return;
+        }
+        if (paymentMode === 'upi') {
+            const txnNote = `SBS-${sessionId}-${Date.now().toString().slice(-4)}`;
+            setCurrentTxnNote(txnNote);
+            // Pre-select first active UPI if none selected yet
+            if (!selectedUpiId && activeUpiSettings.length > 0) {
+                setSelectedUpiId(activeUpiSettings[0].upi_id);
+            }
+            setIsUPIModalOpen(true);
+        } else {
+            handleCreateSale();
+        }
+    };
+
+    const currentUpi = activeUpiSettings.find(u => u.upi_id === selectedUpiId) || activeUpiSettings[0];
+    const upiQrValue = currentUpi
+        ? `upi://pay?pa=${currentUpi.upi_id}&pn=${encodeURIComponent(currentUpi.label)}&am=${cartTotal}&tn=${currentTxnNote}&cu=INR`
+        : '';
 
     if (remoteMode === 'scanner') {
         return (
@@ -468,16 +530,17 @@ export default function SalesPage() {
                 </div>
 
                 {/* Customer Details Form */}
-                <div className="p-3 border-b border-gray-100 bg-cream/15">
-                    <div className="flex items-center gap-1.5 mb-2">
-                        <User className="h-3.5 w-3.5 text-maroon/70" />
-                        <label className="text-[11px] font-bold text-maroon uppercase tracking-wider">Customer Details</label>
+                <div className="px-3 pt-2.5 pb-2 border-b border-gray-100 bg-cream/15 shrink-0">
+                    {/* Row 1: Mobile + Name */}
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                        <User className="h-3 w-3 text-maroon/70" />
+                        <span className="text-[10px] font-bold text-maroon uppercase tracking-wider">Customer</span>
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-1.5 mb-1.5">
                         <div className="relative">
                             <Input
                                 placeholder="Mobile Number"
-                                className="h-8 text-xs border-gold/20 focus-visible:ring-maroon pr-8 placeholder:text-gray-400 bg-white"
+                                className="h-7 text-xs border-gold/20 focus-visible:ring-maroon pr-7 placeholder:text-gray-400 bg-white"
                                 value={customerMobile}
                                 onChange={(e) => {
                                     const val = e.target.value.replace(/\D/g, '').slice(0, 10);
@@ -496,42 +559,63 @@ export default function SalesPage() {
                             )}
                         </div>
                         <Input
+                            ref={customerNameInputRef}
                             placeholder="Customer Name"
-                            className="h-8 text-xs border-gold/20 focus-visible:ring-maroon placeholder:text-gray-400 bg-white"
+                            className="h-7 text-xs border-gold/20 focus-visible:ring-maroon placeholder:text-gray-400 bg-white"
                             value={customerName}
                             onChange={(e) => setCustomerName(e.target.value)}
                         />
                     </div>
+
+                    {/* Row 2: Salesperson */}
+                    <div className="flex items-center gap-1.5">
+                        <UserCheck className="h-3 w-3 text-maroon/70 shrink-0" />
+                        <select
+                            value={selectedStaffId}
+                            onChange={(e) => setSelectedStaffId(e.target.value)}
+                            className={cn(
+                                "flex-1 h-7 text-xs border rounded-md px-2 bg-white focus:outline-none focus:ring-1 focus:ring-maroon/30",
+                                selectedStaffId ? "border-gold/20 text-gray-700" : "border-amber-300 text-amber-700"
+                            )}
+                        >
+                            <option value="">— Assign Salesperson * —</option>
+                            {activeStaff.map((staff) => (
+                                <option key={staff.id} value={staff.id}>
+                                    {staff.name} ({staff.commission_rate}%)
+                                </option>
+                            ))}
+                        </select>
+                    </div>
                 </div>
 
                 {/* Cart Items List */}
-                <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50/20">
-                    <div className="flex items-center justify-between text-xs text-gray-500 font-medium pb-2 border-b border-gray-100">
+                <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-1.5 bg-gray-50/20">
+                    <div className="flex items-center justify-between text-[10px] text-gray-500 font-medium pb-1.5 border-b border-gray-100">
                         <span>Items ({cart.length})</span>
                         <span>Amount</span>
                     </div>
 
                     {cart.length === 0 ? (
-                        <div className="h-full flex flex-col items-center justify-center text-gray-400 py-16 space-y-2">
-                            <ShoppingCart className="h-10 w-10 text-gray-300 stroke-1" />
-                            <span className="text-xs">No items in checkout cart</span>
-                            <span className="text-[10px] text-gray-400 text-center max-w-[200px]">
-                                Scan a barcode or select from the catalogue grid to start.
+                        <div className="flex flex-col items-center justify-center text-gray-400 py-10 space-y-1.5">
+                            <ShoppingCart className="h-9 w-9 text-gray-300 stroke-1" />
+                            <span className="text-xs">Cart is empty</span>
+                            <span className="text-[10px] text-center max-w-[180px]">
+                                Scan a barcode or select from the catalogue.
                             </span>
                         </div>
                     ) : (
                         cart.map((item, index) => (
-                            <div key={item.sareeId} className="flex gap-2 items-start justify-between border-b border-gray-100 pb-3 last:border-0 last:pb-0">
+                            <div key={item.sareeId} className="flex gap-2 items-center justify-between border-b border-gray-100 pb-1.5 last:border-0 last:pb-0">
                                 <div className="flex-1 min-w-0">
-                                    <div className="font-semibold text-xs text-gray-800 leading-snug truncate">{item.sareeName}</div>
-                                    <div className="text-[10px] text-gray-400 font-mono mt-0.5">{item.sareeId}</div>
+                                    <div className="font-semibold text-xs text-gray-800 truncate">{item.sareeName}</div>
+                                    <div className="text-[9px] text-gray-400 font-mono">{item.sareeId}</div>
                                 </div>
-                                <div className="flex flex-col items-end gap-1.5 shrink-0">
-                                    {/* Small Quantity Controls */}
-                                    <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-md p-0.5 shadow-sm">
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                    {/* Quantity Controls */}
+                                    <div className="flex items-center gap-0.5 bg-white border border-gray-200 rounded p-0.5">
                                         <button
                                             type="button"
-                                            className="w-5 h-5 rounded hover:bg-gray-100 flex items-center justify-center text-gray-600 active:scale-90 transition-all font-bold text-xs"
+                                            className="w-4 h-4 rounded hover:bg-gray-100 flex items-center justify-center text-gray-600 active:scale-90 transition-all"
                                             onClick={() => {
                                                 const newCart = [...cart];
                                                 if (newCart[index].quantity > 1) {
@@ -542,14 +626,13 @@ export default function SalesPage() {
                                                 }
                                             }}
                                         >
-                                            <Minus className="h-2.5 w-2.5" />
+                                            <Minus className="h-2 w-2" />
                                         </button>
-                                        <span className="w-5 text-center text-xs font-semibold text-gray-800">{item.quantity}</span>
+                                        <span className="w-4 text-center text-[11px] font-bold text-gray-800">{item.quantity}</span>
                                         <button
                                             type="button"
-                                            className="w-5 h-5 rounded hover:bg-gray-100 flex items-center justify-center text-gray-600 active:scale-90 transition-all font-bold text-xs"
+                                            className="w-4 h-4 rounded hover:bg-gray-100 flex items-center justify-center text-gray-600 active:scale-90 transition-all"
                                             onClick={() => {
-                                                // Find stock limit
                                                 const limit = sarees?.find(s => s.id === item.sareeId)?.stock || 999;
                                                 const newCart = [...cart];
                                                 if (newCart[index].quantity >= limit) {
@@ -560,20 +643,17 @@ export default function SalesPage() {
                                                 setCart(newCart);
                                             }}
                                         >
-                                            <Plus className="h-2.5 w-2.5" />
+                                            <Plus className="h-2 w-2" />
                                         </button>
                                     </div>
-                                    <div className="flex items-center gap-1.5">
-                                        <span className="font-bold text-xs text-maroon">₹{(item.sellingPrice * item.quantity).toLocaleString()}</span>
-                                        <button
-                                            type="button"
-                                            className="text-gray-400 hover:text-red-600 p-0.5 transition-colors"
-                                            onClick={() => handleRemoveFromCart(index)}
-                                            title="Delete"
-                                        >
-                                            <Trash2 className="h-3.5 w-3.5" />
-                                        </button>
-                                    </div>
+                                    <span className="font-bold text-xs text-maroon w-16 text-right">₹{(item.sellingPrice * item.quantity).toLocaleString()}</span>
+                                    <button
+                                        type="button"
+                                        className="text-gray-300 hover:text-red-500 transition-colors"
+                                        onClick={() => handleRemoveFromCart(index)}
+                                    >
+                                        <Trash2 className="h-3 w-3" />
+                                    </button>
                                 </div>
                             </div>
                         ))
@@ -581,48 +661,48 @@ export default function SalesPage() {
                 </div>
 
                 {/* Bottom Billing Summary & Actions Panel */}
-                <div className="border-t border-gray-100 p-4 bg-gray-50/50 space-y-4">
-                    {/* Payment Mode Selection */}
-                    <div className="space-y-1.5">
-                        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Payment Method</span>
-                        <div className="grid grid-cols-3 gap-2">
+                <div className="border-t border-gray-100 px-3 pt-2 pb-3 bg-white space-y-2 shrink-0">
+                    {/* Payment Mode Selection — compact horizontal pills */}
+                    <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider shrink-0">Pay via</span>
+                        <div className="flex gap-1 flex-1">
                             {(['cash', 'card', 'upi'] as const).map((mode) => (
                                 <button
                                     key={mode}
                                     type="button"
                                     onClick={() => setPaymentMode(mode)}
                                     className={cn(
-                                        "flex flex-col items-center justify-center py-2 px-1 rounded-lg border gap-1 transition-all capitalize select-none text-[11px] font-medium",
+                                        "flex items-center justify-center gap-1 flex-1 py-1 rounded-md border text-[11px] font-medium transition-all capitalize select-none",
                                         paymentMode === mode
-                                            ? "border-maroon bg-maroon/5 text-maroon font-semibold"
-                                            : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50"
+                                            ? "border-maroon bg-maroon text-gold shadow-sm"
+                                            : "border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100"
                                     )}
                                 >
-                                    {mode === 'cash' && <Coins className="h-4 w-4" />}
-                                    {mode === 'card' && <CreditCard className="h-4 w-4" />}
-                                    {mode === 'upi' && <QrCode className="h-4 w-4" />}
-                                    <span>{mode}</span>
+                                    {mode === 'cash' && <Coins className="h-3 w-3" />}
+                                    {mode === 'card' && <CreditCard className="h-3 w-3" />}
+                                    {mode === 'upi' && <QrCode className="h-3 w-3" />}
+                                    {mode}
                                 </button>
                             ))}
                         </div>
                     </div>
 
                     {/* Summary lines */}
-                    <div className="space-y-1.5 text-xs border-t border-gray-200/60 pt-3">
-                        <div className="flex justify-between text-gray-500">
+                    <div className="text-xs border-t border-gray-100 pt-1.5 space-y-0.5">
+                        <div className="flex justify-between text-gray-400">
                             <span>Subtotal</span>
                             <span>₹{cartTotal.toLocaleString()}</span>
                         </div>
-                        <div className="flex justify-between text-gray-500">
+                        <div className="flex justify-between text-gray-400">
                             <span>GST (Included)</span>
                             <span>₹0</span>
                         </div>
-                        <div className="flex justify-between text-maroon-light font-medium text-[11px]">
-                            <span>Operator Profit Margin</span>
+                        <div className="flex justify-between text-[11px] text-maroon/70 font-medium">
+                            <span>Profit Margin</span>
                             <span>₹{cartProfit.toLocaleString()}</span>
                         </div>
-                        <div className="flex justify-between text-base font-bold text-maroon pt-1.5 border-t border-gray-200/65">
-                            <span>Net Payable Amount</span>
+                        <div className="flex justify-between font-bold text-maroon text-sm pt-1 border-t border-gray-100">
+                            <span>Net Payable</span>
                             <span>₹{cartTotal.toLocaleString()}</span>
                         </div>
                     </div>
@@ -630,11 +710,11 @@ export default function SalesPage() {
                     {/* Checkout Button */}
                     <Button
                         type="button"
-                        disabled={cart.length === 0 || createSaleMutation.isPending}
-                        onClick={handleCreateSale}
+                        disabled={cart.length === 0 || !selectedStaffId || createSaleMutation.isPending}
+                        onClick={handleCheckoutClick}
                         className={cn(
-                            "w-full h-11 bg-maroon hover:bg-maroon-dark text-gold font-bold text-xs uppercase tracking-wider gap-2 shadow-md rounded-xl transition-all active:scale-95 duration-100",
-                            (cart.length === 0 || createSaleMutation.isPending) && "opacity-60"
+                            "w-full h-10 bg-maroon hover:bg-maroon-dark text-gold font-bold text-xs uppercase tracking-wider gap-2 shadow-md rounded-xl transition-all active:scale-95 duration-100",
+                            (cart.length === 0 || !selectedStaffId || createSaleMutation.isPending) && "opacity-60"
                         )}
                     >
                         {createSaleMutation.isPending ? (
@@ -650,24 +730,122 @@ export default function SalesPage() {
                         )}
                     </Button>
                 </div>
-            </div>
 
-            {/* Modals & Dialog Components */}
-            <ReceiptModal
-                isOpen={isReceiptModalOpen}
-                onClose={() => setIsReceiptModalOpen(false)}
-                sale={lastCompletedSale}
-            />
-            <BarcodeScanner
-                isOpen={isScannerOpen}
-                onClose={() => setIsScannerOpen(false)}
-                onScan={handleBarcodeScan}
-            />
-            <RemoteScannerLink
-                sessionId={sessionId}
-                isOpen={isRemoteLinkOpen}
-                onClose={() => setIsRemoteLinkOpen(false)}
-            />
+                {/* Modals & Dialog Components */}
+                <ReceiptModal
+                    isOpen={isReceiptModalOpen}
+                    onClose={() => setIsReceiptModalOpen(false)}
+                    sale={lastCompletedSale}
+                />
+                <BarcodeScanner
+                    isOpen={isScannerOpen}
+                    onClose={() => setIsScannerOpen(false)}
+                    onScan={handleBarcodeScan}
+                />
+                <RemoteScannerLink
+                    sessionId={sessionId}
+                    isOpen={isRemoteLinkOpen}
+                    onClose={() => setIsRemoteLinkOpen(false)}
+                />
+
+                <Dialog open={isUPIModalOpen} onOpenChange={setIsUPIModalOpen}>
+                    <DialogContent className="sm:max-w-md border-gold/20 shadow-2xl p-4">
+                        <DialogHeader className="border-b border-gold/15 pb-2 text-center">
+                            <DialogTitle className="text-base font-bold font-serif text-maroon text-center">
+                                UPI QR SCAN PAYMENT
+                            </DialogTitle>
+                        </DialogHeader>
+                        <div className="flex flex-col items-center justify-center space-y-4 pt-4">
+
+                            {/* UPI Account Selector */}
+                            {activeUpiSettings.length > 1 && (
+                                <div className="w-full space-y-1">
+                                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">
+                                        Select Merchant UPI Account
+                                    </label>
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {activeUpiSettings.map((upi) => (
+                                            <button
+                                                key={upi.upi_id}
+                                                type="button"
+                                                onClick={() => setSelectedUpiId(upi.upi_id)}
+                                                className={cn(
+                                                    'px-3 py-1.5 text-xs rounded-lg border font-medium transition-all',
+                                                    (selectedUpiId || activeUpiSettings[0]?.upi_id) === upi.upi_id
+                                                        ? 'bg-maroon text-gold border-maroon shadow-sm'
+                                                        : 'bg-white text-gray-600 border-gray-200 hover:border-maroon/40'
+                                                )}
+                                            >
+                                                {upi.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <p className="text-[10px] text-gray-400 font-mono mt-0.5">
+                                        {currentUpi?.upi_id}
+                                    </p>
+                                </div>
+                            )}
+
+                            {activeUpiSettings.length === 0 ? (
+                                <div className="text-center text-xs text-red-500 py-4">
+                                    No active UPI IDs configured. Please add one in Settings.
+                                </div>
+                            ) : (
+                                <div className="bg-white p-3 rounded-lg border border-gold/20 shadow-inner flex items-center justify-center">
+                                    <QRCode
+                                        value={upiQrValue}
+                                        size={192}
+                                        className="mx-auto"
+                                    />
+                                </div>
+                            )}
+
+                            <div className="text-center space-y-1">
+                                <p className="text-sm font-bold text-gray-800">Amount: ₹{cartTotal.toLocaleString()}</p>
+                                {activeUpiSettings.length === 1 && (
+                                    <p className="text-[10px] text-gray-400 font-mono">{currentUpi?.upi_id}</p>
+                                )}
+                                <p className="text-xs font-mono text-gray-500">Ref: {currentTxnNote}</p>
+                            </div>
+
+                            {/* <div className="bg-cream/10 border border-gold/15 p-2.5 rounded-lg w-full text-center space-y-1">
+                            <p className="text-xs font-bold text-maroon uppercase tracking-wider">Instructions</p>
+                            <p className="text-[11px] text-gray-500 max-w-[280px] mx-auto leading-normal">
+                                Customer can scan the QR code via Google Pay, PhonePe, Paytm, or BHIM. Cashier must confirm success on soundbox/app.
+                            </p>
+                        </div> */}
+                        </div>
+                        <div className="flex justify-end gap-2 pt-4 border-t border-gray-100 flex-col sm:flex-row">
+                            <Button
+                                variant="ghost"
+                                className="h-9 text-xs border border-gray-250 hover:bg-gray-50"
+                                onClick={() => setIsUPIModalOpen(false)}
+                                disabled={createSaleMutation.isPending}
+                            >
+                                Cancel Payment
+                            </Button>
+                            <Button
+                                className="bg-maroon hover:bg-maroon-dark text-gold h-9 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5"
+                                onClick={async () => {
+                                    await handleCreateSale();
+                                    setIsUPIModalOpen(false);
+                                }}
+                                disabled={createSaleMutation.isPending}
+                            >
+                                {createSaleMutation.isPending ? (
+                                    <>
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Confirming...
+                                    </>
+                                ) : (
+                                    <>
+                                        <CheckCircle2 className="h-3.5 w-3.5" /> Confirm Payment & Print
+                                    </>
+                                )}
+                            </Button>
+                        </div>
+                    </DialogContent>
+                </Dialog>
+            </div>
         </div>
     );
 }

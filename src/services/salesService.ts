@@ -16,6 +16,8 @@ export interface Sale {
     date: string;
     customerName?: string;
     customerMobile?: string;
+    salespersonId?: string;
+    commissionEarned?: number;
 }
 
 export interface SaleReportItem {
@@ -31,6 +33,8 @@ export interface SaleReportItem {
     customerMobile?: string;
     createdBy?: string;
     updatedBy?: string;
+    salespersonName?: string;
+    commissionEarned?: number;
 }
 
 export const getFriendlyId = (uuid: string, isExchange: boolean): string => {
@@ -43,7 +47,7 @@ export const getFriendlyId = (uuid: string, isExchange: boolean): string => {
 
 export const salesService = {
     getSales: async (): Promise<SaleReportItem[]> => {
-        // Query sales with joined customers and items
+        // Query sales with joined customers, staff, and items
         const { data, error } = await supabase
             .from('sales')
             .select(`
@@ -51,11 +55,15 @@ export const salesService = {
                 created_at,
                 total_amount,
                 profit,
+                commission_earned,
                 created_by,
                 updated_by,
                 customers (
                     name,
                     mobile
+                ),
+                staff (
+                    name
                 ),
                 sale_items (
                     saree_id,
@@ -76,6 +84,8 @@ export const salesService = {
         (data || []).forEach((sale: any) => {
             const customerName = sale.customers?.name || '';
             const customerMobile = sale.customers?.mobile || '';
+            const salespersonName = sale.staff?.name || '';
+            const commissionEarned = Number(sale.commission_earned || 0);
 
             const hasReturn = (sale.sale_items || []).some((item: any) => Number(item.quantity || 0) < 0);
             const friendlySaleId = getFriendlyId(sale.id, hasReturn);
@@ -101,6 +111,8 @@ export const salesService = {
                     customerMobile,
                     createdBy: sale.created_by || '',
                     updatedBy: sale.updated_by || '',
+                    salespersonName,
+                    commissionEarned,
                 });
             });
         });
@@ -112,6 +124,8 @@ export const salesService = {
         items: SaleItem[];
         customerName?: string;
         customerMobile?: string;
+        salespersonId?: string;
+        commissionEarned?: number;
     }): Promise<Sale> => {
         if (!sale.items || sale.items.length === 0) {
             throw new Error("No items in sale");
@@ -182,6 +196,8 @@ export const salesService = {
                 customer_id: customerId,
                 total_amount: totalAmount,
                 profit: totalProfit,
+                salesperson_id: sale.salespersonId || null,
+                commission_earned: sale.commissionEarned ?? 0,
                 created_by: userEmail,
                 updated_by: userEmail
             }])
@@ -228,7 +244,9 @@ export const salesService = {
             profit: totalProfit,
             date: insertedSale.created_at,
             customerName: sale.customerName,
-            customerMobile: sale.customerMobile
+            customerMobile: sale.customerMobile,
+            salespersonId: sale.salespersonId,
+            commissionEarned: sale.commissionEarned,
         };
     },
 
