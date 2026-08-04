@@ -44,6 +44,7 @@ export default function SalesPage() {
     const [currentTxnNote, setCurrentTxnNote] = React.useState('');
     const [selectedUpiId, setSelectedUpiId] = React.useState<string>('');
     const [selectedStaffId, setSelectedStaffId] = React.useState<string>('');
+    const [discountAmount, setDiscountAmount] = React.useState<number>(0);
     const [sareeSearchTerm, setSareeSearchTerm] = React.useState<string>('');
     const [selectedCategory, setSelectedCategory] = React.useState<string>('All');
     const [paymentMode, setPaymentMode] = React.useState<'cash' | 'card' | 'upi'>('cash');
@@ -115,6 +116,7 @@ export default function SalesPage() {
             setCart([]);
             setCustomerName('');
             setCustomerMobile('');
+            setDiscountAmount(0);
             setLastCompletedSale(data);
             setIsReceiptModalOpen(true);
         },
@@ -203,7 +205,7 @@ export default function SalesPage() {
     };
 
     const cartTotal = cart.reduce((sum, item) => sum + (item.sellingPrice * item.quantity), 0);
-    const cartProfit = cart.reduce((sum, item) => sum + ((item.sellingPrice - item.purchasePrice) * item.quantity), 0);
+    const netPayable = Math.max(0, cartTotal - discountAmount);
 
     const handleAddToCart = (saree: Saree) => {
         if (saree.stock <= 0) {
@@ -325,6 +327,8 @@ export default function SalesPage() {
             customerMobile,
             salespersonId: selectedStaffId,
             commissionEarned,
+            paymentMode,
+            discountAmount,
         });
     };
 
@@ -697,13 +701,28 @@ export default function SalesPage() {
                             <span>GST (Included)</span>
                             <span>₹0</span>
                         </div>
-                        <div className="flex justify-between text-[11px] text-maroon/70 font-medium">
-                            <span>Profit Margin</span>
-                            <span>₹{cartProfit.toLocaleString()}</span>
+                        {/* Discount Row */}
+                        <div className="flex items-center justify-between">
+                            <span className="text-green-700 font-medium">Discount</span>
+                            <div className="flex items-center gap-1">
+                                <span className="text-gray-400 text-[11px]">₹</span>
+                                <input
+                                    type="number"
+                                    min={0}
+                                    max={cartTotal}
+                                    value={discountAmount === 0 ? '' : discountAmount}
+                                    placeholder="0"
+                                    onChange={(e) => {
+                                        const val = parseFloat(e.target.value) || 0;
+                                        setDiscountAmount(Math.min(val, cartTotal));
+                                    }}
+                                    className="w-20 text-right text-xs border border-gray-200 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-green-400 text-green-700 font-semibold"
+                                />
+                            </div>
                         </div>
                         <div className="flex justify-between font-bold text-maroon text-sm pt-1 border-t border-gray-100">
                             <span>Net Payable</span>
-                            <span>₹{cartTotal.toLocaleString()}</span>
+                            <span>₹{netPayable.toLocaleString()}</span>
                         </div>
                     </div>
 

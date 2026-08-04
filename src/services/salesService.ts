@@ -10,6 +10,7 @@ export interface SaleItem {
 
 export interface Sale {
     saleId: string;
+    invoiceNumber: string;
     items: SaleItem[];
     totalAmount: number;
     profit: number;
@@ -18,6 +19,8 @@ export interface Sale {
     customerMobile?: string;
     salespersonId?: string;
     commissionEarned?: number;
+    discountAmount?: number;
+    paymentMode?: string;
 }
 
 export interface SaleReportItem {
@@ -126,6 +129,8 @@ export const salesService = {
         customerMobile?: string;
         salespersonId?: string;
         commissionEarned?: number;
+        paymentMode?: string;
+        discountAmount?: number;
     }): Promise<Sale> => {
         if (!sale.items || sale.items.length === 0) {
             throw new Error("No items in sale");
@@ -190,14 +195,25 @@ export const salesService = {
 
         // 3. Create Sale Header
         const userEmail = useAuthStore.getState().user?.email || 'system';
+        const now = new Date();
+        const datePart = now.toISOString().slice(0, 10).replace(/-/g, '');
+        const randPart = Math.floor(1000 + Math.random() * 9000);
+        const invoiceNumber = `INV-${datePart}-${randPart}`;
+        const discount = sale.discountAmount ?? 0;
+        const netAmount = Math.max(0, totalAmount - discount);
+        const netProfit = Math.max(0, totalProfit - discount);
+
         const { data: insertedSale, error: saleInsertError } = await supabase
             .from('sales')
             .insert([{
                 customer_id: customerId,
-                total_amount: totalAmount,
-                profit: totalProfit,
+                total_amount: netAmount,
+                profit: netProfit,
                 salesperson_id: sale.salespersonId || null,
                 commission_earned: sale.commissionEarned ?? 0,
+                invoice_number: invoiceNumber,
+                payment_mode: sale.paymentMode || 'cash',
+                discount_amount: discount,
                 created_by: userEmail,
                 updated_by: userEmail
             }])
@@ -239,14 +255,17 @@ export const salesService = {
 
         return {
             saleId: getFriendlyId(insertedSale.id, false),
+            invoiceNumber,
             items: sale.items,
-            totalAmount,
-            profit: totalProfit,
+            totalAmount: netAmount,
+            profit: netProfit,
             date: insertedSale.created_at,
             customerName: sale.customerName,
             customerMobile: sale.customerMobile,
             salespersonId: sale.salespersonId,
             commissionEarned: sale.commissionEarned,
+            discountAmount: sale.discountAmount ?? 0,
+            paymentMode: sale.paymentMode || 'cash',
         };
     },
 

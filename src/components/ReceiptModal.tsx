@@ -1,16 +1,9 @@
 import React from 'react';
-import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    DialogFooter,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { FileText, MessageSquare, Download, CheckCircle2 } from "lucide-react";
+import { FileText, MessageSquare, Link2, Check, X, Receipt } from "lucide-react";
 import { toast } from 'sonner';
 import type { Sale } from '@/services/salesService';
-import { receiptService } from '@/services/receiptService';
 
 interface ReceiptModalProps {
     isOpen: boolean;
@@ -19,66 +12,118 @@ interface ReceiptModalProps {
 }
 
 export function ReceiptModal({ isOpen, onClose, sale }: ReceiptModalProps) {
+    const [copied, setCopied] = React.useState(false);
+
     if (!sale) return null;
 
-    const handleDownloadPDF = () => {
-        receiptService.downloadPDF(sale);
+    const receiptUrl = `${window.location.origin}/receipt/${sale.invoiceNumber}`;
+
+    const handleCopyLink = async () => {
+        try {
+            await navigator.clipboard.writeText(receiptUrl);
+            setCopied(true);
+            toast.success('Link copied!');
+            setTimeout(() => setCopied(false), 2500);
+        } catch {
+            toast.error('Could not copy link.');
+        }
     };
 
-    const handleShareWhatsApp = async () => {
-        const result = await receiptService.sharePDF(sale);
-        if (result === 'fallback') {
-            toast.info('Sharing not supported on this browser. PDF has been downloaded instead.');
-        }
+    const handleWhatsApp = () => {
+        const customerName = sale.customerName || 'Valued Customer';
+        const message = encodeURIComponent(
+            `✨ *SHREE BANARASI SAREES* ✨\n\n` +
+            `Dear *${customerName}*,\n\n` +
+            `Thank you for shopping with us! 🛍️\n` +
+            `*Invoice No:* ${sale.invoiceNumber}\n` +
+            `*Total Paid:* ₹${sale.totalAmount.toLocaleString('en-IN')}\n\n` +
+            `We hope to see you again soon! 🙏\n\n` +
+            `📲 View & Save your Digital Receipt:\n` +
+            `${receiptUrl}`
+        );
+        const phone = sale.customerMobile?.replace(/\D/g, '') || '';
+        window.open(phone ? `https://wa.me/91${phone}?text=${message}` : `https://wa.me/?text=${message}`, '_blank');
     };
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-            <DialogContent className="sm:max-w-[425px] border-gold/20 shadow-2xl">
-                <DialogHeader className="text-center">
-                    <div className="mx-auto bg-green-100 w-16 h-16 rounded-full flex items-center justify-center mb-4">
-                        <CheckCircle2 className="h-10 w-10 text-green-600" />
+            <DialogContent className="p-0 overflow-hidden border-0 shadow-2xl" style={{ maxWidth: '360px', borderRadius: '16px' }}>
+
+                {/* Close button */}
+                <button
+                    onClick={onClose}
+                    className="absolute top-3 right-3 z-10 w-7 h-7 rounded-full bg-white/20 flex items-center justify-center text-white hover:bg-white/30 transition-colors"
+                >
+                    <X className="h-3.5 w-3.5" />
+                </button>
+
+                {/* ── Top success band ── */}
+                <div
+                    className="text-white text-center px-6 pt-6 pb-5"
+                    style={{ background: 'linear-gradient(135deg, #800000 0%, #5a0000 100%)' }}
+                >
+                    <div className="w-11 h-11 rounded-full bg-white/15 flex items-center justify-center mx-auto mb-3">
+                        <Receipt className="h-5 w-5 text-white" />
                     </div>
-                    <DialogTitle className="text-2xl font-bold text-maroon">Sale Completed!</DialogTitle>
-                    <p className="text-gray-500 mt-2">Bill No: {sale.saleId}</p>
-                </DialogHeader>
+                    <p className="text-xs font-semibold uppercase tracking-widest text-white/70 mb-0.5">Sale Complete</p>
+                    <h2 className="text-lg font-bold text-white">₹{sale.totalAmount.toLocaleString('en-IN')}</h2>
+                    <p className="text-white/60 text-[11px] font-mono mt-1">{sale.invoiceNumber}</p>
+                </div>
 
-                <div className="py-6 space-y-4">
-                    <div className="bg-cream/20 p-4 rounded-lg border border-gold/10 space-y-2">
-                        <div className="flex justify-between items-center pb-2 border-b border-gold/10">
-                            <span className="font-semibold text-maroon">Total Amount</span>
-                            <span className="text-xl font-bold text-maroon">₹{sale.totalAmount.toLocaleString()}</span>
+                {/* ── Customer strip ── */}
+                <div className="flex items-center justify-between px-5 py-2.5 bg-stone-50 border-b border-stone-100 text-xs">
+                    <span className="text-stone-500">Customer</span>
+                    <span className="font-semibold text-stone-700 truncate max-w-[180px]">
+                        {sale.customerName || 'Walk-in'}{sale.customerMobile ? ` · ${sale.customerMobile}` : ''}
+                    </span>
+                </div>
+
+                {/* ── Action buttons ── */}
+                <div className="px-4 py-4 space-y-2 bg-white">
+
+                    {/* WhatsApp — primary */}
+                    <button
+                        onClick={handleWhatsApp}
+                        className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-white text-sm font-semibold transition-all active:scale-[0.98]"
+                        style={{ background: '#25D366' }}
+                    >
+                        <div className="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+                            <MessageSquare className="h-4 w-4" />
                         </div>
-                        <div className="text-sm text-gray-600">
-                            <p>Customer: {sale.customerName || 'Walk-in'}</p>
-                            <p>Mobile: {sale.customerMobile || 'N/A'}</p>
-                        </div>
-                    </div>
+                        <span>Send via WhatsApp</span>
+                    </button>
 
-                    <div className="grid grid-cols-1 gap-3">
-                        <Button
-                            onClick={handleDownloadPDF}
-                            className="w-full bg-maroon hover:bg-maroon/90 text-white flex gap-2 h-12"
+                    {/* Copy link + Download — side by side */}
+                    <div className="grid grid-cols-2 gap-2">
+                        <button
+                            onClick={handleCopyLink}
+                            className="flex items-center justify-center gap-2 py-2.5 rounded-xl border border-stone-200 text-xs font-semibold text-stone-700 bg-stone-50 hover:bg-stone-100 transition-all active:scale-[0.98]"
                         >
-                            <FileText className="h-5 w-5" />
-                            Download Bill (PDF)
-                        </Button>
-
-                        <Button
-                            onClick={handleShareWhatsApp}
-                            className="w-full bg-green-600 hover:bg-green-700 text-white flex gap-2 h-12"
+                            {copied
+                                ? <><Check className="h-3.5 w-3.5 text-green-600" /><span className="text-green-600">Copied!</span></>
+                                : <><Link2 className="h-3.5 w-3.5" />Copy Link</>
+                            }
+                        </button>
+                        <button
+                            onClick={() => window.open(`/receipt/${sale.invoiceNumber}?print=true`, '_blank')}
+                            className="flex items-center justify-center gap-2 py-2.5 rounded-xl border border-stone-200 text-xs font-semibold text-stone-700 bg-stone-50 hover:bg-stone-100 transition-all active:scale-[0.98]"
                         >
-                            <MessageSquare className="h-5 w-5" />
-                            Send Receipt via WhatsApp
-                        </Button>
+                            <FileText className="h-3.5 w-3.5" />
+                            Download PDF
+                        </button>
                     </div>
                 </div>
 
-                <DialogFooter>
-                    <Button variant="outline" onClick={onClose} className="w-full border-gold/30">
+                {/* ── Footer ── */}
+                <div className="px-4 pb-4 bg-white">
+                    <button
+                        onClick={onClose}
+                        className="w-full py-2 rounded-xl text-xs text-stone-400 hover:text-stone-600 transition-colors font-medium"
+                    >
                         Close
-                    </Button>
-                </DialogFooter>
+                    </button>
+                </div>
+
             </DialogContent>
         </Dialog>
     );

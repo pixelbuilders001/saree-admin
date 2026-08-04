@@ -14,6 +14,7 @@ import ReportsPage from '@/pages/Reports';
 import ExchangePage from '@/pages/Exchange';
 import ExpensesPage from '@/pages/Expenses';
 import SettingsPage from '@/pages/Settings';
+import ReceiptView from '@/pages/ReceiptView';
 import { supabase } from '@/lib/supabase';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -131,6 +132,7 @@ function App() {
             <Route path="expenses" element={<ExpensesPage />} />
             <Route path="settings" element={<SettingsPage />} />
           </Route>
+          <Route path="/receipt/:invoiceNumber" element={<ReceiptView />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         <Toaster position="top-right" richColors />
