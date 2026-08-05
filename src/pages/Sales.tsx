@@ -300,7 +300,12 @@ export default function SalesPage() {
         try {
             if (remoteMode === 'scanner') {
                 setConnectionStatus('connecting');
-                const peer = new Peer();
+                const peer = new Peer({
+                    host: '0.peerjs.com',
+                    port: 443,
+                    secure: true,
+                    debug: 1
+                });
                 peerRef.current = peer;
 
                 peer.on('open', (id) => {
@@ -341,7 +346,12 @@ export default function SalesPage() {
                 });
             } else {
                 const peerId = `POS-${sessionId}`;
-                const peer = new Peer(peerId);
+                const peer = new Peer(peerId, {
+                    host: '0.peerjs.com',
+                    port: 443,
+                    secure: true,
+                    debug: 1
+                });
                 peerRef.current = peer;
 
                 peer.on('open', (id) => {
