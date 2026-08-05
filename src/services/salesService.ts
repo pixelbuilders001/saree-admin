@@ -291,7 +291,7 @@ export const salesService = {
         replaceItems: SaleItem[];
         customerName?: string;
         customerMobile?: string;
-    }): Promise<{ exchangeId: string; date: string; success: boolean; netTotalAmount: number; customerId: string | null }> => {
+    }): Promise<{ exchangeId: string; invoiceNumber: string; date: string; success: boolean; netTotalAmount: number; customerId: string | null }> => {
         // 1. Resolve Customer ID
         let customerId: string | null = null;
         if (exchange.customerMobile) {
