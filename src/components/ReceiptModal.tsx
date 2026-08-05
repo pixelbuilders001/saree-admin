@@ -16,7 +16,7 @@ export function ReceiptModal({ isOpen, onClose, sale }: ReceiptModalProps) {
 
     if (!sale) return null;
 
-    const receiptUrl = `${window.location.origin}/receipt/${sale.invoiceNumber}`;
+    const receiptUrl = `https://shree-banarasi-sarees.vercel.app/receipt/${sale.invoiceNumber}`;
 
     const handleCopyLink = async () => {
         try {

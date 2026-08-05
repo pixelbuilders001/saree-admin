@@ -45,6 +45,7 @@ export const dashboardService = {
                 sale_items (
                     saree_id,
                     quantity,
+                    selling_price,
                     inventory (
                         saree_name
                     )
@@ -94,15 +95,18 @@ export const dashboardService = {
             sales: monthlyMap[month]
         }));
 
-        // Recent Activities (take last 5 sales details)
         const recentActivities = (sales || []).slice(0, 5).map(sale => {
-            const itemCount = (sale.sale_items || []).reduce((sum: number, item: any) => sum + Number(item.quantity || 0), 0);
+            const itemCount = (sale.sale_items || []).reduce((sum: number, item: any) => {
+                const qty = Number(item.quantity || 0);
+                const isRet = qty < 0 || Number(item.selling_price || 0) < 0;
+                return sum + (isRet ? -Math.abs(qty) : Math.abs(qty));
+            }, 0);
             const firstItemName = (sale.sale_items?.[0]?.inventory as any)?.saree_name || 'Item';
             const description = itemCount > 1
                 ? `Sold ${itemCount} items (inc. ${firstItemName})`
                 : `Sold 1x ${firstItemName}`;
 
-            const hasReturn = (sale.sale_items || []).some((item: any) => Number(item.quantity || 0) < 0);
+            const hasReturn = (sale.sale_items || []).some((item: any) => Number(item.quantity || 0) < 0 || Number(item.selling_price || 0) < 0);
             const friendlySaleId = getFriendlyId(sale.id, hasReturn);
 
             return {

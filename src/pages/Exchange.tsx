@@ -1,7 +1,12 @@
 import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import { inventoryService, type Saree } from '@/services/inventoryService';
 import { salesService, type SaleReportItem } from '@/services/salesService';
+import { syncService } from '@/services/syncService';
+import { playBeep } from '@/lib/audio';
+import { BarcodeScanner } from '@/components/sales/BarcodeScanner';
+import { RemoteScannerLink } from '@/components/sales/RemoteScannerLink';
 import {
     ArrowLeftRight,
     Search,
@@ -12,10 +17,21 @@ import {
     ArrowDownLeft,
     ArrowUpRight,
     SearchCode,
+    BadgeCent,
+    Copy,
+    Check,
+    Scan,
+    Link,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import {
     Table,
     TableBody,
@@ -27,6 +43,8 @@ import {
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { receiptService } from '@/services/receiptService';
+import { creditService, type StoreCredit } from '@/services/creditService';
+import { ReceiptModal } from '@/components/ReceiptModal';
 
 export default function ExchangePage() {
     const [originalSaleId, setOriginalSaleId] = React.useState('');
@@ -34,6 +52,20 @@ export default function ExchangePage() {
 
     const [returnItems, setReturnItems] = React.useState<SaleReportItem[]>([]);
     const [replaceItems, setReplaceItems] = React.useState<any[]>([]);
+    const [issuedCredit, setIssuedCredit] = React.useState<StoreCredit | null>(null);
+    const [copiedCode, setCopiedCode] = React.useState(false);
+    const [lastCompletedSale, setLastCompletedSale] = React.useState<any | null>(null);
+    const [isReceiptModalOpen, setIsReceiptModalOpen] = React.useState(false);
+    const [isScannerOpen, setIsScannerOpen] = React.useState(false);
+    const [isRemoteLinkOpen, setIsRemoteLinkOpen] = React.useState(false);
+
+    const [searchParams] = useSearchParams();
+    const urlSessionId = searchParams.get('sessionId');
+
+    const [sessionId] = React.useState(() => {
+        if (urlSessionId) return urlSessionId;
+        return Math.random().toString(36).substring(2, 10).toUpperCase();
+    });
 
     const queryClient = useQueryClient();
 
@@ -49,32 +81,39 @@ export default function ExchangePage() {
 
     const exchangeMutation = useMutation({
         mutationFn: salesService.processExchange,
-        onSuccess: (data) => {
+        onSuccess: async (data) => {
             queryClient.invalidateQueries({ queryKey: ['sales'] });
             queryClient.invalidateQueries({ queryKey: ['sarees'] });
             queryClient.invalidateQueries({ queryKey: ['dashboardStats'] });
 
-            receiptService.downloadExchangePDF({
-                exchangeId: data.exchangeId,
-                customerName: returnItems[0]?.customerName || 'N/A',
-                customerMobile: returnItems[0]?.customerMobile || 'N/A',
-                date: data.date,
-                returnItems: returnItems.map(i => ({
-                    sareeId: i.sareeId,
-                    sareeName: i.sareeName,
-                    quantity: i.quantity,
-                    sellingPrice: i.sellingPrice
-                })),
-                replaceItems: replaceItems.map(i => ({
-                    sareeId: i.sareeId,
-                    sareeName: i.sareeName,
-                    quantity: i.quantity,
-                    sellingPrice: i.sellingPrice
-                })),
-                netDifference: data.netTotalAmount
-            });
+            // Auto-issue store credit if return > replacement
+            const creditAmount = returnTotal - replaceTotal;
+            if (creditAmount > 0 && data.customerId) {
+                try {
+                    const credit = await creditService.issueCredit(
+                        data.customerId,
+                        creditAmount,
+                        `Exchange on ${data.invoiceNumber || data.exchangeId} — Store credit for value difference`
+                    );
+                    setIssuedCredit(credit);
+                    toast.success('Exchange complete! Store credit voucher issued.');
+                } catch {
+                    toast.error('Failed to issue store credit voucher.');
+                }
+            } else {
+                toast.success('Exchange completed successfully!');
+            }
 
-            toast.success('Exchange processed successfully & Receipt downloaded!');
+            const completedSale = {
+                id: data.exchangeId,
+                invoiceNumber: data.invoiceNumber || data.exchangeId,
+                totalAmount: data.netTotalAmount,
+                customerName: returnItems[0]?.customerName || 'Walk-in',
+                customerMobile: returnItems[0]?.customerMobile || '',
+            };
+            setLastCompletedSale(completedSale);
+            setIsReceiptModalOpen(true);
+
             setOriginalSaleId('');
             setReturnItems([]);
             setReplaceItems([]);
@@ -84,13 +123,63 @@ export default function ExchangePage() {
         }
     });
 
+    const handleBarcodeScan = (decodedText: string) => {
+        const saree = sarees?.find(s =>
+            s.id.toLowerCase() === decodedText.trim().toLowerCase() ||
+            (s.barcode && s.barcode.toLowerCase() === decodedText.trim().toLowerCase())
+        );
+
+        if (saree) {
+            if (saree.status !== 'active') {
+                toast.error(`Saree "${saree.sareeName}" is inactive and cannot be exchanged.`);
+                return;
+            }
+            playBeep();
+            handleAddReplacement(saree);
+            setIsScannerOpen(false);
+        } else {
+            toast.error(`No saree found with barcode: ${decodedText}`);
+        }
+    };
+
+    // Polling logic for remote scanner mode
+    React.useEffect(() => {
+        if (!sarees) return;
+
+        const interval = setInterval(async () => {
+            try {
+                const items = await syncService.getScannedItems(sessionId);
+                if (items && items.length > 0) {
+                    items.forEach(item => {
+                        const saree = sarees.find(s =>
+                            s.id.toLowerCase() === item.barcode.toLowerCase() ||
+                            (s.barcode && s.barcode.toLowerCase() === item.barcode.toLowerCase())
+                        );
+                        if (saree && saree.status === 'active') {
+                            playBeep();
+                            handleAddReplacement(saree);
+                        }
+                    });
+                }
+            } catch (err) {
+                console.error("Polling error:", err);
+            }
+        }, 2000);
+
+        return () => clearInterval(interval);
+    }, [sessionId, sarees]);
+
     const handleLookupSale = () => {
         if (!originalSaleId) return;
 
-        const saleItems = allSales?.filter(s => s.saleId.toLowerCase() === originalSaleId.toLowerCase());
+        const query = originalSaleId.trim().toLowerCase();
+        const saleItems = allSales?.filter(s =>
+            s.saleId.toLowerCase() === query ||
+            (s.invoiceNumber && s.invoiceNumber.toLowerCase() === query)
+        );
 
         if (!saleItems || saleItems.length === 0) {
-            toast.error('Sale not found');
+            toast.error('Sale or Invoice not found');
             return;
         }
 
@@ -196,10 +285,10 @@ export default function ExchangePage() {
                                 <div className="relative flex-1">
                                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
                                     <Input
-                                        placeholder="Enter Sale ID (e.g. SL-1002)"
+                                        placeholder="Enter Sale ID or Invoice No. (e.g. SL-1002, INV-2026-0805-...)"
                                         className="pl-8 border-gold/30 h-8 text-xs font-mono"
                                         value={originalSaleId}
-                                        onChange={(e) => setOriginalSaleId(e.target.value.toUpperCase())}
+                                        onChange={(e) => setOriginalSaleId(e.target.value.trim().toUpperCase())}
                                         onKeyDown={(e) => e.key === 'Enter' && handleLookupSale()}
                                     />
                                 </div>
@@ -264,37 +353,59 @@ export default function ExchangePage() {
                                 </CardTitle>
                             </CardHeader>
                             <CardContent className="p-3 space-y-2">
-                                <div className="relative">
-                                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
-                                    <Input
-                                        placeholder="Scan barcode or type matching Saree name..."
-                                        className="pl-8 border-gold/30 h-8 text-xs bg-white"
-                                        value={sareeSearchTerm}
-                                        onChange={(e) => setSareeSearchTerm(e.target.value)}
-                                    />
-                                    {sareeSearchTerm && (
-                                        <Card className="absolute z-50 w-full mt-1 border-gold/20 shadow-2xl max-h-[180px] overflow-y-auto">
-                                            <CardContent className="p-0">
-                                                {filteredSarees.length > 0 ? (
-                                                    filteredSarees.map((saree) => (
-                                                        <div
-                                                            key={saree.id}
-                                                            className="p-2 hover:bg-cream/20 cursor-pointer border-b border-gray-150 last:border-0 flex justify-between items-center text-xs"
-                                                            onClick={() => handleAddReplacement(saree)}
-                                                        >
-                                                            <div>
-                                                                <div className="font-bold text-maroon">{saree.sareeName}</div>
-                                                                <div className="text-[10px] text-gray-405">{saree.id} | Available: {saree.stock}</div>
+                                <div className="flex gap-2">
+                                    <div className="relative flex-1">
+                                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                                        <Input
+                                            placeholder="Scan barcode or type matching Saree name..."
+                                            className="pl-8 border-gold/30 h-8 text-xs bg-white"
+                                            value={sareeSearchTerm}
+                                            onChange={(e) => setSareeSearchTerm(e.target.value)}
+                                        />
+                                        {sareeSearchTerm && (
+                                            <Card className="absolute z-50 w-full mt-1 border-gold/20 shadow-2xl max-h-[180px] overflow-y-auto">
+                                                <CardContent className="p-0">
+                                                    {filteredSarees.length > 0 ? (
+                                                        filteredSarees.map((saree) => (
+                                                            <div
+                                                                key={saree.id}
+                                                                className="p-2 hover:bg-cream/20 cursor-pointer border-b border-gray-150 last:border-0 flex justify-between items-center text-xs"
+                                                                onClick={() => handleAddReplacement(saree)}
+                                                            >
+                                                                <div>
+                                                                    <div className="font-bold text-maroon">{saree.sareeName}</div>
+                                                                    <div className="text-[10px] text-gray-405">{saree.id} | Available: {saree.stock}</div>
+                                                                </div>
+                                                                <div className="font-bold text-maroon font-mono">₹{saree.sellingPrice.toLocaleString()}</div>
                                                             </div>
-                                                            <div className="font-bold text-maroon font-mono">₹{saree.sellingPrice.toLocaleString()}</div>
-                                                        </div>
-                                                    ))
-                                                ) : (
-                                                    <div className="p-3 text-center text-xs text-gray-405 italic">No matching sarees found</div>
-                                                )}
-                                            </CardContent>
-                                        </Card>
-                                    )}
+                                                        ))
+                                                    ) : (
+                                                        <div className="p-3 text-center text-xs text-gray-405 italic">No matching sarees found</div>
+                                                    )}
+                                                </CardContent>
+                                            </Card>
+                                        )}
+                                    </div>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="icon"
+                                        className="border-gold/30 h-8 w-8 text-maroon hover:bg-cream/10 flex-shrink-0"
+                                        title="Camera Barcode Scanner"
+                                        onClick={() => setIsScannerOpen(true)}
+                                    >
+                                        <Scan className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="icon"
+                                        className="border-gold/30 h-8 w-8 text-maroon hover:bg-cream/10 flex-shrink-0"
+                                        title="Remote Mobile Scanner Link"
+                                        onClick={() => setIsRemoteLinkOpen(true)}
+                                    >
+                                        <Link className="h-4 w-4" />
+                                    </Button>
                                 </div>
 
                                 {replaceItems.length > 0 && (
@@ -376,9 +487,16 @@ export default function ExchangePage() {
                                     </span>
                                 </div>
                                 {netDifference < 0 && (
-                                    <p className="text-[9px] text-gray-400 italic mt-1 leading-normal">
-                                        * Note: The replacement value is lower than original sale value. Under business policy, negative differences are not refunded.
-                                    </p>
+                                    <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5">
+                                        <div className="flex items-center gap-1.5 text-amber-700 text-[10px] font-bold mb-1">
+                                            <BadgeCent className="h-3.5 w-3.5" />
+                                            STORE CREDIT TO BE ISSUED
+                                        </div>
+                                        <p className="text-xs font-black text-amber-800 font-mono">₹{Math.abs(netDifference).toLocaleString()}</p>
+                                        <p className="text-[9px] text-amber-600 mt-1 leading-normal">
+                                            A voucher will be auto-generated for the customer on exchange completion.
+                                        </p>
+                                    </div>
                                 )}
                             </div>
                         </CardContent>
@@ -389,12 +507,99 @@ export default function ExchangePage() {
                                 onClick={handleProcessExchange}
                             >
                                 {exchangeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <CheckCircle2 className="h-4 w-4 mr-1" />}
-                                COMPLETE EXCHANGE
+                                {netDifference < 0
+                                    ? `EXCHANGE + ISSUE ₹${Math.abs(netDifference).toLocaleString()} CREDIT`
+                                    : 'COMPLETE EXCHANGE'
+                                }
                             </Button>
                         </CardFooter>
                     </Card>
                 </div>
             </div>
+
+            {/* ── Voucher Success Dialog ──────────────────────────── */}
+            {issuedCredit && (
+                <Dialog open={!!issuedCredit} onOpenChange={() => setIssuedCredit(null)}>
+                    <DialogContent className="sm:max-w-sm border-gold/20 shadow-2xl p-0 overflow-hidden">
+                        <div className="bg-maroon p-4 text-center">
+                            <BadgeCent className="h-10 w-10 text-gold mx-auto mb-2" />
+                            <DialogTitle className="text-gold font-black text-base tracking-widest">STORE CREDIT ISSUED</DialogTitle>
+                            <p className="text-gold/70 text-xs mt-1">Customer can use this code on their next purchase</p>
+                        </div>
+                        <div className="p-5 space-y-4">
+                            {/* Voucher Code */}
+                            <div className="border-2 border-dashed border-gold/40 rounded-xl p-4 text-center bg-amber-50">
+                                <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Voucher Code</p>
+                                <p className="text-2xl font-black font-mono text-maroon tracking-widest">{issuedCredit.voucherCode}</p>
+                                <p className="text-xs font-bold text-amber-700 mt-1">₹{issuedCredit.originalAmount.toLocaleString('en-IN')} Store Credit</p>
+                            </div>
+
+                            {/* Customer info */}
+                            {(issuedCredit.customerName || issuedCredit.customerMobile) && (
+                                <div className="text-xs text-gray-500 text-center">
+                                    <span className="font-semibold text-gray-700">{issuedCredit.customerName}</span>
+                                    {issuedCredit.customerMobile && <span className="ml-2 font-mono">{issuedCredit.customerMobile}</span>}
+                                </div>
+                            )}
+
+                            {/* Actions */}
+                            <div className="grid grid-cols-2 gap-2">
+                                <Button
+                                    variant="outline"
+                                    className="border-gold/30 text-maroon gap-1.5 text-xs h-9"
+                                    onClick={() => {
+                                        navigator.clipboard.writeText(issuedCredit.voucherCode);
+                                        setCopiedCode(true);
+                                        setTimeout(() => setCopiedCode(false), 2000);
+                                    }}
+                                >
+                                    {copiedCode ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+                                    {copiedCode ? 'Copied!' : 'Copy Code'}
+                                </Button>
+                                <Button
+                                    className="bg-green-600 hover:bg-green-700 text-white gap-1.5 text-xs h-9"
+                                    onClick={() => {
+                                        const msg = encodeURIComponent(
+                                            `🎁 *Store Credit Voucher*\n` +
+                                            `Code: *${issuedCredit.voucherCode}*\n` +
+                                            `Amount: ₹${issuedCredit.originalAmount.toLocaleString('en-IN')}\n` +
+                                            `From: Shree Banarasi Sarees`
+                                        );
+                                        window.open(`https://wa.me/${issuedCredit.customerMobile?.replace(/\D/g, '')}?text=${msg}`, '_blank');
+                                    }}
+                                >
+                                    WhatsApp
+                                </Button>
+                            </div>
+
+                            <Button
+                                className="w-full bg-maroon hover:bg-maroon-dark text-gold h-9 text-xs font-bold"
+                                onClick={() => setIssuedCredit(null)}
+                            >
+                                Done
+                            </Button>
+                        </div>
+                    </DialogContent>
+                </Dialog>
+            )}
+
+            {isReceiptModalOpen && (
+                <ReceiptModal
+                    isOpen={isReceiptModalOpen}
+                    onClose={() => setIsReceiptModalOpen(false)}
+                    sale={lastCompletedSale}
+                />
+            )}
+            <BarcodeScanner
+                isOpen={isScannerOpen}
+                onClose={() => setIsScannerOpen(false)}
+                onScan={handleBarcodeScan}
+            />
+            <RemoteScannerLink
+                sessionId={sessionId}
+                isOpen={isRemoteLinkOpen}
+                onClose={() => setIsRemoteLinkOpen(false)}
+            />
         </div>
     );
 }

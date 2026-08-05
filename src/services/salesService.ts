@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/useAuthStore';
+import { creditService } from './creditService';
 
 export interface SaleItem {
     sareeId: string;
@@ -25,6 +26,7 @@ export interface Sale {
 
 export interface SaleReportItem {
     saleId: string;
+    invoiceNumber?: string;
     sareeId: string;
     sareeName: string;
     quantity: number;
@@ -55,6 +57,7 @@ export const salesService = {
             .from('sales')
             .select(`
                 id,
+                invoice_number,
                 created_at,
                 total_amount,
                 profit,
@@ -90,19 +93,25 @@ export const salesService = {
             const salespersonName = sale.staff?.name || '';
             const commissionEarned = Number(sale.commission_earned || 0);
 
-            const hasReturn = (sale.sale_items || []).some((item: any) => Number(item.quantity || 0) < 0);
+            const hasReturn = (sale.sale_items || []).some((item: any) => Number(item.quantity || 0) < 0 || Number(item.selling_price || 0) < 0);
             const friendlySaleId = getFriendlyId(sale.id, hasReturn);
 
             (sale.sale_items || []).forEach((item: any) => {
-                const quantity = Number(item.quantity || 0);
+                const quantity = Math.abs(Number(item.quantity || 0));
                 const sellingPrice = Number(item.selling_price || 0);
-                const totalAmount = quantity * sellingPrice;
+                const totalAmount = (Number(item.selling_price || 0) < 0 || Number(item.quantity || 0) < 0)
+                    ? -Math.abs(quantity * sellingPrice)
+                    : quantity * sellingPrice;
 
                 const purchasePrice = Number(item.inventory?.purchase_price || 0);
-                const profit = totalAmount - (quantity * purchasePrice);
+                const isReturn = Number(item.selling_price || 0) < 0 || Number(item.quantity || 0) < 0;
+                const profit = isReturn
+                    ? totalAmount + (quantity * purchasePrice)
+                    : totalAmount - (quantity * purchasePrice);
 
                 reportItems.push({
                     saleId: friendlySaleId,
+                    invoiceNumber: sale.invoice_number,
                     sareeId: item.saree_id,
                     sareeName: item.inventory?.saree_name || 'Unknown Saree',
                     quantity,
@@ -131,6 +140,8 @@ export const salesService = {
         commissionEarned?: number;
         paymentMode?: string;
         discountAmount?: number;
+        voucherCode?: string;
+        voucherAmount?: number;
     }): Promise<Sale> => {
         if (!sale.items || sale.items.length === 0) {
             throw new Error("No items in sale");
@@ -200,8 +211,9 @@ export const salesService = {
         const randPart = Math.floor(1000 + Math.random() * 9000);
         const invoiceNumber = `INV-${datePart}-${randPart}`;
         const discount = sale.discountAmount ?? 0;
-        const netAmount = Math.max(0, totalAmount - discount);
-        const netProfit = Math.max(0, totalProfit - discount);
+        const voucherVal = sale.voucherAmount ?? 0;
+        const netAmount = Math.max(0, totalAmount - discount - voucherVal);
+        const netProfit = Math.max(0, totalProfit - discount - voucherVal);
 
         const { data: insertedSale, error: saleInsertError } = await supabase
             .from('sales')
@@ -253,6 +265,11 @@ export const salesService = {
 
         if (itemsInsertError) throw itemsInsertError;
 
+        // 5. Redeem the store credit voucher if one was applied
+        if (sale.voucherCode && voucherVal > 0) {
+            await creditService.redeemCredit(sale.voucherCode, insertedSale.id, voucherVal);
+        }
+
         return {
             saleId: getFriendlyId(insertedSale.id, false),
             invoiceNumber,
@@ -274,7 +291,7 @@ export const salesService = {
         replaceItems: SaleItem[];
         customerName?: string;
         customerMobile?: string;
-    }): Promise<{ exchangeId: string; date: string; success: boolean; netTotalAmount: number }> => {
+    }): Promise<{ exchangeId: string; date: string; success: boolean; netTotalAmount: number; customerId: string | null }> => {
         // 1. Resolve Customer ID
         let customerId: string | null = null;
         if (exchange.customerMobile) {
@@ -350,12 +367,18 @@ export const salesService = {
 
         // 3. Create Exchange Sale Header
         const userEmail = useAuthStore.getState().user?.email || 'system';
+        const now = new Date();
+        const datePart = now.toISOString().slice(0, 10).replace(/-/g, '');
+        const randPart = Math.floor(1000 + Math.random() * 9000);
+        const invoiceNumber = `INV-EX-${datePart}-${randPart}`;
+
         const { data: insertedSale, error: saleInsertError } = await supabase
             .from('sales')
             .insert([{
                 customer_id: customerId,
                 total_amount: netTotalAmount,
                 profit: netProfit,
+                invoice_number: invoiceNumber,
                 created_by: userEmail,
                 updated_by: userEmail
             }])
@@ -378,8 +401,8 @@ export const salesService = {
             itemsToInsert.push({
                 sale_id: insertedSale.id,
                 saree_id: item.sareeId,
-                quantity: -item.quantity, // Negative quantity representing return
-                selling_price: item.sellingPrice
+                quantity: item.quantity,            // Positive quantity representing count returned
+                selling_price: -item.sellingPrice  // Negative price representing return value to satifsy check constraint
             });
         }
 
@@ -408,9 +431,11 @@ export const salesService = {
 
         return {
             exchangeId: getFriendlyId(insertedSale.id, true),
+            invoiceNumber,
             date: insertedSale.created_at,
             success: true,
-            netTotalAmount
+            netTotalAmount,
+            customerId,
         };
     },
 };

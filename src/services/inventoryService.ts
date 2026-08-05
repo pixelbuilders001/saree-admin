@@ -170,4 +170,47 @@ export const inventoryService = {
 
         if (error) throw error;
     },
+
+    bulkCreateSarees: async (rows: Omit<Saree, 'id' | 'addedDate'>[]): Promise<{ inserted: number; errors: string[] }> => {
+        const userEmail = useAuthStore.getState().user?.email || 'system';
+        const errors: string[] = [];
+        const records: any[] = [];
+
+        rows.forEach((row, idx) => {
+            // Validate required fields
+            if (!row.sareeName || !row.category || !row.fabric || !row.color) {
+                errors.push(`Row ${idx + 2}: Missing required field (name/category/fabric/color)`);
+                return;
+            }
+            if (isNaN(Number(row.purchasePrice)) || isNaN(Number(row.sellingPrice))) {
+                errors.push(`Row ${idx + 2}: Invalid price value`);
+                return;
+            }
+            const randId = 'S' + Math.floor(1000 + Math.random() * 9000) + Math.floor(Math.random() * 9);
+            records.push({
+                id: randId,
+                saree_name: String(row.sareeName).trim(),
+                category: String(row.category).trim(),
+                fabric: String(row.fabric).trim(),
+                color: String(row.color).trim(),
+                purchase_price: Number(row.purchasePrice),
+                selling_price: Number(row.sellingPrice),
+                stock: Number(row.stock) || 0,
+                rack_no: row.rackNo ? String(row.rackNo).trim() : null,
+                barcode: row.barcode ? String(row.barcode).trim() : randId,
+                status: row.status === 'inactive' ? 'inactive' : 'active',
+                created_by: userEmail,
+                updated_by: userEmail,
+            });
+        });
+
+        if (records.length === 0) {
+            return { inserted: 0, errors };
+        }
+
+        const { error } = await supabase.from('inventory').insert(records);
+        if (error) throw error;
+
+        return { inserted: records.length, errors };
+    },
 };

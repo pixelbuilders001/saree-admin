@@ -4,6 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import { inventoryService, type Saree } from '@/services/inventoryService';
 import { salesService } from '@/services/salesService';
 import { customerService } from '@/services/customerService';
+import { creditService } from '@/services/creditService';
 import {
     ShoppingCart,
     Search,
@@ -48,6 +49,9 @@ export default function SalesPage() {
     const [sareeSearchTerm, setSareeSearchTerm] = React.useState<string>('');
     const [selectedCategory, setSelectedCategory] = React.useState<string>('All');
     const [paymentMode, setPaymentMode] = React.useState<'cash' | 'card' | 'upi'>('cash');
+    const [voucherCodeInput, setVoucherCodeInput] = React.useState<string>('');
+    const [appliedVoucher, setAppliedVoucher] = React.useState<{ code: string; amount: number; customerName?: string } | null>(null);
+    const [isCheckingVoucher, setIsCheckingVoucher] = React.useState(false);
     const [highlightedIndex, setHighlightedIndex] = React.useState<number>(0);
     const [cart, setCart] = React.useState<Array<{
         sareeId: string;
@@ -117,6 +121,8 @@ export default function SalesPage() {
             setCustomerName('');
             setCustomerMobile('');
             setDiscountAmount(0);
+            setAppliedVoucher(null);
+            setVoucherCodeInput('');
             setLastCompletedSale(data);
             setIsReceiptModalOpen(true);
         },
@@ -185,8 +191,35 @@ export default function SalesPage() {
         if (customer) {
             setCustomerName(customer.name);
             toast.success(`Welcome back, ${customer.name}!`);
+
+            // Auto-fetch active store credits for this customer
+            (async () => {
+                try {
+                    const credits = await creditService.getActiveCreditsForCustomer(customer.customerId);
+                    if (credits && credits.length > 0) {
+                        const activeCredit = credits[0];
+                        setVoucherCodeInput(activeCredit.voucherCode);
+                        setAppliedVoucher({
+                            code: activeCredit.voucherCode,
+                            amount: activeCredit.remainingAmount,
+                            customerName: customer.name
+                        });
+                        toast.info(`Available Store Credit SBS-XXXXXX applied!`, {
+                            description: `Found active voucher ${activeCredit.voucherCode} (₹${activeCredit.remainingAmount.toLocaleString()}) and applied it to the cart.`
+                        });
+                    } else {
+                        // Clear voucher code if none exists or customer changed
+                        setVoucherCodeInput('');
+                        setAppliedVoucher(null);
+                    }
+                } catch (err) {
+                    console.error('Failed to auto-fetch store credits:', err);
+                }
+            })();
         } else if (!mobileOverride) {
             toast.info('Customer not found. You can enter the name manually.');
+            setVoucherCodeInput('');
+            setAppliedVoucher(null);
         }
     };
 
@@ -205,7 +238,8 @@ export default function SalesPage() {
     };
 
     const cartTotal = cart.reduce((sum, item) => sum + (item.sellingPrice * item.quantity), 0);
-    const netPayable = Math.max(0, cartTotal - discountAmount);
+    const appliedVoucherAmount = appliedVoucher ? Math.min(appliedVoucher.amount, Math.max(0, cartTotal - discountAmount)) : 0;
+    const netPayable = Math.max(0, cartTotal - discountAmount - appliedVoucherAmount);
 
     const handleAddToCart = (saree: Saree) => {
         if (saree.stock <= 0) {
@@ -306,6 +340,40 @@ export default function SalesPage() {
         return () => clearInterval(interval);
     }, [sessionId, remoteMode, sarees]);
 
+    const handleApplyVoucher = async () => {
+        if (!voucherCodeInput.trim()) return;
+        setIsCheckingVoucher(true);
+        try {
+            const credit = await creditService.lookupCredit(voucherCodeInput.trim());
+            if (!credit) {
+                toast.error('Voucher code not found');
+                setAppliedVoucher(null);
+            } else if (credit.status !== 'active') {
+                toast.error(`Voucher has already been ${credit.status}`);
+                setAppliedVoucher(null);
+            } else if (new Date(credit.expiresAt || '') < new Date()) {
+                toast.error('Voucher has expired');
+                setAppliedVoucher(null);
+            } else {
+                setAppliedVoucher({
+                    code: credit.voucherCode,
+                    amount: credit.remainingAmount,
+                    customerName: credit.customerName
+                });
+                toast.success(`Applied ₹${credit.remainingAmount} store credit!`);
+            }
+        } catch (error) {
+            toast.error('Failed to validate voucher');
+        } finally {
+            setIsCheckingVoucher(false);
+        }
+    };
+
+    const handleClearVoucher = () => {
+        setAppliedVoucher(null);
+        setVoucherCodeInput('');
+    };
+
     const handleCreateSale = async () => {
         if (cart.length === 0) {
             toast.error('Cart is empty');
@@ -329,6 +397,8 @@ export default function SalesPage() {
             commissionEarned,
             paymentMode,
             discountAmount,
+            voucherCode: appliedVoucher?.code,
+            voucherAmount: appliedVoucherAmount,
         });
     };
 
@@ -719,6 +789,52 @@ export default function SalesPage() {
                                     className="w-20 text-right text-xs border border-gray-200 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-green-400 text-green-700 font-semibold"
                                 />
                             </div>
+                        </div>
+
+                        {/* Store Credit Voucher Row */}
+                        <div className="flex flex-col gap-1 pt-1.5 border-t border-gray-100 mt-1">
+                            <div className="flex items-center justify-between">
+                                <span className="text-gray-400 text-[10px] font-semibold uppercase tracking-wider">Store Credit Voucher</span>
+                                {appliedVoucher && (
+                                    <button
+                                        type="button"
+                                        onClick={handleClearVoucher}
+                                        className="text-[9px] text-red-500 hover:text-red-700 font-bold"
+                                    >
+                                        Remove
+                                    </button>
+                                )}
+                            </div>
+                            {appliedVoucher ? (
+                                <div className="flex items-center justify-between text-xs bg-amber-50 rounded border border-amber-200/60 p-1.5">
+                                    <div className="flex-1 min-w-0">
+                                        <span className="font-bold text-amber-800 font-mono block text-[11px]">{appliedVoucher.code}</span>
+                                        <span className="text-[9px] text-amber-600 block truncate">
+                                            {appliedVoucher.customerName ? `For: ${appliedVoucher.customerName}` : 'Available Store Credit'}
+                                        </span>
+                                    </div>
+                                    <span className="font-bold text-amber-700 font-mono text-[11px]">-₹{appliedVoucherAmount.toLocaleString()}</span>
+                                </div>
+                            ) : (
+                                <div className="flex gap-1">
+                                    <input
+                                        type="text"
+                                        placeholder="Enter voucher code (e.g. SBS-X4P9R2)"
+                                        value={voucherCodeInput}
+                                        onChange={(e) => setVoucherCodeInput(e.target.value.toUpperCase())}
+                                        className="flex-1 text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-maroon/20 uppercase font-mono h-7"
+                                        onKeyDown={(e) => e.key === 'Enter' && handleApplyVoucher()}
+                                    />
+                                    <button
+                                        type="button"
+                                        disabled={isCheckingVoucher || !voucherCodeInput.trim()}
+                                        onClick={handleApplyVoucher}
+                                        className="bg-maroon hover:bg-maroon-dark text-gold disabled:opacity-50 text-[10px] font-bold px-3 py-1 rounded transition-colors h-7"
+                                    >
+                                        {isCheckingVoucher ? '...' : 'APPLY'}
+                                    </button>
+                                </div>
+                            )}
                         </div>
                         <div className="flex justify-between font-bold text-maroon text-sm pt-1 border-t border-gray-100">
                             <span>Net Payable</span>

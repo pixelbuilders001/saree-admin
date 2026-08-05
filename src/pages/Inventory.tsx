@@ -6,6 +6,7 @@ import {
     Search,
     Filter,
     FileDown,
+    FileUp,
     MoreHorizontal,
     Edit,
     Trash2,
@@ -45,6 +46,7 @@ import {
 } from "@/components/ui/dialog";
 import { SareeForm } from '@/components/inventory/SareeForm';
 import { BarcodeGenerator } from '@/components/inventory/BarcodeGenerator';
+import { CsvImportModal } from '@/components/inventory/CsvImportModal';
 import { toast } from 'sonner';
 
 export default function InventoryPage() {
@@ -59,6 +61,7 @@ export default function InventoryPage() {
     const [isPasswordDialogOpen, setIsPasswordDialogOpen] = React.useState(false);
     const [passwordInput, setPasswordInput] = React.useState('');
     const [barcodeToShow, setBarcodeToShow] = React.useState<{ value: string, label: string } | null>(null);
+    const [isImportOpen, setIsImportOpen] = React.useState(false);
 
     const queryClient = useQueryClient();
 
@@ -187,6 +190,14 @@ export default function InventoryPage() {
                     </Button>
                 </div>
                 <div className="flex items-center justify-end gap-2">
+                    <Button
+                        variant="outline" size="sm"
+                        className="border-gold/30 text-maroon gap-1.5 h-8 text-xs px-2.5 font-bold hover:bg-cream/10"
+                        onClick={() => setIsImportOpen(true)}
+                    >
+                        <FileUp className="h-3.5 w-3.5" />
+                        IMPORT CSV
+                    </Button>
                     <Button variant="outline" size="sm" className="border-gold/30 text-maroon gap-1.5 h-8 text-xs px-2.5 font-bold hover:bg-cream/10">
                         <FileDown className="h-3.5 w-3.5" />
                         EXPORT
@@ -437,6 +448,11 @@ export default function InventoryPage() {
                 onClose={() => setBarcodeToShow(null)}
                 value={barcodeToShow?.value || ''}
                 label={barcodeToShow?.label || ''}
+            />
+
+            <CsvImportModal
+                isOpen={isImportOpen}
+                onClose={() => setIsImportOpen(false)}
             />
         </div>
     );
