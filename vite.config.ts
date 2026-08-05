@@ -11,7 +11,7 @@ export default defineConfig({
   },
   server: {
     allowedHosts: [
-      'extreme-crucial-macintosh-storage.trycloudflare.com',
+      'pursuant-try-phpbb-tent.trycloudflare.com',
       'saree-admin-chi.vercel.app'
     ]
   }

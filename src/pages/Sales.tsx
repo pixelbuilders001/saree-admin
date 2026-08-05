@@ -29,8 +29,8 @@ import { toast } from 'sonner';
 import { ReceiptModal } from '@/components/ReceiptModal';
 import { BarcodeScanner } from '@/components/sales/BarcodeScanner';
 import { RemoteScannerLink } from '@/components/sales/RemoteScannerLink';
-import { syncService } from '@/services/syncService';
 import { playBeep } from '@/lib/audio';
+import Peer from 'peerjs';
 import type { Sale } from '@/services/salesService';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import QRCode from 'react-qr-code';
@@ -79,6 +79,8 @@ export default function SalesPage() {
         localStorage.setItem('sales_session_id', id);
         return id;
     });
+
+
 
     const queryClient = useQueryClient();
 
@@ -273,6 +275,142 @@ export default function SalesPage() {
         toast.success(`${saree.sareeName} added to cart`);
     };
 
+    const [remoteConnected, setRemoteConnected] = React.useState(false);
+    const [connectionStatus, setConnectionStatus] = React.useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
+
+    const peerRef = React.useRef<Peer | null>(null);
+    const connRef = React.useRef<any>(null);
+
+    const sareesRef = React.useRef(sarees);
+    React.useEffect(() => {
+        sareesRef.current = sarees;
+    }, [sarees]);
+
+    const addToCartRef = React.useRef(handleAddToCart);
+    React.useEffect(() => {
+        addToCartRef.current = handleAddToCart;
+    }, [handleAddToCart]);
+
+    const initializePeer = React.useCallback(() => {
+        if (peerRef.current) {
+            peerRef.current.destroy();
+            peerRef.current = null;
+        }
+
+        try {
+            if (remoteMode === 'scanner') {
+                setConnectionStatus('connecting');
+                const peer = new Peer();
+                peerRef.current = peer;
+
+                peer.on('open', (id) => {
+                    console.log('Scanner Peer registered with ID:', id);
+                    const conn = peer.connect(`POS-${sessionId}`, { reliable: true });
+                    connRef.current = conn;
+
+                    conn.on('open', () => {
+                        setConnectionStatus('connected');
+                        toast.success('Connected to terminal');
+                    });
+
+                    conn.on('close', () => {
+                        setConnectionStatus('disconnected');
+                        connRef.current = null;
+                    });
+
+                    conn.on('error', (err) => {
+                        console.error('Data connection error:', err);
+                        setConnectionStatus('disconnected');
+                        connRef.current = null;
+                        toast.error('Scanner connection lost');
+                    });
+                });
+
+                peer.on('error', (err) => {
+                    console.error('PeerJS error:', err);
+                    setConnectionStatus('disconnected');
+                    if (err.type === 'peer-unavailable') {
+                        toast.error('Terminal not online. Make sure checkout page is open.');
+                    } else {
+                        toast.error(`P2P Initialization error: ${err.type}`);
+                    }
+                });
+
+                peer.on('close', () => {
+                    setConnectionStatus('disconnected');
+                });
+            } else {
+                const peerId = `POS-${sessionId}`;
+                const peer = new Peer(peerId);
+                peerRef.current = peer;
+
+                peer.on('open', (id) => {
+                    console.log('Master POS Terminal PeerJS open with ID:', id);
+                });
+
+                peer.on('connection', (conn) => {
+                    console.log('Terminal received connection from:', conn.peer);
+                    setRemoteConnected(true);
+                    connRef.current = conn;
+
+                    conn.on('data', (data) => {
+                        console.log('Terminal received barcode:', data);
+                        if (data && typeof data === 'string') {
+                            const barcode = data.trim();
+                            const foundSaree = sareesRef.current?.find(s =>
+                                s.id.toLowerCase() === barcode.toLowerCase() ||
+                                s.barcode?.toLowerCase() === barcode.toLowerCase()
+                            );
+
+                            if (foundSaree) {
+                                if (foundSaree.status !== 'active') {
+                                    toast.error(`Saree "${foundSaree.sareeName}" is inactive.`);
+                                    return;
+                                }
+                                playBeep();
+                                addToCartRef.current(foundSaree);
+                                toast.success(`Remote scanned: ${foundSaree.sareeName}`);
+                            } else {
+                                toast.error(`No active saree found for barcode: ${barcode}`);
+                            }
+                        }
+                    });
+
+                    conn.on('close', () => {
+                        setRemoteConnected(false);
+                        connRef.current = null;
+                        toast.info('Remote scanner disconnected');
+                    });
+
+                    conn.on('error', (err) => {
+                        console.error('Terminal dynamic connection error:', err);
+                        setRemoteConnected(false);
+                        connRef.current = null;
+                    });
+                });
+
+                peer.on('error', (err) => {
+                    console.error('Master peer error:', err);
+                });
+            }
+        } catch (error) {
+            console.error('Peer instantiation error:', error);
+            setConnectionStatus('disconnected');
+        }
+    }, [remoteMode, sessionId]);
+
+    React.useEffect(() => {
+        initializePeer();
+
+        return () => {
+            if (peerRef.current) {
+                peerRef.current.destroy();
+                peerRef.current = null;
+            }
+            connRef.current = null;
+        };
+    }, [initializePeer]);
+
     const handleBarcodeScan = (decodedText: string) => {
         if (isProcessingScan || (lastScannedBarcode === decodedText)) return;
 
@@ -286,12 +424,21 @@ export default function SalesPage() {
         }, 2000);
 
         if (remoteMode === 'scanner') {
-            syncService.pushScannedItem(sessionId, decodedText)
-                .then(() => {
+            if (connRef.current && connRef.current.open) {
+                try {
+                    connRef.current.send(decodedText);
                     playBeep();
-                    toast.success(`Scanned: ${decodedText}`);
-                })
-                .catch(() => toast.error("Failed to sync scan"));
+                    if (navigator.vibrate) {
+                        navigator.vibrate(100);
+                    }
+                    toast.success(`Scanned & sent: ${decodedText}`);
+                } catch (err) {
+                    console.error("Failed to send scan over WebRTC P2P:", err);
+                    toast.error("Failed to send scan over P2P link");
+                }
+            } else {
+                toast.error("Not connected to terminal. Please tap Reconnect.");
+            }
             return;
         }
 
@@ -313,32 +460,7 @@ export default function SalesPage() {
         }
     };
 
-    // Polling logic for Master (Laptop) mode
-    React.useEffect(() => {
-        if (remoteMode === 'scanner' || !sarees) return;
-
-        const interval = setInterval(async () => {
-            try {
-                const items = await syncService.getScannedItems(sessionId);
-                if (items && items.length > 0) {
-                    items.forEach(item => {
-                        const saree = sarees.find(s =>
-                            s.id.toLowerCase() === item.barcode.toLowerCase() ||
-                            s.barcode?.toLowerCase() === item.barcode.toLowerCase()
-                        );
-                        if (saree && saree.status === 'active') {
-                            playBeep();
-                            handleAddToCart(saree);
-                        }
-                    });
-                }
-            } catch (err) {
-                console.error("Polling error:", err);
-            }
-        }, 2000);
-
-        return () => clearInterval(interval);
-    }, [sessionId, remoteMode, sarees]);
+    // Legacy polling logic removed in favor of zero-cost WebRTC Peer-to-Peer
 
     const handleApplyVoucher = async () => {
         if (!voucherCodeInput.trim()) return;
@@ -438,23 +560,46 @@ export default function SalesPage() {
                         <CardTitle className="text-2xl">Remote Scanner</CardTitle>
                         <p className="text-gold/60 mt-2 font-mono text-sm">Session: {sessionId}</p>
                     </CardHeader>
-                    <CardContent className="p-6 space-y-6">
-                        <p className="text-center text-gray-500 text-sm italic">
+                    <CardContent className="p-6 space-y-6 text-center">
+                        <p className="text-gray-500 text-sm italic">
                             Your phone is now acting as a wireless scanner for your laptop.
                         </p>
                         <Button
                             className="w-full h-20 bg-gold hover:bg-gold-dark text-maroon font-bold text-xl gap-3 shadow-lg"
+                            disabled={connectionStatus !== 'connected'}
                             onClick={() => setIsScannerOpen(true)}
                         >
                             <Camera className="h-8 w-8" />
                             Open Camera
                         </Button>
                         <div className="pt-4 border-t border-gray-100 flex flex-col items-center gap-2">
-                            <div className="flex items-center gap-2 text-green-600 font-medium text-sm">
-                                <span className="w-2 h-2 rounded-full bg-green-500 animate-ping"></span>
-                                Connected to Sync
-                            </div>
-                            <Button variant="ghost" className="text-gray-400 text-xs" onClick={() => window.location.href = '/sales'}>
+                            {connectionStatus === 'connected' ? (
+                                <div className="flex items-center gap-2 text-green-600 font-medium text-sm">
+                                    <span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse"></span>
+                                    Connected (P2P Live)
+                                </div>
+                            ) : connectionStatus === 'connecting' ? (
+                                <div className="flex items-center gap-2 text-amber-600 font-medium text-sm">
+                                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
+                                    Connecting...
+                                </div>
+                            ) : (
+                                <div className="flex flex-col items-center gap-2">
+                                    <div className="flex items-center gap-2 text-red-600 font-medium text-sm">
+                                        <span className="w-2.5 h-2.5 rounded-full bg-red-500"></span>
+                                        Disconnected
+                                    </div>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-8 border-gold/20 text-maroon hover:bg-cream/10 text-xs px-3"
+                                        onClick={initializePeer}
+                                    >
+                                        Reconnect to Terminal
+                                    </Button>
+                                </div>
+                            )}
+                            <Button variant="ghost" className="text-gray-400 text-xs mt-2" onClick={() => window.location.href = '/sales'}>
                                 Exit Scanner Mode
                             </Button>
                         </div>
@@ -597,6 +742,12 @@ export default function SalesPage() {
                     <div className="flex items-center gap-2">
                         <ShoppingCart className="h-4.5 w-4.5" />
                         <span className="font-bold text-xs uppercase tracking-wider">Checkout Terminal</span>
+                        {remoteConnected && (
+                            <span className="flex items-center gap-1 bg-green-500/10 text-green-400 border border-green-500/25 px-1.5 py-0.5 rounded-full text-[9px] font-medium leading-none animate-pulse">
+                                <span className="h-1.5 w-1.5 rounded-full bg-green-400"></span>
+                                Live Scanner
+                            </span>
+                        )}
                     </div>
                     <span className="text-[10px] font-mono bg-gold/15 text-gold-light px-2 py-0.5 rounded">
                         ID: {sessionId}

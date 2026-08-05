@@ -19,8 +19,7 @@ interface RemoteScannerLinkProps {
 
 export function RemoteScannerLink({ sessionId, isOpen, onClose }: RemoteScannerLinkProps) {
     const [copied, setCopied] = React.useState(false);
-    const origin = typeof window !== 'undefined' ? window.location.origin : '';
-    const scannerUrl = `${origin}/sales?remoteMode=scanner&sessionId=${sessionId}`;
+    const scannerUrl = `https://barcode-scanner-dun.vercel.app?sessionId=${sessionId}`;
 
     const handleCopy = () => {
         navigator.clipboard.writeText(scannerUrl);
