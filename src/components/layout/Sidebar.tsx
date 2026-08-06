@@ -25,6 +25,7 @@ const navItems = [
     // { icon: Truck, label: 'Purchases', path: '/purchases' },
     { icon: ArrowLeftRight, label: 'Exchange', path: '/exchange' },
     { icon: Receipt, label: 'Expenses', path: '/expenses' },
+    { icon: Truck, label: 'Weavers Ledger', path: '/weavers' },
     { icon: Users, label: 'Customers', path: '/customers' },
     { icon: BarChart3, label: 'Reports', path: '/reports' },
     { icon: Settings, label: 'Settings', path: '/settings' },

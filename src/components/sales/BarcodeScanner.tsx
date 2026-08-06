@@ -33,10 +33,13 @@ export function BarcodeScanner({ isOpen, onClose, onScan }: BarcodeScannerProps)
                         aspectRatio: 1.0,
                     };
 
+                    let hasScanned = false;
                     await instance.start(
                         { facingMode: "environment" },
                         config,
                         (decodedText) => {
+                            if (hasScanned) return;
+                            hasScanned = true;
                             onScan(decodedText);
                         },
                         undefined // ignore errors

@@ -13,6 +13,7 @@ import DashboardPage from '@/pages/Dashboard';
 import ReportsPage from '@/pages/Reports';
 import ExchangePage from '@/pages/Exchange';
 import ExpensesPage from '@/pages/Expenses';
+import WeaversPage from '@/pages/Weavers';
 import SettingsPage from '@/pages/Settings';
 import ReceiptView from '@/pages/ReceiptView';
 import { supabase } from '@/lib/supabase';
@@ -130,6 +131,7 @@ function App() {
             <Route path="reports" element={<ReportsPage />} />
             <Route path="exchange" element={<ExchangePage />} />
             <Route path="expenses" element={<ExpensesPage />} />
+            <Route path="weavers" element={<WeaversPage />} />
             <Route path="settings" element={<SettingsPage />} />
           </Route>
           <Route path="/receipt/:invoiceNumber" element={<ReceiptView />} />

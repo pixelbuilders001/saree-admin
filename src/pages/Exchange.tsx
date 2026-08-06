@@ -3,10 +3,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { inventoryService, type Saree } from '@/services/inventoryService';
 import { salesService, type SaleReportItem } from '@/services/salesService';
-import { syncService } from '@/services/syncService';
 import { playBeep } from '@/lib/audio';
 import { BarcodeScanner } from '@/components/sales/BarcodeScanner';
 import { RemoteScannerLink } from '@/components/sales/RemoteScannerLink';
+import Peer from 'peerjs';
 import {
     ArrowLeftRight,
     Search,
@@ -22,6 +22,7 @@ import {
     Check,
     Scan,
     Link,
+    RefreshCw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -59,12 +60,35 @@ export default function ExchangePage() {
     const [isScannerOpen, setIsScannerOpen] = React.useState(false);
     const [isRemoteLinkOpen, setIsRemoteLinkOpen] = React.useState(false);
 
+    function handleAddReplacement(saree: Saree) {
+        const existing = replaceItems.find(i => i.sareeId === saree.id);
+        if (existing) {
+            setReplaceItems(items => items.map(i =>
+                i.sareeId === saree.id ? { ...i, quantity: i.quantity + 1 } : i
+            ));
+        } else {
+            setReplaceItems(items => [...items, {
+                sareeId: saree.id,
+                sareeName: saree.sareeName,
+                quantity: 1,
+                sellingPrice: saree.sellingPrice
+            }]);
+        }
+        setSareeSearchTerm('');
+        toast.success(`Added ${saree.sareeName} to exchange`);
+    }
+
     const [searchParams] = useSearchParams();
     const urlSessionId = searchParams.get('sessionId');
 
-    const [sessionId] = React.useState(() => {
+    // Persist session ID
+    const [sessionId, setSessionId] = React.useState(() => {
         if (urlSessionId) return urlSessionId;
-        return Math.random().toString(36).substring(2, 10).toUpperCase();
+        const saved = localStorage.getItem('exchange_session_id');
+        if (saved) return saved;
+        const id = 'E-' + Math.random().toString(36).substring(2, 7).toUpperCase();
+        localStorage.setItem('exchange_session_id', id);
+        return id;
     });
 
     const queryClient = useQueryClient();
@@ -142,32 +166,124 @@ export default function ExchangePage() {
         }
     };
 
-    // Polling logic for remote scanner mode
+    const [remoteConnected, setRemoteConnected] = React.useState(false);
+    const [peerActive, setPeerActive] = React.useState(false);
+
+    const peerRef = React.useRef<Peer | null>(null);
+    const connRef = React.useRef<any>(null);
+
+    const sareesRef = React.useRef(sarees);
     React.useEffect(() => {
-        if (!sarees) return;
+        sareesRef.current = sarees;
+    }, [sarees]);
 
-        const interval = setInterval(async () => {
-            try {
-                const items = await syncService.getScannedItems(sessionId);
-                if (items && items.length > 0) {
-                    items.forEach(item => {
-                        const saree = sarees.find(s =>
-                            s.id.toLowerCase() === item.barcode.toLowerCase() ||
-                            (s.barcode && s.barcode.toLowerCase() === item.barcode.toLowerCase())
+    const addReplacementRef = React.useRef(handleAddReplacement);
+    React.useEffect(() => {
+        addReplacementRef.current = handleAddReplacement;
+    }, [handleAddReplacement]);
+
+    const handleRegenerateSession = React.useCallback(() => {
+        const id = 'E-' + Math.random().toString(36).substring(2, 7).toUpperCase();
+        localStorage.setItem('exchange_session_id', id);
+        setSessionId(id);
+        toast.info(`Regenerated Session ID: ${id}`);
+    }, []);
+
+    const initializePeer = React.useCallback(() => {
+        if (peerRef.current) {
+            peerRef.current.destroy();
+            peerRef.current = null;
+        }
+
+        try {
+            const peerId = `POS-${sessionId}`;
+            const peer = new Peer(peerId, {
+                host: '0.peerjs.com',
+                port: 443,
+                secure: true,
+                debug: 1
+            });
+            peerRef.current = peer;
+
+            peer.on('open', (id) => {
+                console.log('Master POS Terminal PeerJS open with ID:', id);
+                setPeerActive(true);
+            });
+
+            peer.on('connection', (conn) => {
+                console.log('Terminal received connection from:', conn.peer);
+                setRemoteConnected(true);
+                connRef.current = conn;
+
+                conn.on('data', (data) => {
+                    console.log('Terminal received barcode:', data);
+                    if (data && typeof data === 'string') {
+                        const barcode = data.trim();
+                        const foundSaree = sareesRef.current?.find(s =>
+                            s.id.toLowerCase() === barcode.toLowerCase() ||
+                            s.barcode?.toLowerCase() === barcode.toLowerCase()
                         );
-                        if (saree && saree.status === 'active') {
-                            playBeep();
-                            handleAddReplacement(saree);
-                        }
-                    });
-                }
-            } catch (err) {
-                console.error("Polling error:", err);
-            }
-        }, 2000);
 
-        return () => clearInterval(interval);
-    }, [sessionId, sarees]);
+                        if (foundSaree) {
+                            if (foundSaree.status !== 'active') {
+                                toast.error(`Saree "${foundSaree.sareeName}" is inactive.`);
+                                return;
+                            }
+                            playBeep();
+                            addReplacementRef.current(foundSaree);
+                            toast.success(`Remote scanned: ${foundSaree.sareeName}`);
+                        } else {
+                            toast.error(`No active saree found for barcode: ${barcode}`);
+                        }
+                    }
+                });
+
+                conn.on('close', () => {
+                    setRemoteConnected(false);
+                    connRef.current = null;
+                    toast.info('Remote scanner disconnected');
+                });
+
+                conn.on('error', (err) => {
+                    console.error('Terminal dynamic connection error:', err);
+                    setRemoteConnected(false);
+                    connRef.current = null;
+                });
+            });
+
+            peer.on('close', () => {
+                setPeerActive(false);
+            });
+
+            peer.on('error', (err) => {
+                console.error('Master peer error:', err);
+                if (err.type === 'unavailable-id') {
+                    console.log('Peer ID taken, auto-regenerating session...');
+                    const newId = 'E-' + Math.random().toString(36).substring(2, 7).toUpperCase();
+                    localStorage.setItem('exchange_session_id', newId);
+                    setSessionId(newId);
+                } else {
+                    setPeerActive(false);
+                }
+            });
+        } catch (error) {
+            console.error('Peer instantiation error:', error);
+            setPeerActive(false);
+        }
+    }, [sessionId]);
+
+    React.useEffect(() => {
+        initializePeer();
+
+        return () => {
+            if (peerRef.current) {
+                peerRef.current.destroy();
+                peerRef.current = null;
+            }
+            connRef.current = null;
+            setPeerActive(false);
+        };
+    }, [initializePeer]);
 
     const handleLookupSale = () => {
         if (!originalSaleId) return;
@@ -206,23 +322,6 @@ export default function ExchangePage() {
         ).slice(0, 8);
     }, [sarees, sareeSearchTerm]);
 
-    const handleAddReplacement = (saree: Saree) => {
-        const existing = replaceItems.find(i => i.sareeId === saree.id);
-        if (existing) {
-            setReplaceItems(items => items.map(i =>
-                i.sareeId === saree.id ? { ...i, quantity: i.quantity + 1 } : i
-            ));
-        } else {
-            setReplaceItems(items => [...items, {
-                sareeId: saree.id,
-                sareeName: saree.sareeName,
-                quantity: 1,
-                sellingPrice: saree.sellingPrice
-            }]);
-        }
-        setSareeSearchTerm('');
-        toast.success(`Added ${saree.sareeName} to exchange`);
-    };
 
     const handleRemoveReplacement = (index: number) => {
         setReplaceItems(items => items.filter((_, i) => i !== index));
@@ -265,9 +364,34 @@ export default function ExchangePage() {
                 <div className="flex items-center gap-2">
                     <ArrowLeftRight className="h-5 w-5 text-maroon" />
                     <div>
-                        <h1 className="text-xl font-bold font-serif text-maroon tracking-wider">SBS EXCHANGE DESK</h1>
+                        <div className="flex items-center gap-2">
+                            <h1 className="text-xl font-bold font-serif text-maroon tracking-wider">SBS EXCHANGE DESK</h1>
+                            {remoteConnected && (
+                                <span className="flex items-center gap-1 bg-green-500/10 text-green-400 border border-green-500/25 px-1.5 py-0.5 rounded-full text-[9px] font-medium leading-none animate-pulse">
+                                    <span className="h-1.5 w-1.5 rounded-full bg-green-400"></span>
+                                    Live Scanner
+                                </span>
+                            )}
+                        </div>
                         <p className="text-xs text-gray-500 font-sans">Strict 7-day customer exchange portal</p>
                     </div>
+                </div>
+                <div className="flex items-center gap-1.5 font-sans">
+                    <span
+                        className={`h-2 w-2 rounded-full ${peerActive ? (remoteConnected ? 'bg-green-500 animate-pulse' : 'bg-green-400') : 'bg-gray-300'}`}
+                        title={peerActive ? (remoteConnected ? 'Live Connection Established' : 'Host Peer Registered & Ready') : 'Offline - Signaling Reconnection Needed'}
+                    />
+                    <span className="text-[10px] font-mono bg-maroon/5 border border-maroon/10 text-maroon px-2 py-0.5 rounded flex items-center gap-1">
+                        Session: {sessionId}
+                        <button
+                            type="button"
+                            onClick={handleRegenerateSession}
+                            className="p-0.5 hover:bg-maroon/10 rounded transition-colors text-maroon/70 hover:text-maroon"
+                            title="Regenerate Session ID & Reconnect"
+                        >
+                            <RefreshCw className="h-2.5 w-2.5" />
+                        </button>
+                    </span>
                 </div>
             </div>
 
