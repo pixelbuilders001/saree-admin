@@ -31,37 +31,39 @@ export function RemoteScannerLink({ sessionId, isOpen, onClose }: RemoteScannerL
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
             <DialogContent className="sm:max-w-md border-gold/20">
-                <DialogHeader>
-                    <DialogTitle className="text-maroon flex items-center gap-2">
-                        <Smartphone className="h-5 w-5" />
+                <DialogHeader className="pb-2">
+                    <DialogTitle className="text-maroon flex items-center gap-2 text-base">
+                        <Smartphone className="h-4.5 w-4.5" />
                         Link Remote Scanner
                     </DialogTitle>
-                    <DialogDescription>
-                        Scan this QR code with your phone to start scanning sarees from your mobile camera.
+                    <DialogDescription className="text-xs">
+                        Scan QR code with your mobile camera to sync scanners.
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="flex flex-col items-center justify-center p-6 bg-white rounded-lg border border-gold/10">
-                    <div className="bg-white p-4 rounded-xl border-2 border-cream">
-                        <QRCode value={scannerUrl} size={200} />
+                <div className="flex flex-row items-center gap-5 p-4 bg-cream/10 rounded-lg border border-gold/10">
+                    <div className="bg-white p-2.5 rounded-lg border border-cream shadow-sm flex-shrink-0">
+                        <QRCode value={scannerUrl} size={120} />
                     </div>
-                    <div className="mt-6 w-full space-y-4">
-                        <div className="text-center">
-                            <p className="text-sm font-medium text-gray-500 uppercase tracking-wider">Session ID</p>
-                            <p className="text-2xl font-bold font-mono text-maroon">{sessionId}</p>
+                    <div className="flex-1 flex flex-col justify-between space-y-4">
+                        <div className="space-y-0.5">
+                            <p className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider">Session ID</p>
+                            <p className="text-xl font-bold font-mono text-maroon tracking-wide">{sessionId}</p>
                         </div>
 
-                        <div className="pt-4 flex flex-col gap-2">
+                        <div className="flex flex-col gap-1.5 w-full">
                             <Button
                                 variant="outline"
-                                className="w-full border-gold/20 gap-2 h-11"
+                                size="sm"
+                                className="w-full border-gold/20 gap-1.5 h-8.5 text-xs"
                                 onClick={handleCopy}
                             >
-                                {copied ? <Check className="h-4 w-4" /> : <LinkIcon className="h-4 w-4" />}
-                                {copied ? "Copied!" : "Copy Scanner Link"}
+                                {copied ? <Check className="h-3.5 w-3.5" /> : <LinkIcon className="h-3.5 w-3.5" />}
+                                {copied ? "Copied!" : "Copy Link"}
                             </Button>
                             <Button
-                                className="w-full bg-maroon hover:bg-maroon-dark text-gold h-11"
+                                size="sm"
+                                className="w-full bg-maroon hover:bg-maroon-dark text-gold h-8.5 text-xs"
                                 onClick={onClose}
                             >
                                 Done
