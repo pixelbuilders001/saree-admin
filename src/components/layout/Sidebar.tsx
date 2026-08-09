@@ -17,6 +17,7 @@ import {
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/store/useAuthStore';
+import { toast } from 'sonner';
 
 const navItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
@@ -24,7 +25,7 @@ const navItems = [
     { icon: ShoppingCart, label: 'Sales', path: '/sales' },
     // { icon: Truck, label: 'Purchases', path: '/purchases' },
     { icon: ArrowLeftRight, label: 'Exchange', path: '/exchange' },
-    { icon: Receipt, label: 'Expenses', path: '/expenses' },
+    // { icon: Receipt, label: 'Expenses', path: '/expenses' },
     { icon: Truck, label: 'Weavers Ledger', path: '/weavers' },
     { icon: Users, label: 'Customers', path: '/customers' },
     { icon: BarChart3, label: 'Reports', path: '/reports' },
@@ -34,6 +35,18 @@ const navItems = [
 export const Sidebar = () => {
     const [isOpen, setIsOpen] = React.useState(false);
     const { logout, user } = useAuthStore();
+
+    const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, path: string) => {
+        const isStaff = user?.role === 'staff';
+        const isAllowed = path === '/sales' || path === '/settings';
+
+        if (isStaff && !isAllowed) {
+            e.preventDefault();
+            toast.error("Not authorized! Staff can only access Sales and Settings.");
+            return;
+        }
+        setIsOpen(false);
+    };
 
     return (
         <>
@@ -70,7 +83,7 @@ export const Sidebar = () => {
                                         ? "bg-white/80 text-maroon"
                                         : "text-white/80 hover:bg-white/10 hover:text-white"
                                 )}
-                                onClick={() => setIsOpen(false)}
+                                onClick={(e) => handleNavClick(e, item.path)}
                             >
                                 <item.icon className="h-5 w-5" />
                                 {item.label}

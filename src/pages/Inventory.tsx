@@ -63,6 +63,15 @@ export default function InventoryPage() {
     const [barcodeToShow, setBarcodeToShow] = React.useState<{ value: string, label: string } | null>(null);
     const [isImportOpen, setIsImportOpen] = React.useState(false);
 
+    // Filter states
+    const [isFilterPanelOpen, setIsFilterPanelOpen] = React.useState(false);
+    const [selectedCategory, setSelectedCategory] = React.useState('All');
+    const [selectedFabric, setSelectedFabric] = React.useState('All');
+    const [stockFilter, setStockFilter] = React.useState('All'); // 'All' | 'in_stock' | 'low_stock' | 'out_of_stock'
+    const [statusFilter, setStatusFilter] = React.useState('All'); // 'All' | 'active' | 'inactive'
+    const [minPrice, setMinPrice] = React.useState('');
+    const [maxPrice, setMaxPrice] = React.useState('');
+
     const queryClient = useQueryClient();
 
     const { data: sarees, isLoading } = useQuery({
@@ -70,10 +79,10 @@ export default function InventoryPage() {
         queryFn: inventoryService.getSarees
     });
 
-    // Reset pagination when search changes
+    // Reset pagination when search or filters change
     React.useEffect(() => {
         setCurrentPage(1);
-    }, [searchTerm]);
+    }, [searchTerm, selectedCategory, selectedFabric, stockFilter, statusFilter, minPrice, maxPrice]);
 
     const createMutation = useMutation({
         mutationFn: inventoryService.createSaree,
@@ -93,11 +102,70 @@ export default function InventoryPage() {
         }
     });
 
-    const filteredSarees = Array.isArray(sarees) ? sarees.filter(saree =>
-        saree.sareeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        saree.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        saree.rackNo.toLowerCase().includes(searchTerm.toLowerCase())
-    ) : [];
+    const categories = React.useMemo(() => {
+        if (!Array.isArray(sarees)) return [];
+        return Array.from(new Set(sarees.map(s => s.category).filter(Boolean))).sort();
+    }, [sarees]);
+
+    const fabrics = React.useMemo(() => {
+        if (!Array.isArray(sarees)) return [];
+        return Array.from(new Set(sarees.map(s => s.fabric).filter(Boolean))).sort();
+    }, [sarees]);
+
+    const activeFiltersCount = React.useMemo(() => {
+        let count = 0;
+        if (selectedCategory !== 'All') count++;
+        if (selectedFabric !== 'All') count++;
+        if (stockFilter !== 'All') count++;
+        if (statusFilter !== 'All') count++;
+        if (minPrice !== '') count++;
+        if (maxPrice !== '') count++;
+        return count;
+    }, [selectedCategory, selectedFabric, stockFilter, statusFilter, minPrice, maxPrice]);
+
+    const handleResetFilters = () => {
+        setSelectedCategory('All');
+        setSelectedFabric('All');
+        setStockFilter('All');
+        setStatusFilter('All');
+        setMinPrice('');
+        setMaxPrice('');
+    };
+
+    const filteredSarees = Array.isArray(sarees) ? sarees.filter(saree => {
+        // Search term check
+        const matchesSearch = searchTerm ? (
+            saree.sareeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            saree.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            saree.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            saree.rackNo.toLowerCase().includes(searchTerm.toLowerCase())
+        ) : true;
+
+        // Category check
+        const matchesCategory = selectedCategory === 'All' || saree.category === selectedCategory;
+
+        // Fabric check
+        const matchesFabric = selectedFabric === 'All' || saree.fabric === selectedFabric;
+
+        // Stock status check
+        let matchesStock = true;
+        if (stockFilter === 'in_stock') {
+            matchesStock = saree.stock > 0;
+        } else if (stockFilter === 'low_stock') {
+            matchesStock = saree.stock > 0 && saree.stock < 5;
+        } else if (stockFilter === 'out_of_stock') {
+            matchesStock = saree.stock === 0;
+        }
+
+        // Status check
+        const matchesStatus = statusFilter === 'All' || saree.status === statusFilter;
+
+        // Price range check
+        const matchesMinPrice = minPrice === '' || saree.sellingPrice >= Number(minPrice);
+        const matchesMaxPrice = maxPrice === '' || saree.sellingPrice <= Number(maxPrice);
+
+        return matchesSearch && matchesCategory && matchesFabric && matchesStock && matchesStatus && matchesMinPrice && matchesMaxPrice;
+    }) : [];
 
     const totalPages = Math.ceil(filteredSarees.length / itemsPerPage);
     const paginatedSarees = filteredSarees.slice(
@@ -184,9 +252,16 @@ export default function InventoryPage() {
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
                     </div>
-                    <Button variant="outline" className="border-gold/30 text-maroon gap-1.5 h-8 text-xs px-2.5 font-bold hover:bg-cream/10">
+                    <Button
+                        variant="outline"
+                        className={cn(
+                            "border-gold/30 text-maroon gap-1.5 h-8 text-xs px-2.5 font-bold hover:bg-cream/10 transition-all",
+                            (isFilterPanelOpen || activeFiltersCount > 0) && "bg-maroon text-gold hover:bg-maroon-dark hover:text-gold border-maroon"
+                        )}
+                        onClick={() => setIsFilterPanelOpen(!isFilterPanelOpen)}
+                    >
                         <Filter className="h-3.5 w-3.5" />
-                        FILTER
+                        FILTER {activeFiltersCount > 0 && `(${activeFiltersCount})`}
                     </Button>
                 </div>
                 <div className="flex items-center justify-end gap-2">
@@ -198,12 +273,120 @@ export default function InventoryPage() {
                         <FileUp className="h-3.5 w-3.5" />
                         IMPORT CSV
                     </Button>
-                    <Button variant="outline" size="sm" className="border-gold/30 text-maroon gap-1.5 h-8 text-xs px-2.5 font-bold hover:bg-cream/10">
+                    {/* <Button variant="outline" size="sm" className="border-gold/30 text-maroon gap-1.5 h-8 text-xs px-2.5 font-bold hover:bg-cream/10">
                         <FileDown className="h-3.5 w-3.5" />
                         EXPORT
-                    </Button>
+                    </Button> */}
                 </div>
             </div>
+
+            {/* Expandable Advanced Filters Panel */}
+            {isFilterPanelOpen && (
+                <div className="bg-white p-3 border border-gold/15 rounded-md shadow-sm space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                        {/* Category */}
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-maroon uppercase tracking-wide">Category</label>
+                            <select
+                                value={selectedCategory}
+                                onChange={(e) => setSelectedCategory(e.target.value)}
+                                className="w-full h-8 text-xs rounded-md border border-gold/30 px-2 bg-white text-gray-800 focus:outline-none focus:ring-1 focus:ring-maroon"
+                            >
+                                <option value="All">All Categories</option>
+                                {categories.map(cat => (
+                                    <option key={cat} value={cat}>{cat}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {/* Fabric */}
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-maroon uppercase tracking-wide">Fabric</label>
+                            <select
+                                value={selectedFabric}
+                                onChange={(e) => setSelectedFabric(e.target.value)}
+                                className="w-full h-8 text-xs rounded-md border border-gold/30 px-2 bg-white text-gray-800 focus:outline-none focus:ring-1 focus:ring-maroon"
+                            >
+                                <option value="All">All Fabrics</option>
+                                {fabrics.map(fab => (
+                                    <option key={fab} value={fab}>{fab}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {/* Stock Status */}
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-maroon uppercase tracking-wide">Stock Level</label>
+                            <select
+                                value={stockFilter}
+                                onChange={(e) => setStockFilter(e.target.value)}
+                                className="w-full h-8 text-xs rounded-md border border-gold/30 px-2 bg-white text-gray-800 focus:outline-none focus:ring-1 focus:ring-maroon"
+                            >
+                                <option value="All">All Levels</option>
+                                <option value="in_stock">In Stock</option>
+                                <option value="low_stock">Low Stock (&lt; 5)</option>
+                                <option value="out_of_stock">Out of Stock</option>
+                            </select>
+                        </div>
+
+                        {/* Status */}
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-maroon uppercase tracking-wide">Status</label>
+                            <select
+                                value={statusFilter}
+                                onChange={(e) => setStatusFilter(e.target.value)}
+                                className="w-full h-8 text-xs rounded-md border border-gold/30 px-2 bg-white text-gray-800 focus:outline-none focus:ring-1 focus:ring-maroon"
+                            >
+                                <option value="All">All Statuses</option>
+                                <option value="active">Active</option>
+                                <option value="inactive">Inactive</option>
+                            </select>
+                        </div>
+
+                        {/* Min Price */}
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-maroon uppercase tracking-wide">Min Price (₹)</label>
+                            <Input
+                                type="number"
+                                placeholder="Min"
+                                value={minPrice}
+                                onChange={(e) => setMinPrice(e.target.value)}
+                                className="h-8 text-xs border-gold/30 bg-white focus-visible:ring-maroon"
+                            />
+                        </div>
+
+                        {/* Max Price */}
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-maroon uppercase tracking-wide">Max Price (₹)</label>
+                            <Input
+                                type="number"
+                                placeholder="Max"
+                                value={maxPrice}
+                                onChange={(e) => setMaxPrice(e.target.value)}
+                                className="h-8 text-xs border-gold/30 bg-white focus-visible:ring-maroon"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={handleResetFilters}
+                            className="h-7 text-xs text-gray-500 hover:text-gray-900 font-bold"
+                        >
+                            Reset Filters
+                        </Button>
+                        <Button
+                            size="sm"
+                            onClick={() => setIsFilterPanelOpen(false)}
+                            className="h-7 text-xs bg-maroon hover:bg-maroon-dark text-gold font-bold"
+                        >
+                            Close Panel
+                        </Button>
+                    </div>
+                </div>
+            )}
 
             {/* High Density Table Card */}
             <Card className="border-gold/20 shadow-md">

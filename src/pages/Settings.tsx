@@ -25,7 +25,8 @@ type PasswordFormValues = z.infer<typeof passwordSchema>;
 export default function SettingsPage() {
     const [showPassword, setShowPassword] = React.useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = React.useState(false);
-    const logout = useAuthStore(state => state.logout);
+    const { logout, user } = useAuthStore();
+    const isStaff = user?.role === 'staff';
 
     const [upiSettings, setUpiSettings] = React.useState<UpiSetting[]>([]);
     const [isLoadingUpi, setIsLoadingUpi] = React.useState(true);
@@ -51,6 +52,10 @@ export default function SettingsPage() {
 
     const handleAddUpi = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (isStaff) {
+            toast.error('Unauthorized: Staff cannot add UPI addresses');
+            return;
+        }
         if (!newUpiId || !newUpiLabel) {
             toast.error('Both UPI ID and label are required');
             return;
@@ -74,6 +79,10 @@ export default function SettingsPage() {
     };
 
     const handleToggleActive = async (setting: UpiSetting) => {
+        if (isStaff) {
+            toast.error('Unauthorized: Staff cannot modify UPI configurations');
+            return;
+        }
         try {
             await settingsService.saveUpiSetting({
                 id: setting.id,
@@ -89,6 +98,10 @@ export default function SettingsPage() {
     };
 
     const handleDeleteUpi = async (id: string, label: string) => {
+        if (isStaff) {
+            toast.error('Unauthorized: Staff cannot delete UPI configurations');
+            return;
+        }
         if (upiSettings.length <= 1) {
             toast.error('Must keep at least one UPI configuration.');
             return;
@@ -247,69 +260,84 @@ export default function SettingsPage() {
                                                     <p className="text-[11px] font-mono text-gray-500">{setting.upi_id}</p>
                                                 </div>
                                                 <div className="flex items-center gap-2">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleToggleActive(setting)}
-                                                        className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border transition-all ${setting.is_active
-                                                            ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-105'
-                                                            : 'bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-150'
-                                                            }`}
-                                                    >
-                                                        {setting.is_active ? 'Active' : 'Inactive'}
-                                                    </button>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        onClick={() => handleDeleteUpi(setting.id!, setting.label)}
-                                                        className="h-7 w-7 text-red-500 hover:text-red-700 hover:bg-red-50"
-                                                        disabled={!setting.id}
-                                                    >
-                                                        <Trash2 className="h-3.5 w-3.5" />
-                                                    </Button>
+                                                    {isStaff ? (
+                                                        <span
+                                                            className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${setting.is_active
+                                                                ? 'bg-green-50 text-green-700 border-green-200'
+                                                                : 'bg-gray-100 text-gray-600 border-gray-200'
+                                                                }`}
+                                                        >
+                                                            {setting.is_active ? 'Active' : 'Inactive'}
+                                                        </span>
+                                                    ) : (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleToggleActive(setting)}
+                                                            className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border transition-all cursor-pointer ${setting.is_active
+                                                                ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
+                                                                : 'bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200'
+                                                                }`}
+                                                        >
+                                                            {setting.is_active ? 'Active' : 'Inactive'}
+                                                        </button>
+                                                    )}
+                                                    {!isStaff && (
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            onClick={() => handleDeleteUpi(setting.id!, setting.label)}
+                                                            className="h-7 w-7 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                                            disabled={!setting.id}
+                                                        >
+                                                            <Trash2 className="h-3.5 w-3.5" />
+                                                        </Button>
+                                                    )}
                                                 </div>
                                             </div>
                                         ))
                                     )}
                                 </div>
 
-                                <form onSubmit={handleAddUpi} className="space-y-3 pt-3 border-t border-gray-100">
-                                    <h4 className="text-xs font-bold text-maroon uppercase tracking-wide">Add New UPI Address</h4>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] font-bold text-gray-600">Label (e.g. Primary - YBL)</label>
-                                            <Input
-                                                placeholder="Label"
-                                                value={newUpiLabel}
-                                                onChange={(e) => setNewUpiLabel(e.target.value)}
-                                                className="h-8 text-xs border-gold/30 focus-visible:ring-maroon text-gray-800 bg-white"
-                                            />
+                                {!isStaff && (
+                                    <form onSubmit={handleAddUpi} className="space-y-3 pt-3 border-t border-gray-100">
+                                        <h4 className="text-xs font-bold text-maroon uppercase tracking-wide">Add New UPI Address</h4>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] font-bold text-gray-600">Label (e.g. Primary - YBL)</label>
+                                                <Input
+                                                    placeholder="Label"
+                                                    value={newUpiLabel}
+                                                    onChange={(e) => setNewUpiLabel(e.target.value)}
+                                                    className="h-8 text-xs border-gold/30 focus-visible:ring-maroon text-gray-800 bg-white"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] font-bold text-gray-600">UPI Address (e.g. user@abc)</label>
+                                                <Input
+                                                    placeholder="7461824651@ybl"
+                                                    value={newUpiId}
+                                                    onChange={(e) => setNewUpiId(e.target.value)}
+                                                    className="h-8 text-xs border-gold/30 focus-visible:ring-maroon text-gray-800 bg-white"
+                                                />
+                                            </div>
                                         </div>
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] font-bold text-gray-600">UPI Address (e.g. user@abc)</label>
-                                            <Input
-                                                placeholder="7461824651@ybl"
-                                                value={newUpiId}
-                                                onChange={(e) => setNewUpiId(e.target.value)}
-                                                className="h-8 text-xs border-gold/30 focus-visible:ring-maroon text-gray-800 bg-white"
-                                            />
-                                        </div>
-                                    </div>
-                                    <Button
-                                        type="submit"
-                                        disabled={isSavingUpi}
-                                        className="h-8 w-full bg-maroon hover:bg-maroon-dark text-gold font-semibold text-xs tracking-wider gap-1.5 shadow-sm rounded-lg"
-                                    >
-                                        {isSavingUpi ? (
-                                            <>
-                                                <Loader2 className="h-3 w-3 animate-spin text-gold" /> Adding...
-                                            </>
-                                        ) : (
-                                            <>
-                                                <Plus className="h-3.5 w-3.5 text-gold" /> Add UPI Configuration
-                                            </>
-                                        )}
-                                    </Button>
-                                </form>
+                                        <Button
+                                            type="submit"
+                                            disabled={isSavingUpi}
+                                            className="h-8 w-full bg-maroon hover:bg-maroon-dark text-gold font-semibold text-xs tracking-wider gap-1.5 shadow-sm rounded-lg"
+                                        >
+                                            {isSavingUpi ? (
+                                                <>
+                                                    <Loader2 className="h-3 w-3 animate-spin text-gold" /> Adding...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Plus className="h-3.5 w-3.5 text-gold" /> Add UPI Configuration
+                                                </>
+                                            )}
+                                        </Button>
+                                    </form>
+                                )}
                             </div>
                         )}
                     </CardContent>

@@ -625,7 +625,7 @@ export default function SalesPage() {
     }
 
     return (
-        <div className="h-[calc(100vh-100px)] flex flex-col lg:flex-row gap-4 overflow-hidden -m-4 p-4 text-sm bg-cream/10">
+        <div className="h-[calc(100vh-100px)] flex flex-col lg:flex-row gap-4 overflow-hidden -m-4 lg:m-0 p-4 text-sm bg-cream/10">
             {/* Left Panel: Inventory Catalog & Filters */}
             <div className="flex-1 flex flex-col min-w-0 bg-white rounded-xl border border-gold/15 overflow-hidden shadow-sm">
 
@@ -690,7 +690,7 @@ export default function SalesPage() {
                             <span className="text-xs">Loading items catalogue...</span>
                         </div>
                     ) : filteredGridSarees.length > 0 ? (
-                        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-2.5">
                             {filteredGridSarees.map((saree, idx) => {
                                 const isHighlighted = idx === highlightedIndex && sareeSearchTerm !== '';
                                 return (
@@ -700,7 +700,7 @@ export default function SalesPage() {
                                         disabled={saree.stock <= 0}
                                         onClick={() => handleAddToCart(saree)}
                                         className={cn(
-                                            "text-left bg-white border rounded-xl p-3 flex flex-col justify-between shadow-sm hover:shadow-md transition-all active:scale-95 duration-100 relative overflow-hidden group cursor-pointer w-full text-xs h-[115px]",
+                                            "text-left bg-white border rounded-lg p-2.5 flex flex-col justify-between shadow-sm hover:shadow-md transition-all active:scale-95 duration-100 relative overflow-hidden group cursor-pointer w-full text-xs h-[95px]",
                                             isHighlighted
                                                 ? "border-maroon ring-2 ring-maroon/15 shadow-md"
                                                 : "border-gray-100 hover:border-gold/30",
@@ -708,27 +708,29 @@ export default function SalesPage() {
                                         )}
                                     >
                                         {saree.stock <= 0 ? (
-                                            <span className="absolute top-1.5 right-1.5 text-[9px] bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded-full font-semibold">
+                                            <span className="absolute top-1 right-1 text-[8px] bg-gray-200 text-gray-600 px-1 py-0.5 rounded font-semibold z-10">
                                                 Sold Out
                                             </span>
                                         ) : saree.stock < 5 ? (
-                                            <span className="absolute top-1.5 right-1.5 text-[9px] bg-red-50 text-red-600 px-1.5 py-0.5 rounded-full font-semibold animate-pulse">
+                                            <span className="absolute top-1 right-1 text-[8px] bg-red-50 text-red-600 px-1 py-0.5 rounded font-semibold animate-pulse z-10">
                                                 {saree.stock} Left
                                             </span>
                                         ) : null}
 
-                                        <div className="flex-1 min-w-0">
-                                            <div className="text-[10px] text-gray-400 font-mono mb-0.5 truncate">{saree.id}</div>
-                                            <div className="font-semibold text-gray-800 text-xs line-clamp-2 leading-tight group-hover:text-maroon transition-colors pr-8">
-                                                {saree.sareeName}
+                                        <div className="flex-1 min-w-0 w-full">
+                                            <div className="flex justify-between items-center w-full gap-1 mb-0.5">
+                                                <span className="text-[9px] text-gray-400 font-mono truncate">{saree.id}</span>
+                                                <span className="text-[9px] text-gray-500 bg-cream/30 px-1.5 py-0.5 rounded truncate max-w-[60px]" title={saree.category}>
+                                                    {saree.category}
+                                                </span>
                                             </div>
-                                            <div className="text-[10px] text-gray-500 mt-1 bg-cream/35 px-1.5 py-0.5 rounded inline-block">
-                                                {saree.category}
+                                            <div className="font-semibold text-gray-800 text-xs truncate group-hover:text-maroon transition-colors pr-8" title={saree.sareeName}>
+                                                {saree.sareeName}
                                             </div>
                                         </div>
 
-                                        <div className="mt-2 pt-2 border-t border-gray-50 flex justify-between items-center w-full">
-                                            <div className="font-bold text-maroon text-[13px]">₹{saree.sellingPrice.toLocaleString()}</div>
+                                        <div className="mt-1.5 pt-1.5 border-t border-gray-50 flex justify-between items-center w-full flex-shrink-0">
+                                            <div className="font-bold text-maroon text-xs">₹{saree.sellingPrice.toLocaleString()}</div>
                                             <div className="text-[9px] text-gray-400">Qty: {saree.stock}</div>
                                         </div>
                                     </button>
@@ -745,7 +747,7 @@ export default function SalesPage() {
             </div>
 
             {/* Right Panel: POS Sidebar (Billing & Customer details) */}
-            <div className="w-full lg:w-[410px] shrink-0 flex flex-col bg-white rounded-xl border border-gold/15 shadow-md overflow-hidden h-full">
+            <div className="w-full lg:w-[360px] xl:w-[410px] shrink-0 flex flex-col bg-white rounded-xl border border-gold/15 shadow-md overflow-hidden h-full">
 
                 {/* Header */}
                 <div className="bg-maroon px-4 py-3 flex items-center justify-between text-gold border-b border-gold/15">
