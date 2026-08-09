@@ -112,4 +112,56 @@ export const customerService = {
             totalSpent: totalSpent,
         };
     },
+
+    updateCustomer: async (id: string, customer: Partial<Omit<Customer, 'customerId' | 'totalPurchases' | 'totalSpent'>>): Promise<void> => {
+        const userEmail = useAuthStore.getState().user?.email || 'system';
+        const { error } = await supabase
+            .from('customers')
+            .update({
+                name: customer.name,
+                mobile: customer.mobile,
+                address: customer.address,
+                city: customer.city,
+                updated_by: userEmail,
+            })
+            .eq('id', id);
+
+        if (error) throw error;
+    },
+
+    deleteCustomer: async (id: string): Promise<void> => {
+        const { error } = await supabase
+            .from('customers')
+            .delete()
+            .eq('id', id);
+
+        if (error) throw error;
+    },
+
+    getCustomerInvoices: async (customerId: string): Promise<any[]> => {
+        const { data, error } = await supabase
+            .from('sales')
+            .select(`
+                id,
+                invoice_number,
+                total_amount,
+                profit,
+                created_at,
+                sale_items (
+                    saree_id,
+                    quantity,
+                    selling_price,
+                    inventory (
+                        saree_name
+                    )
+                )
+            `)
+            .eq('customer_id', customerId)
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        return data || [];
+    }
 };
+
+

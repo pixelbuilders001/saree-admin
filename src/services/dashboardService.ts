@@ -6,12 +6,26 @@ export interface DashboardStats {
     grossProfit: number;
     totalExpenses: number;
     netProfit: number;
+    weaverOutstanding: number;
+    storeCreditOutstanding: number;
+
+    totalUniqueSarees: number;
+    totalStockQty: number;
+    inventoryValuationCost: number;
+    inventoryValuationRetail: number;
+    lowStockCount: number;
+
     totalSales: number;
     totalCustomers: number;
-    lowStockCount: number;
+    totalWeavers: number;
+
     monthlySales: { month: string; sales: number }[];
-    categoryDistribution: { category: string; count: number }[];
-    recentActivities: { id: string; type: string; description: string; date: string }[];
+    categoryDistribution: { category: string; count: number; stock: number }[];
+    fabricDistribution: { fabric: string; count: number; stock: number }[];
+    
+    recentActivities: { id: string; type: string; description: string; date: string; amount: number }[];
+    recentExpenses: { id: string; category: string; description: string; amount: number; date: string }[];
+    recentWeaverPayments: { id: string; weaverName: string; amount: number; method: string; date: string }[];
 }
 
 export const dashboardService = {
@@ -25,7 +39,7 @@ export const dashboardService = {
         // 2. Fetch all sarees (inventory info)
         const { data: sarees, error: sareesError } = await supabase
             .from('inventory')
-            .select('category, stock');
+            .select('category, fabric, stock, purchase_price, selling_price');
         if (sareesError) throw sareesError;
 
         // 3. Fetch all expenses
@@ -54,23 +68,104 @@ export const dashboardService = {
             .order('created_at', { ascending: false });
         if (salesError) throw salesError;
 
+        // 5. Fetch Weavers, weaver payments and purchases in parallel
+        const { data: weaversData, error: weaversError } = await supabase
+            .from('weavers')
+            .select('id, name');
+        if (weaversError) throw weaversError;
+
+        const { data: paymentsData, error: paymentsError } = await supabase
+            .from('weaver_payments')
+            .select('id, weaver_id, amount, payment_method, created_at')
+            .order('created_at', { ascending: false });
+        if (paymentsError) throw paymentsError;
+
+        const { data: purchasesData, error: purchasesError } = await supabase
+            .from('purchases')
+            .select('purchase_price, quantity, supplier');
+        if (purchasesError) throw purchasesError;
+
+        // 6. Fetch active store credits
+        const { data: storeCredits, error: creditsError } = await supabase
+            .from('store_credits')
+            .select('remaining_amount')
+            .eq('status', 'active');
+        if (creditsError) throw creditsError;
+
+        // 7. Fetch recent 5 expenses
+        const { data: recentExpensesData, error: recentExpensesError } = await supabase
+            .from('expenses')
+            .select('id, category, amount, description, created_at')
+            .order('created_at', { ascending: false })
+            .limit(5);
+        if (recentExpensesError) throw recentExpensesError;
+
         // Calculate Revenue and Profit
         const totalRevenue = (sales || []).reduce((sum, s) => sum + Number(s.total_amount || 0), 0);
         const grossProfit = (sales || []).reduce((sum, s) => sum + Number(s.profit || 0), 0);
         const totalExpenses = (expenses || []).reduce((sum, e) => sum + Number(e.amount || 0), 0);
 
-        // Low stock count (sarees with stock < 5)
+        // Calculate Weaver Outstanding
+        const weavers = weaversData || [];
+        const payments = paymentsData || [];
+        const purchases = purchasesData || [];
+
+        let weaverOutstanding = 0;
+        weavers.forEach((weaver: any) => {
+            const nameLower = (weaver.name || '').trim().toLowerCase();
+            const weaverPurchases = purchases.filter((p: any) => 
+                p.supplier && p.supplier.trim().toLowerCase() === nameLower
+            );
+            const totalGoods = weaverPurchases.reduce(
+                (sum: number, p: any) => sum + (Number(p.purchase_price || 0) * Number(p.quantity || 0)),
+                0
+            );
+            const weaverPayments = payments.filter((p: any) => p.weaver_id === weaver.id);
+            const totalPaid = weaverPayments.reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
+            
+            weaverOutstanding += Math.max(0, totalGoods - totalPaid);
+        });
+
+        // Store credit outstanding
+        const storeCreditOutstanding = (storeCredits || []).reduce((sum, c) => sum + Number(c.remaining_amount || 0), 0);
+
+        // Inventory values
+        const totalUniqueSarees = (sarees || []).length;
+        const totalStockQty = (sarees || []).reduce((sum, s) => sum + Number(s.stock || 0), 0);
+        const inventoryValuationCost = (sarees || []).reduce((sum, s) => sum + (Number(s.purchase_price || 0) * Number(s.stock || 0)), 0);
+        const inventoryValuationRetail = (sarees || []).reduce((sum, s) => sum + (Number(s.selling_price || 0) * Number(s.stock || 0)), 0);
         const lowStockCount = (sarees || []).filter(s => Number(s.stock || 0) < 5).length;
 
         // Category distribution
-        const catMap: Record<string, number> = {};
+        const catMap: Record<string, { count: number; stock: number }> = {};
         (sarees || []).forEach(s => {
             const cat = s.category || 'Uncategorized';
-            catMap[cat] = (catMap[cat] || 0) + 1;
+            if (!catMap[cat]) {
+                catMap[cat] = { count: 0, stock: 0 };
+            }
+            catMap[cat].count += 1;
+            catMap[cat].stock += Number(s.stock || 0);
         });
         const categoryDistribution = Object.keys(catMap).map(category => ({
             category,
-            count: catMap[category]
+            count: catMap[category].count,
+            stock: catMap[category].stock
+        }));
+
+        // Fabric distribution
+        const fabMap: Record<string, { count: number; stock: number }> = {};
+        (sarees || []).forEach(s => {
+            const fab = s.fabric || 'Unspecified';
+            if (!fabMap[fab]) {
+                fabMap[fab] = { count: 0, stock: 0 };
+            }
+            fabMap[fab].count += 1;
+            fabMap[fab].stock += Number(s.stock || 0);
+        });
+        const fabricDistribution = Object.keys(fabMap).map(fabric => ({
+            fabric,
+            count: fabMap[fabric].count,
+            stock: fabMap[fabric].stock
         }));
 
         // Monthly sales (for the last 6 months)
@@ -95,6 +190,7 @@ export const dashboardService = {
             sales: monthlyMap[month]
         }));
 
+        // Recent sales activities
         const recentActivities = (sales || []).slice(0, 5).map(sale => {
             const itemCount = (sale.sale_items || []).reduce((sum: number, item: any) => {
                 const qty = Number(item.quantity || 0);
@@ -113,21 +209,53 @@ export const dashboardService = {
                 id: friendlySaleId,
                 type: 'Sale',
                 description,
-                date: sale.created_at
+                date: sale.created_at,
+                amount: Number(sale.total_amount || 0)
             };
         });
+
+        // Recent weaver payments
+        const recentWeaverPayments = payments.slice(0, 5).map((pay: any) => {
+            const weaver = weavers.find((w: any) => w.id === pay.weaver_id);
+            return {
+                id: pay.id || 'N/A',
+                weaverName: weaver ? weaver.name : 'Unknown Weaver',
+                amount: Number(pay.amount || 0),
+                method: pay.payment_method || 'Cash',
+                date: pay.created_at
+            };
+        });
+
+        // Recent expenses
+        const recentExpenses = (recentExpensesData || []).map((x: any) => ({
+            id: x.id,
+            category: x.category || 'Other',
+            description: x.description || '',
+            amount: Number(x.amount || 0),
+            date: x.created_at
+        }));
 
         return {
             totalRevenue,
             grossProfit,
             totalExpenses,
             netProfit: grossProfit - totalExpenses,
+            weaverOutstanding,
+            storeCreditOutstanding,
+            totalUniqueSarees,
+            totalStockQty,
+            inventoryValuationCost,
+            inventoryValuationRetail,
+            lowStockCount,
             totalSales: (sales || []).length,
             totalCustomers: totalCustomers || 0,
-            lowStockCount,
+            totalWeavers: weavers.length,
             monthlySales,
             categoryDistribution,
-            recentActivities
+            fabricDistribution,
+            recentActivities,
+            recentExpenses,
+            recentWeaverPayments
         };
     }
 };
