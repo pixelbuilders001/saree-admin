@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
 import Papa from 'papaparse';
+import * as XLSX from 'xlsx';
 import {
     Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
@@ -16,20 +17,29 @@ const COL_MAP: Record<string, string> = {
     'fabric': 'fabric',
     'color': 'color',
     'purchase_price': 'purchasePrice', 'purchase price': 'purchasePrice', 'cost': 'purchasePrice',
-    'selling_price': 'sellingPrice', 'selling price': 'sellingPrice', 'price': 'sellingPrice', 'mrp': 'sellingPrice',
+    'selling_price': 'sellingPrice', 'selling price': 'sellingPrice', 'price': 'sellingPrice',
     'stock': 'stock', 'qty': 'stock', 'quantity': 'stock',
     'rack_no': 'rackNo', 'rack no': 'rackNo', 'rack': 'rackNo',
     'barcode': 'barcode',
     'status': 'status',
+    'sku': 'sku', 'sku_code': 'sku', 'sku code': 'sku',
+    'category_id': 'categoryId', 'category id': 'categoryId',
+    'description': 'description',
+    'mrp': 'mrp', 'maximum_retail_price': 'mrp', 'maximum retail price': 'mrp',
+    'discount_amount': 'discountAmount', 'discount amount': 'discountAmount', 'discount': 'discountAmount',
+    'discount_percentage': 'discountPercentage', 'discount percentage': 'discountPercentage', 'discount %': 'discountPercentage'
 };
 
 const REQUIRED = ['sareeName', 'category', 'fabric', 'color', 'purchasePrice', 'sellingPrice'];
-const TEMPLATE_HEADERS = 'saree_name,category,fabric,color,purchase_price,selling_price,stock,rack_no,barcode,status';
-const TEMPLATE_EXAMPLE = 'Kanjivaram Red Silk,Kanjivaram,Silk,Red,4500,8000,5,A-12,,active\nBanarasi Gold Zari,Banarasi,Silk,Gold,5000,9500,3,B-04,,active';
+const TEMPLATE_HEADERS = 'saree_name,category,fabric,color,purchase_price,selling_price,stock,rack_no,barcode,status,sku,category_id,description,mrp,discount_amount,discount_percentage';
+const TEMPLATE_EXAMPLE = 'Kanjivaram Red Silk,Kanjivaram,Silk,Red,4500,8000,5,A-12,,active,SKU-KAN-001,cat_101,Beautiful handwoven Kanjivaram silk saree,10000,2000,20\nBanarasi Gold Zari,Banarasi,Silk,Gold,5000,9500,3,B-04,,active,SKU-BAN-002,cat_102,Stunning gold zari Banarasi silk,12000,2500,20.83';
 
 interface ParsedRow {
     sareeName: string;
     category: string;
+    categoryId?: string;
+    sku?: string;
+    description?: string;
     fabric: string;
     color: string;
     purchasePrice: number;
@@ -38,6 +48,9 @@ interface ParsedRow {
     rackNo: string;
     barcode: string;
     status: string;
+    mrp: number;
+    discountAmount: number;
+    discountPercentage: number;
 }
 
 interface CsvImportModalProps {
@@ -75,49 +88,91 @@ export function CsvImportModal({ isOpen, onClose }: CsvImportModalProps) {
         URL.revokeObjectURL(url);
     };
 
+    const processRawData = (data: Record<string, any>[], initialErrors: string[]) => {
+        const errs: string[] = [...initialErrors];
+        const parsed: ParsedRow[] = [];
+
+        data.forEach((rawRow, idx) => {
+            // Normalize headers
+            const row: Record<string, string> = {};
+            Object.entries(rawRow).forEach(([k, v]) => {
+                const mapped = COL_MAP[k.trim().toLowerCase()];
+                if (mapped) row[mapped] = v !== undefined && v !== null ? String(v) : '';
+            });
+
+            // Check required
+            const missing = REQUIRED.filter(f => !row[f]?.trim());
+            if (missing.length) {
+                errs.push(`Row ${idx + 2}: Missing ${missing.join(', ')}`);
+                return;
+            }
+
+            parsed.push({
+                sareeName: row.sareeName?.trim() || '',
+                category: row.category?.trim() || '',
+                categoryId: row.categoryId?.trim() || '',
+                sku: row.sku?.trim() || '',
+                description: row.description?.trim() || '',
+                fabric: row.fabric?.trim() || '',
+                color: row.color?.trim() || '',
+                purchasePrice: parseFloat(row.purchasePrice) || 0,
+                sellingPrice: parseFloat(row.sellingPrice) || 0,
+                stock: parseInt(row.stock) || 0,
+                rackNo: row.rackNo?.trim() || '',
+                barcode: row.barcode?.trim() || '',
+                status: row.status?.trim() || 'active',
+                mrp: parseFloat(row.mrp) || parseFloat(row.sellingPrice) || 0,
+                discountAmount: parseFloat(row.discountAmount) || 0,
+                discountPercentage: parseFloat(row.discountPercentage) || 0,
+            });
+        });
+
+        setParseErrors(errs);
+        setRows(parsed);
+        if (parsed.length > 0) setStep('preview');
+        else toast.error('No valid rows found in file. Check your file format.');
+    };
+
     const handleFile = (file: File) => {
-        Papa.parse(file, {
-            header: true,
-            skipEmptyLines: true,
-            complete: ({ data, errors }) => {
-                const errs: string[] = errors.map(e => `Parse error row ${e.row}: ${e.message}`);
-                const parsed: ParsedRow[] = [];
+        const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls') || 
+                        file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+                        file.type === 'application/vnd.ms-excel';
 
-                (data as Record<string, string>[]).forEach((rawRow, idx) => {
-                    // Normalize headers
-                    const row: Record<string, string> = {};
-                    Object.entries(rawRow).forEach(([k, v]) => {
-                        const mapped = COL_MAP[k.trim().toLowerCase()];
-                        if (mapped) row[mapped] = v;
-                    });
-
-                    // Check required
-                    const missing = REQUIRED.filter(f => !row[f]?.trim());
-                    if (missing.length) {
-                        errs.push(`Row ${idx + 2}: Missing ${missing.join(', ')}`);
+        if (isExcel) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = e.target?.result;
+                    if (!data) {
+                        toast.error('Could not read Excel file.');
+                        return;
+                    }
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    
+                    const rowsData = XLSX.utils.sheet_to_json<Record<string, any>>(worksheet, { defval: '' });
+                    if (rowsData.length === 0) {
+                        toast.error('Excel sheet is empty.');
                         return;
                     }
 
-                    parsed.push({
-                        sareeName: row.sareeName?.trim() || '',
-                        category: row.category?.trim() || '',
-                        fabric: row.fabric?.trim() || '',
-                        color: row.color?.trim() || '',
-                        purchasePrice: parseFloat(row.purchasePrice) || 0,
-                        sellingPrice: parseFloat(row.sellingPrice) || 0,
-                        stock: parseInt(row.stock) || 0,
-                        rackNo: row.rackNo?.trim() || '',
-                        barcode: row.barcode?.trim() || '',
-                        status: row.status?.trim() || 'active',
-                    });
-                });
-
-                setParseErrors(errs);
-                setRows(parsed);
-                if (parsed.length > 0) setStep('preview');
-                else toast.error('No valid rows found in CSV. Check your file format.');
-            },
-        });
+                    processRawData(rowsData, []);
+                } catch (error: any) {
+                    toast.error('Error parsing Excel file: ' + (error?.message || 'Unknown error'));
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        } else {
+            Papa.parse(file, {
+                header: true,
+                skipEmptyLines: true,
+                complete: ({ data, errors }) => {
+                    const errs: string[] = errors.map(e => `Parse error row ${e.row}: ${e.message}`);
+                    processRawData(data as Record<string, string>[], errs);
+                },
+            });
+        }
     };
 
     const handleImport = async () => {
@@ -143,7 +198,7 @@ export function CsvImportModal({ isOpen, onClose }: CsvImportModalProps) {
                 <DialogHeader className="border-b border-gold/15 px-5 py-3 shrink-0">
                     <DialogTitle className="text-base font-bold font-serif text-maroon flex items-center gap-2">
                         <Upload className="h-4 w-4" />
-                        BULK IMPORT — CSV
+                        BULK IMPORT — CSV / EXCEL
                     </DialogTitle>
                 </DialogHeader>
 
@@ -166,12 +221,12 @@ export function CsvImportModal({ isOpen, onClose }: CsvImportModalProps) {
                             </div>
                             <div>
                                 <p className="font-semibold text-sm text-maroon">Click to upload or drag & drop</p>
-                                <p className="text-xs text-gray-400 mt-1">CSV files only · Max 5MB</p>
+                                <p className="text-xs text-gray-400 mt-1">CSV or XLSX/XLS files · Max 5MB</p>
                             </div>
                             <input
                                 ref={fileInputRef}
                                 type="file"
-                                accept=".csv"
+                                accept=".csv, .xlsx, .xls"
                                 className="hidden"
                                 onChange={(e) => { if (e.target.files?.[0]) handleFile(e.target.files[0]); }}
                             />

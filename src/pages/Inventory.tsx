@@ -48,6 +48,7 @@ import { SareeForm } from '@/components/inventory/SareeForm';
 import { BarcodeGenerator } from '@/components/inventory/BarcodeGenerator';
 import { CsvImportModal } from '@/components/inventory/CsvImportModal';
 import { toast } from 'sonner';
+import { supabase } from '@/lib/supabase';
 
 export default function InventoryPage() {
     const [searchTerm, setSearchTerm] = React.useState('');
@@ -62,6 +63,70 @@ export default function InventoryPage() {
     const [passwordInput, setPasswordInput] = React.useState('');
     const [barcodeToShow, setBarcodeToShow] = React.useState<{ value: string, label: string } | null>(null);
     const [isImportOpen, setIsImportOpen] = React.useState(false);
+    const [galleryState, setGalleryState] = React.useState<{ images: { imageUrl: string }[], title: string } | null>(null);
+    const [galleryActiveIndex, setGalleryActiveIndex] = React.useState<number>(0);
+    const [isSeeding, setIsSeeding] = React.useState(false);
+
+    const handleSeedImages = async () => {
+        if (!sarees || sarees.length === 0) {
+            toast.error("No sarees found to seed images for");
+            return;
+        }
+
+        setIsSeeding(true);
+        const toastId = toast.loading("Checking inventory database and seeding missing images...");
+
+        try {
+            const mockSareeImages = [
+                "https://images.unsplash.com/photo-1610030469983-98e550d6193c?auto=format&fit=crop&w=600&q=80",
+                "https://images.unsplash.com/photo-1617627143750-d86bc21e42bb?auto=format&fit=crop&w=600&q=80",
+                "https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?auto=format&fit=crop&w=600&q=80",
+                "https://images.unsplash.com/photo-1609357605129-26f69add5d6e?auto=format&fit=crop&w=600&q=80",
+                "https://images.unsplash.com/photo-1590156221120-7c48d4ef7e06?auto=format&fit=crop&w=600&q=80",
+                "https://images.unsplash.com/photo-1621184455862-c163dfb30e0f?auto=format&fit=crop&w=600&q=80"
+            ];
+
+            let seededCount = 0;
+
+            for (const saree of sarees) {
+                const currentImagesCount = saree.images?.length || 0;
+                if (currentImagesCount < 2) {
+                    const needed = 2 - currentImagesCount;
+                    const inserts = [];
+
+                    for (let i = 0; i < needed; i++) {
+                        const randomUrl = mockSareeImages[Math.floor(Math.random() * mockSareeImages.length)];
+                        inserts.push({
+                            inventory_id: saree.id,
+                            image_url: randomUrl,
+                            is_primary: currentImagesCount === 0 && i === 0,
+                            sort_order: currentImagesCount + i
+                        });
+                    }
+
+                    if (inserts.length > 0) {
+                        const { error } = await supabase
+                            .from('inventory_images')
+                            .insert(inserts);
+
+                        if (error) {
+                            console.error(`Failed to insert images for saree ${saree.id}:`, error);
+                            throw error;
+                        }
+                        seededCount++;
+                    }
+                }
+            }
+
+            await queryClient.invalidateQueries({ queryKey: ['sarees'] });
+            toast.success(`Seeded missing images for ${seededCount} sarees!`, { id: toastId });
+        } catch (err: any) {
+            console.error(err);
+            toast.error(`Error seeding images: ${err.message || err}`, { id: toastId });
+        } finally {
+            setIsSeeding(false);
+        }
+    };
 
     // Filter states
     const [isFilterPanelOpen, setIsFilterPanelOpen] = React.useState(false);
@@ -85,7 +150,8 @@ export default function InventoryPage() {
     }, [searchTerm, selectedCategory, selectedFabric, stockFilter, statusFilter, minPrice, maxPrice]);
 
     const createMutation = useMutation({
-        mutationFn: inventoryService.createSaree,
+        mutationFn: ({ saree, images }: { saree: any; images: any[] }) => 
+            inventoryService.createSaree(saree, images),
         onSuccess: (data) => {
             queryClient.invalidateQueries({ queryKey: ['sarees'] });
             setIsFormOpen(false);
@@ -94,7 +160,20 @@ export default function InventoryPage() {
     });
 
     const updateMutation = useMutation({
-        mutationFn: ({ id, data }: { id: string, data: any }) => inventoryService.updateSaree(id, data),
+        mutationFn: ({ 
+            id, 
+            data, 
+            imagesToUpload, 
+            imagesToDelete, 
+            primaryImageId 
+        }: { 
+            id: string; 
+            data: any; 
+            imagesToUpload?: any[]; 
+            imagesToDelete?: any[]; 
+            primaryImageId?: string 
+        }) => 
+            inventoryService.updateSaree(id, data, imagesToUpload, imagesToDelete, primaryImageId),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['sarees'] });
             setIsFormOpen(false);
@@ -185,11 +264,32 @@ export default function InventoryPage() {
         }
     };
 
-    const handleFormSubmit = async (values: any) => {
+    const handleFormSubmit = async (values: any, imageState: any[]) => {
+        const imagesToUpload = imageState.filter(img => img.isNew && !img.toDelete && img.file).map(img => ({
+            file: img.file!,
+            isPrimary: img.isPrimary
+        }));
+        
+        const imagesToDelete = imageState.filter(img => !img.isNew && img.toDelete).map(img => ({
+            id: img.id!,
+            storageKey: img.storageKey
+        }));
+
+        const primaryImageId = imageState.find(img => !img.isNew && !img.toDelete && img.isPrimary)?.id;
+
         if (editingSaree) {
-            await updateMutation.mutateAsync({ id: editingSaree.id, data: values });
+            await updateMutation.mutateAsync({ 
+                id: editingSaree.id, 
+                data: values, 
+                imagesToUpload, 
+                imagesToDelete,
+                primaryImageId
+            });
         } else {
-            await createMutation.mutateAsync(values);
+            await createMutation.mutateAsync({
+                saree: values,
+                images: imagesToUpload
+            });
         }
     };
 
@@ -267,11 +367,20 @@ export default function InventoryPage() {
                 <div className="flex items-center justify-end gap-2">
                     <Button
                         variant="outline" size="sm"
+                        className="border-gold/30 text-maroon gap-1.5 h-8 text-xs px-2.5 font-bold hover:bg-cream/10 bg-cream/5"
+                        onClick={handleSeedImages}
+                        disabled={isSeeding}
+                    >
+                        {isSeeding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                        SEED IMAGES
+                    </Button>
+                    <Button
+                        variant="outline" size="sm"
                         className="border-gold/30 text-maroon gap-1.5 h-8 text-xs px-2.5 font-bold hover:bg-cream/10"
                         onClick={() => setIsImportOpen(true)}
                     >
                         <FileUp className="h-3.5 w-3.5" />
-                        IMPORT CSV
+                        IMPORT CSV / EXCEL
                     </Button>
                     {/* <Button variant="outline" size="sm" className="border-gold/30 text-maroon gap-1.5 h-8 text-xs px-2.5 font-bold hover:bg-cream/10">
                         <FileDown className="h-3.5 w-3.5" />
@@ -394,41 +503,90 @@ export default function InventoryPage() {
                     <Table>
                         <TableHeader className="bg-cream/20 border-b border-gold/10">
                             <TableRow className="hover:bg-transparent">
-                                <TableHead className="h-8 text-[10px] font-bold text-maroon py-1 px-3">Id</TableHead>
-                                <TableHead className="h-8 text-[10px] font-bold text-maroon py-1">Name</TableHead>
-                                <TableHead className="h-8 text-[10px] font-bold text-maroon py-1">Category</TableHead>
-                                <TableHead className="h-8 text-[10px] font-bold text-maroon py-1">Fabric</TableHead>
-                                <TableHead className="h-8 text-[10px] font-bold text-maroon py-1 text-right">Purchase (₹)</TableHead>
-                                <TableHead className="h-8 text-[10px] font-bold text-maroon py-1 text-right">Price (₹)</TableHead>
-                                <TableHead className="h-8 text-[10px] font-bold text-maroon py-1 text-center">Stock</TableHead>
-                                {/* <TableHead className="h-8 text-[10px] font-bold text-maroon py-1">Rack</TableHead> */}
-                                <TableHead className="h-8 text-[10px] font-bold text-maroon py-1">Status</TableHead>
-                                <TableHead className="h-8 text-[10px] font-bold text-maroon py-1">Created By</TableHead>
-                                <TableHead className="h-8 text-[10px] font-bold text-maroon py-1">Updated By</TableHead>
-                                <TableHead className="h-8 text-[10px] font-bold text-maroon py-1 text-right px-3">Actions</TableHead>
+                                <TableHead className="sticky left-0 bg-[#FAF9F3] z-20 h-8 text-[10px] font-bold text-maroon py-1 px-3 border-r border-gold/10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] w-[70px] min-w-[70px]">Id</TableHead>
+                                <TableHead className="sticky left-[70px] bg-[#FAF9F3] z-20 h-8 text-[10px] font-bold text-maroon py-1 px-3 border-r border-gold/10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] min-w-[200px] max-w-[200px]">Name</TableHead>
+                                <TableHead className="h-8 text-[10px] font-bold text-maroon py-1 whitespace-nowrap">Category</TableHead>
+                                <TableHead className="h-8 text-[10px] font-bold text-maroon py-1 whitespace-nowrap">Fabric</TableHead>
+                                <TableHead className="h-8 text-[10px] font-bold text-maroon py-1 whitespace-nowrap">Color</TableHead>
+                                <TableHead className="h-8 text-[10px] font-bold text-maroon py-1 text-right whitespace-nowrap">MRP (₹)</TableHead>
+                                <TableHead className="h-8 text-[10px] font-bold text-maroon py-1 text-right whitespace-nowrap">Discount</TableHead>
+                                <TableHead className="h-8 text-[10px] font-bold text-maroon py-1 text-right whitespace-nowrap">Purchase (₹)</TableHead>
+                                <TableHead className="h-8 text-[10px] font-bold text-maroon py-1 text-right whitespace-nowrap">Selling (₹)</TableHead>
+                                <TableHead className="h-8 text-[10px] font-bold text-maroon py-1 text-center whitespace-nowrap">Stock</TableHead>
+                                <TableHead className="h-8 text-[10px] font-bold text-maroon py-1 whitespace-nowrap">Added Date</TableHead>
+                                <TableHead className="h-8 text-[10px] font-bold text-maroon py-1 whitespace-nowrap">Status</TableHead>
+                                <TableHead className="h-8 text-[10px] font-bold text-maroon py-1 whitespace-nowrap">Created By</TableHead>
+                                <TableHead className="h-8 text-[10px] font-bold text-maroon py-1 whitespace-nowrap">Updated By</TableHead>
+                                <TableHead className="sticky right-0 bg-[#FAF9F3] z-20 h-8 text-[10px] font-bold text-maroon py-1 text-right px-3 border-l border-gold/10 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)] w-[60px] min-w-[60px]">Actions</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {isLoading ? (
                                 <TableRow>
-                                    <TableCell colSpan={12} className="h-24 text-center text-maroon/50 text-xs italic">
+                                    <TableCell colSpan={15} className="h-24 text-center text-maroon/50 text-xs italic">
                                         <Loader2 className="h-5 w-5 animate-spin mx-auto mb-1" />
                                         Loading inventory database...
                                     </TableCell>
                                 </TableRow>
                             ) : paginatedSarees?.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={12} className="h-20 text-center text-xs text-gray-500 italic">No sarees match filter criteria</TableCell>
+                                    <TableCell colSpan={15} className="h-20 text-center text-xs text-gray-500 italic">No sarees match filter criteria</TableCell>
                                 </TableRow>
                             ) : (
                                 paginatedSarees?.map((saree) => (
-                                    <TableRow key={saree.id} className="hover:bg-cream/5 border-b border-gold/5 h-8">
-                                        <TableCell className="py-1 px-3 text-xs font-mono font-bold text-maroon">{saree.id}</TableCell>
-                                        <TableCell className="py-1 text-xs font-semibold text-gray-805">{saree.sareeName}</TableCell>
-                                        <TableCell className="py-1 text-xs text-gray-600">{saree.category}</TableCell>
-                                        <TableCell className="py-1 text-xs text-gray-500">{saree.fabric}</TableCell>
-                                        <TableCell className="py-1 text-xs text-right">
-                                            <div className="flex items-center justify-end gap-1 group">
+                                    <TableRow key={saree.id} className="hover:bg-cream/5 border-b border-gold/5 h-12 group">
+                                        <TableCell className="sticky left-0 bg-white group-hover:bg-[#FAF9F3] transition-colors z-10 py-1 px-3 text-xs font-mono font-bold text-maroon border-r border-gold/10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] w-[70px] min-w-[70px]">{saree.id}</TableCell>
+                                        <TableCell className="sticky left-[70px] bg-white group-hover:bg-[#FAF9F3] transition-colors z-10 py-1 px-3 text-xs font-semibold text-gray-800 border-r border-gold/10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] min-w-[200px] max-w-[200px]" title={saree.description || undefined}>
+                                            <div className="flex items-center gap-2">
+                                                {saree.images && saree.images.length > 0 ? (
+                                                    <img 
+                                                        src={saree.images.find(img => img.isPrimary)?.imageUrl || saree.images[0].imageUrl} 
+                                                        alt={saree.sareeName} 
+                                                        className="h-8 w-8 object-cover rounded border border-gold/20 cursor-pointer hover:scale-105 transition-transform"
+                                                        onClick={() => {
+                                                            setGalleryState({ images: saree.images || [], title: saree.sareeName });
+                                                            const primaryIdx = saree.images?.findIndex(img => img.isPrimary) ?? -1;
+                                                            setGalleryActiveIndex(primaryIdx !== -1 ? primaryIdx : 0);
+                                                        }}
+                                                    />
+                                                ) : (
+                                                    <div className="h-8 w-8 bg-cream/35 border border-gold/15 rounded flex items-center justify-center text-[8px] text-gray-400 font-bold flex-shrink-0 uppercase">
+                                                        No Img
+                                                    </div>
+                                                )}
+                                                <div className="min-w-0 flex-1">
+                                                    <span className="font-semibold block truncate max-w-[130px]">{saree.sareeName}</span>
+                                                    {saree.sku && (
+                                                        <span className="block text-[9px] text-gray-400 font-mono tracking-wider truncate max-w-[130px]" title={`SKU: ${saree.sku}`}>
+                                                            {saree.sku}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell className="py-1 text-xs text-gray-600 whitespace-nowrap">
+                                            <span className="font-medium block">{saree.category}</span>
+                                            {saree.categoryId && (
+                                                <span className="block text-[9px] text-gray-400 font-mono truncate max-w-[100px]" title={`Cat ID: ${saree.categoryId}`}>
+                                                    ID: {saree.categoryId}
+                                                </span>
+                                            )}
+                                        </TableCell>
+                                        <TableCell className="py-1 text-xs text-gray-500 whitespace-nowrap">{saree.fabric}</TableCell>
+                                        <TableCell className="py-1 text-xs text-gray-500 whitespace-nowrap">{saree.color || '—'}</TableCell>
+                                        <TableCell className="py-1 text-xs text-right font-mono text-gray-500 whitespace-nowrap">₹{(saree.mrp || 0).toLocaleString()}</TableCell>
+                                        <TableCell className="py-1 text-xs text-right text-gray-500 whitespace-nowrap">
+                                            {saree.discountAmount ? (
+                                                <div>
+                                                    <span className="font-semibold text-red-600 font-mono">₹{saree.discountAmount.toLocaleString()}</span>
+                                                    {(saree.discountPercentage || 0) > 0 && (
+                                                        <span className="text-[9px] text-gray-400 block font-mono">({saree.discountPercentage}%)</span>
+                                                    )}
+                                                </div>
+                                            ) : '—'}
+                                        </TableCell>
+                                        <TableCell className="py-1 text-xs text-right whitespace-nowrap">
+                                            <div className="flex items-center justify-end gap-1">
                                                 <span className="font-semibold text-gray-500 font-mono text-[11px]">
                                                     {visiblePrices.has(saree.id)
                                                         ? `₹${saree.purchasePrice.toLocaleString()}`
@@ -448,8 +606,8 @@ export default function InventoryPage() {
                                                 </Button>
                                             </div>
                                         </TableCell>
-                                        <TableCell className="py-1 text-xs text-right font-bold text-maroon font-mono">₹{saree.sellingPrice.toLocaleString()}</TableCell>
-                                        <TableCell className="py-1 text-xs text-center">
+                                        <TableCell className="py-1 text-xs text-right font-bold text-maroon font-mono whitespace-nowrap">₹{saree.sellingPrice.toLocaleString()}</TableCell>
+                                        <TableCell className="py-1 text-xs text-center whitespace-nowrap">
                                             <span className={cn(
                                                 "font-bold px-1.5 py-0.5 rounded text-[10px] border",
                                                 saree.stock < 5
@@ -459,21 +617,27 @@ export default function InventoryPage() {
                                                 {saree.stock}
                                             </span>
                                         </TableCell>
-                                        {/* <TableCell className="py-1 text-xs text-gray-600 font-semibold">{saree.rackNo}</TableCell> */}
-                                        <TableCell className="py-1 text-xs">
+                                        <TableCell className="py-1 text-xs text-gray-500 whitespace-nowrap">
+                                            {saree.addedDate ? new Date(saree.addedDate).toLocaleDateString('en-IN', {
+                                                day: '2-digit',
+                                                month: 'short',
+                                                year: 'numeric'
+                                            }) : '—'}
+                                        </TableCell>
+                                        <TableCell className="py-1 text-xs whitespace-nowrap">
                                             <span className={cn(
                                                 "inline-block rounded-full w-2 h-2 mr-1",
                                                 saree.status === 'active' ? 'bg-green-500' : 'bg-gray-300'
                                             )} />
                                             <span className="text-[10px] uppercase font-bold text-gray-500">{saree.status}</span>
                                         </TableCell>
-                                        <TableCell className="py-1 text-[10px] font-mono text-gray-500 truncate max-w-[125px]" title={saree.createdBy || 'system'}>
+                                        <TableCell className="py-1 text-[10px] font-mono text-gray-500 truncate max-w-[125px] whitespace-nowrap" title={saree.createdBy || 'system'}>
                                             {saree.createdBy || 'system'}
                                         </TableCell>
-                                        <TableCell className="py-1 text-[10px] font-mono text-gray-500 truncate max-w-[125px]" title={saree.updatedBy || 'system'}>
+                                        <TableCell className="py-1 text-[10px] font-mono text-gray-500 truncate max-w-[125px] whitespace-nowrap" title={saree.updatedBy || 'system'}>
                                             {saree.updatedBy || 'system'}
                                         </TableCell>
-                                        <TableCell className="py-1 px-3 text-right">
+                                        <TableCell className="sticky right-0 bg-white group-hover:bg-[#FAF9F3] transition-colors z-10 py-1 px-3 text-right border-l border-gold/10 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)] w-[60px] min-w-[60px]">
                                             <DropdownMenu>
                                                 <DropdownMenuTrigger asChild>
                                                     <Button variant="ghost" className="h-6 w-6 p-0 hover:bg-gold/10 rounded-full">
@@ -637,6 +801,67 @@ export default function InventoryPage() {
                 isOpen={isImportOpen}
                 onClose={() => setIsImportOpen(false)}
             />
+
+            <Dialog open={!!galleryState} onOpenChange={(open) => !open && setGalleryState(null)}>
+                <DialogContent className="max-w-lg border-gold/20 shadow-2xl p-0 overflow-hidden bg-white">
+                    <DialogHeader className="border-b border-gold/15 px-5 py-3 shrink-0">
+                        <DialogTitle className="text-sm font-bold font-serif text-maroon flex items-center justify-between">
+                            {galleryState?.title} — Gallery
+                        </DialogTitle>
+                    </DialogHeader>
+                    <div className="flex flex-col items-center p-5 gap-4">
+                        {galleryState && galleryState.images.length > 0 ? (
+                            <>
+                                {/* Large display */}
+                                <div className="relative w-full aspect-square max-h-[350px] overflow-hidden rounded-lg border border-gold/10 bg-cream/5 flex items-center justify-center">
+                                    <img
+                                        src={galleryState.images[galleryActiveIndex].imageUrl}
+                                        alt={galleryState.title}
+                                        className="max-w-full max-h-full object-contain"
+                                    />
+                                    {galleryState.images.length > 1 && (
+                                        <>
+                                            <button
+                                                onClick={() => setGalleryActiveIndex(prev => (prev - 1 + galleryState.images.length) % galleryState.images.length)}
+                                                className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center transition-colors text-sm font-bold cursor-pointer"
+                                            >
+                                                &larr;
+                                            </button>
+                                            <button
+                                                onClick={() => setGalleryActiveIndex(prev => (prev + 1) % galleryState.images.length)}
+                                                className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center transition-colors text-sm font-bold cursor-pointer"
+                                            >
+                                                &rarr;
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
+                                {/* Thumbnails */}
+                                {galleryState.images.length > 1 && (
+                                    <div className="flex items-center justify-center gap-2 overflow-x-auto w-full py-1">
+                                        {galleryState.images.map((img, idx) => (
+                                            <button
+                                                key={idx}
+                                                onClick={() => setGalleryActiveIndex(idx)}
+                                                className={cn(
+                                                    "w-12 h-12 rounded border-2 overflow-hidden flex-shrink-0 transition-all cursor-pointer",
+                                                    galleryActiveIndex === idx
+                                                        ? "border-maroon scale-105 shadow-sm"
+                                                        : "border-gold/20 hover:border-gold/60"
+                                                )}
+                                            >
+                                                <img src={img.imageUrl} alt="" className="w-full h-full object-cover" />
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </>
+                        ) : (
+                            <div className="py-10 text-gray-400 text-xs italic">No images available</div>
+                        )}
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

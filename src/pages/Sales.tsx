@@ -45,7 +45,6 @@ export default function SalesPage() {
     const [currentTxnNote, setCurrentTxnNote] = React.useState('');
     const [selectedUpiId, setSelectedUpiId] = React.useState<string>('');
     const [selectedStaffId, setSelectedStaffId] = React.useState<string>('');
-    const [discountAmount, setDiscountAmount] = React.useState<number>(0);
     const [sareeSearchTerm, setSareeSearchTerm] = React.useState<string>('');
     const [selectedCategory, setSelectedCategory] = React.useState<string>('All');
     const [paymentMode, setPaymentMode] = React.useState<'cash' | 'card' | 'upi'>('cash');
@@ -59,6 +58,9 @@ export default function SalesPage() {
         quantity: number;
         sellingPrice: number;
         purchasePrice: number;
+        mrp: number;
+        discountAmount: number;
+        discountPercentage: number;
     }>>([]);
     const [lastCompletedSale, setLastCompletedSale] = React.useState<Sale | null>(null);
     const [isReceiptModalOpen, setIsReceiptModalOpen] = React.useState(false);
@@ -122,7 +124,6 @@ export default function SalesPage() {
             setCart([]);
             setCustomerName('');
             setCustomerMobile('');
-            setDiscountAmount(0);
             setAppliedVoucher(null);
             setVoucherCodeInput('');
             setLastCompletedSale(data);
@@ -239,9 +240,11 @@ export default function SalesPage() {
         setCart(newCart);
     };
 
-    const cartTotal = cart.reduce((sum, item) => sum + (item.sellingPrice * item.quantity), 0);
-    const appliedVoucherAmount = appliedVoucher ? Math.min(appliedVoucher.amount, Math.max(0, cartTotal - discountAmount)) : 0;
-    const netPayable = Math.max(0, cartTotal - discountAmount - appliedVoucherAmount);
+    const subtotal = cart.reduce((sum, item) => sum + ((item.mrp || item.sellingPrice) * item.quantity), 0);
+    const discountAmount = cart.reduce((sum, item) => sum + ((item.discountAmount || 0) * item.quantity), 0);
+    const cartTotal = subtotal - discountAmount;
+    const appliedVoucherAmount = appliedVoucher ? Math.min(appliedVoucher.amount, Math.max(0, cartTotal)) : 0;
+    const netPayable = Math.max(0, cartTotal - appliedVoucherAmount);
 
     const handleAddToCart = (saree: Saree) => {
         if (saree.stock <= 0) {
@@ -268,7 +271,10 @@ export default function SalesPage() {
                     sareeName: saree.sareeName,
                     quantity: 1,
                     sellingPrice: saree.sellingPrice,
-                    purchasePrice: saree.purchasePrice
+                    purchasePrice: saree.purchasePrice,
+                    mrp: saree.mrp || saree.sellingPrice,
+                    discountAmount: saree.discountAmount || 0,
+                    discountPercentage: saree.discountPercentage || 0
                 }];
             }
         });
@@ -554,7 +560,7 @@ export default function SalesPage() {
 
     const currentUpi = activeUpiSettings.find(u => u.upi_id === selectedUpiId) || activeUpiSettings[0];
     const upiQrValue = currentUpi
-        ? `upi://pay?pa=${currentUpi.upi_id}&pn=${encodeURIComponent(currentUpi.label)}&am=${cartTotal}&tn=${currentTxnNote}&cu=INR`
+        ? `upi://pay?pa=${currentUpi.upi_id}&pn=${encodeURIComponent(currentUpi.label)}&am=${netPayable}&tn=${currentTxnNote}&cu=INR`
         : '';
 
     if (remoteMode === 'scanner') {
@@ -700,7 +706,7 @@ export default function SalesPage() {
                                         disabled={saree.stock <= 0}
                                         onClick={() => handleAddToCart(saree)}
                                         className={cn(
-                                            "text-left bg-white border rounded-lg p-2.5 flex flex-col justify-between shadow-sm hover:shadow-md transition-all active:scale-95 duration-100 relative overflow-hidden group cursor-pointer w-full text-xs h-[95px]",
+                                            "text-left bg-white border rounded-lg p-2.5 flex flex-col justify-between shadow-sm hover:shadow-md transition-all active:scale-95 duration-100 relative overflow-hidden group cursor-pointer w-full text-xs h-[105px]",
                                             isHighlighted
                                                 ? "border-maroon ring-2 ring-maroon/15 shadow-md"
                                                 : "border-gray-100 hover:border-gold/30",
@@ -717,15 +723,28 @@ export default function SalesPage() {
                                             </span>
                                         ) : null}
 
-                                        <div className="flex-1 min-w-0 w-full">
-                                            <div className="flex justify-between items-center w-full gap-1 mb-0.5">
-                                                <span className="text-[9px] text-gray-400 font-mono truncate">{saree.id}</span>
-                                                <span className="text-[9px] text-gray-500 bg-cream/30 px-1.5 py-0.5 rounded truncate max-w-[60px]" title={saree.category}>
-                                                    {saree.category}
-                                                </span>
-                                            </div>
-                                            <div className="font-semibold text-gray-800 text-xs truncate group-hover:text-maroon transition-colors pr-8" title={saree.sareeName}>
-                                                {saree.sareeName}
+                                        <div className="flex gap-2 items-start w-full flex-1">
+                                            {saree.images && saree.images.length > 0 ? (
+                                                <img 
+                                                    src={saree.images.find(img => img.isPrimary)?.imageUrl || saree.images[0].imageUrl} 
+                                                    alt={saree.sareeName} 
+                                                    className="w-10 h-10 object-cover rounded border border-gold/15 flex-shrink-0"
+                                                />
+                                            ) : (
+                                                <div className="w-10 h-10 bg-cream/35 border border-gold/10 rounded flex items-center justify-center text-[7px] text-gray-400 font-bold flex-shrink-0 uppercase">
+                                                    No Img
+                                                </div>
+                                            )}
+                                            <div className="flex-1 min-w-0 w-full">
+                                                <div className="flex justify-between items-center w-full gap-1 mb-0.5">
+                                                    <span className="text-[8px] text-gray-400 font-mono truncate">{saree.id}</span>
+                                                    <span className="text-[8px] text-gray-505 bg-cream/30 px-1 py-0.2 rounded truncate max-w-[50px]" title={saree.category}>
+                                                        {saree.category}
+                                                    </span>
+                                                </div>
+                                                <div className="font-semibold text-gray-800 text-xs truncate group-hover:text-maroon transition-colors pr-1" title={saree.sareeName}>
+                                                    {saree.sareeName}
+                                                </div>
                                             </div>
                                         </div>
 
@@ -743,6 +762,7 @@ export default function SalesPage() {
                             <span className="text-xs">No active sarees match your criteria</span>
                         </div>
                     )}
+
                 </div>
             </div>
 
@@ -845,7 +865,14 @@ export default function SalesPage() {
                             <div key={item.sareeId} className="flex gap-2 items-center justify-between border-b border-gray-100 pb-1.5 last:border-0 last:pb-0">
                                 <div className="flex-1 min-w-0">
                                     <div className="font-semibold text-xs text-gray-800 truncate">{item.sareeName}</div>
-                                    <div className="text-[9px] text-gray-400 font-mono">{item.sareeId}</div>
+                                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[9px] text-gray-400">
+                                        <span className="font-mono">{item.sareeId}</span>
+                                        {item.mrp > item.sellingPrice && (
+                                            <span className="text-gray-400 font-medium">
+                                                MRP: <span className="line-through">₹{item.mrp}</span> (-₹{item.discountAmount} / {item.discountPercentage}%)
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
                                 <div className="flex items-center gap-1.5 shrink-0">
                                     {/* Quantity Controls */}
@@ -927,31 +954,21 @@ export default function SalesPage() {
                     {/* Summary lines */}
                     <div className="text-xs border-t border-gray-100 pt-1.5 space-y-0.5">
                         <div className="flex justify-between text-gray-400">
-                            <span>Subtotal</span>
-                            <span>₹{cartTotal.toLocaleString()}</span>
+                            <span>Subtotal (MRP)</span>
+                            <span>₹{subtotal.toLocaleString()}</span>
                         </div>
                         <div className="flex justify-between text-gray-400">
                             <span>GST (Included)</span>
                             <span>₹0</span>
                         </div>
                         {/* Discount Row */}
-                        <div className="flex items-center justify-between">
-                            <span className="text-green-700 font-medium">Discount</span>
-                            <div className="flex items-center gap-1">
-                                <span className="text-gray-400 text-[11px]">₹</span>
-                                <input
-                                    type="number"
-                                    min={0}
-                                    max={cartTotal}
-                                    value={discountAmount === 0 ? '' : discountAmount}
-                                    placeholder="0"
-                                    onChange={(e) => {
-                                        const val = parseFloat(e.target.value) || 0;
-                                        setDiscountAmount(Math.min(val, cartTotal));
-                                    }}
-                                    className="w-20 text-right text-xs border border-gray-200 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-green-400 text-green-700 font-semibold"
-                                />
-                            </div>
+                        <div className="flex justify-between text-green-700 font-medium">
+                            <span>Discount (Table)</span>
+                            <span className="font-semibold text-right">-₹{discountAmount.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between text-gray-600 font-semibold border-t border-dashed border-gray-100 pt-1 mt-1">
+                            <span>Net Total</span>
+                            <span>₹{cartTotal.toLocaleString()}</span>
                         </div>
 
                         {/* Store Credit Voucher Row */}

@@ -212,8 +212,11 @@ export const salesService = {
         const invoiceNumber = `INV-${datePart}-${randPart}`;
         const discount = sale.discountAmount ?? 0;
         const voucherVal = sale.voucherAmount ?? 0;
-        const netAmount = Math.max(0, totalAmount - discount - voucherVal);
-        const netProfit = Math.max(0, totalProfit - discount - voucherVal);
+        
+        // Note: Individual item discounts are already deducted from the item's sellingPrice.
+        // Therefore, totalAmount is already the discounted sum. We only deduct voucherVal for the net total paid.
+        const netAmount = Math.max(0, totalAmount - voucherVal);
+        const netProfit = Math.max(0, totalProfit - voucherVal);
 
         const { data: insertedSale, error: saleInsertError } = await supabase
             .from('sales')

@@ -154,7 +154,9 @@ export default function ReceiptView() {
         );
     }
 
-    const subtotal = receipt.items.reduce((s, i) => s + i.quantity * i.sellingPrice, 0);
+    // Since item-level discounts are already subtracted from item.sellingPrice,
+    // the true subtotal before discount is the sum of selling prices PLUS the total discount amount.
+    const subtotal = receipt.items.reduce((s, i) => s + i.quantity * i.sellingPrice, 0) + receipt.discountAmount;
     const dateShort = fmtDate(receipt.date);
     const dateLong = fmtLong(receipt.date);
 
