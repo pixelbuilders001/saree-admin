@@ -58,15 +58,23 @@ export default function DashboardPage() {
         {
             title: 'REVENUE',
             value: formatCurrency(stats?.totalRevenue || 0),
-            subtitle: `${stats?.totalSales || 0} invoices issued`,
+            subtitle: `${stats?.totalSales || 0} POS + ${stats?.totalOnlineOrders || 0} Online`,
             icon: DollarSign,
             color: 'text-green-700 bg-green-50/60 border-green-200/50',
             iconColor: 'bg-green-150/70 text-green-700'
         },
         {
+            title: 'ONLINE ORDERS',
+            value: `${stats?.onlineOrdersPending || 0} Pending`,
+            subtitle: `${stats?.totalOnlineOrders || 0} orders received`,
+            icon: ShoppingBag,
+            color: 'text-indigo-700 bg-indigo-50/60 border-indigo-200/50',
+            iconColor: 'bg-indigo-100 text-indigo-700'
+        },
+        {
             title: 'NET PROFIT',
             value: formatCurrency(stats?.netProfit || 0),
-            subtitle: 'Gross profit minus overheads',
+            subtitle: 'POS and delivered online profit',
             icon: TrendingUp,
             color: 'text-emerald-700 bg-emerald-50/60 border-emerald-200/50',
             iconColor: 'bg-emerald-100 text-emerald-700'
@@ -166,7 +174,7 @@ export default function DashboardPage() {
             </div>
 
             {/* High Density Metric Cards - Compact Grid (Redesigned sizes) */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
                 {statCards.map((card, index) => (
                     <motion.div key={index} variants={itemVariants}>
                         <Card className={`border ${card.color} shadow-sm rounded-lg hover:shadow-md transition-all h-[84px] flex flex-col justify-between overflow-hidden relative group`}>
@@ -360,7 +368,18 @@ export default function DashboardPage() {
                                                 const isReturn = act.id.startsWith('EX-') || act.amount < 0;
                                                 return (
                                                     <TableRow key={index} className="hover:bg-cream/5 border-b border-gold/5 h-8">
-                                                        <TableCell className="py-1 text-xs font-mono font-bold text-maroon">{act.id}</TableCell>
+                                                        <TableCell className="py-1 text-xs font-mono font-bold text-maroon font-sans">
+                                                            <div className="flex items-center gap-1.5">
+                                                                <span className={`inline-block text-[8px] font-semibold px-1 py-0.2 rounded border uppercase leading-tight ${
+                                                                    act.type === 'Online Order' 
+                                                                        ? 'bg-indigo-50 text-indigo-700 border-indigo-150' 
+                                                                        : 'bg-green-50 text-green-700 border-green-150'
+                                                                }`}>
+                                                                    {act.type === 'Online Order' ? 'Online' : 'POS'}
+                                                                </span>
+                                                                <span className="font-mono">{act.id}</span>
+                                                            </div>
+                                                        </TableCell>
                                                         <TableCell className="py-1 text-xs text-gray-700 truncate max-w-[200px]" title={act.description}>
                                                             {act.description}
                                                         </TableCell>

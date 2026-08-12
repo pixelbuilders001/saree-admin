@@ -143,3 +143,136 @@ CREATE POLICY "Allow authenticated update on categories" ON public.categories
 
 CREATE POLICY "Allow authenticated delete on categories" ON public.categories
     FOR DELETE TO authenticated USING (true);
+
+
+-- 6. Create Online Orders Tables
+CREATE TABLE public.orders (
+  id uuid not null default gen_random_uuid (),
+  order_number text not null,
+  user_id uuid null,
+  customer_name text not null,
+  customer_phone text not null,
+  customer_email text null,
+  shipping_address jsonb not null,
+  subtotal numeric(12, 2) not null default 0,
+  shipping_fee numeric(12, 2) not null default 0,
+  discount numeric(12, 2) not null default 0,
+  total_amount numeric(12, 2) not null default 0,
+  payment_method text not null default 'cod'::text,
+  payment_status text not null default 'pending'::text,
+  order_status text not null default 'placed'::text,
+  notes text null,
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now(),
+  constraint orders_pkey primary key (id),
+  constraint orders_order_number_key unique (order_number),
+  constraint orders_user_id_fkey foreign KEY (user_id) references auth.users (id),
+  constraint orders_payment_method_check check ((payment_method = 'cod'::text)),
+  constraint orders_payment_status_check check (
+    (
+      payment_status = any (
+        array[
+          'pending'::text,
+          'paid'::text,
+          'failed'::text,
+          'refunded'::text
+        ]
+      )
+    )
+  ),
+  constraint orders_status_check check (
+    (
+      order_status = any (
+        array[
+          'placed'::text,
+          'confirmed'::text,
+          'processing'::text,
+          'packed'::text,
+          'shipped'::text,
+          'out_for_delivery'::text,
+          'delivered'::text,
+          'cancelled'::text,
+          'returned'::text
+        ]
+      )
+    )
+  )
+) TABLESPACE pg_default;
+
+-- Enable Row Level Security (RLS) on Orders
+ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow public select on orders" ON public.orders
+    FOR SELECT TO public USING (true);
+
+CREATE POLICY "Allow authenticated insert on orders" ON public.orders
+    FOR INSERT TO authenticated WITH CHECK (true);
+
+CREATE POLICY "Allow authenticated update on orders" ON public.orders
+    FOR UPDATE TO authenticated USING (true);
+
+CREATE POLICY "Allow authenticated delete on orders" ON public.orders
+    FOR DELETE TO authenticated USING (true);
+
+
+CREATE TABLE public.order_items (
+  id uuid not null default gen_random_uuid (),
+  order_id uuid not null,
+  inventory_id text not null,
+  product_name text not null,
+  sku text null,
+  barcode text null,
+  quantity integer not null default 1,
+  unit_price numeric(12, 2) not null,
+  total_price numeric(12, 2) not null,
+  product_snapshot jsonb null,
+  created_at timestamp with time zone not null default now(),
+  constraint order_items_pkey primary key (id),
+  constraint order_items_inventory_id_fkey foreign KEY (inventory_id) references inventory (id),
+  constraint order_items_order_id_fkey foreign KEY (order_id) references orders (id) on delete CASCADE,
+  constraint order_items_quantity_check check ((quantity > 0))
+) TABLESPACE pg_default;
+
+-- Enable Row Level Security (RLS) on Order Items
+ALTER TABLE public.order_items ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow public select on order_items" ON public.order_items
+    FOR SELECT TO public USING (true);
+
+CREATE POLICY "Allow authenticated insert on order_items" ON public.order_items
+    FOR INSERT TO authenticated WITH CHECK (true);
+
+CREATE POLICY "Allow authenticated update on order_items" ON public.order_items
+    FOR UPDATE TO authenticated USING (true);
+
+CREATE POLICY "Allow authenticated delete on order_items" ON public.order_items
+    FOR DELETE TO authenticated USING (true);
+
+
+CREATE TABLE public.order_status_history (
+  id uuid not null default gen_random_uuid (),
+  order_id uuid not null,
+  status text not null,
+  note text null,
+  created_at timestamp with time zone not null default now(),
+  constraint order_status_history_pkey primary key (id),
+  constraint order_status_history_order_id_fkey foreign KEY (order_id) references orders (id) on delete CASCADE
+) TABLESPACE pg_default;
+
+CREATE INDEX IF NOT EXISTS idx_order_status_history_order_id ON public.order_status_history USING btree (order_id) TABLESPACE pg_default;
+
+-- Enable Row Level Security (RLS) on Order Status History
+ALTER TABLE public.order_status_history ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow public select on order_status_history" ON public.order_status_history
+    FOR SELECT TO public USING (true);
+
+CREATE POLICY "Allow authenticated insert on order_status_history" ON public.order_status_history
+    FOR INSERT TO authenticated WITH CHECK (true);
+
+CREATE POLICY "Allow authenticated update on order_status_history" ON public.order_status_history
+    FOR UPDATE TO authenticated USING (true);
+
+CREATE POLICY "Allow authenticated delete on order_status_history" ON public.order_status_history
+    FOR DELETE TO authenticated USING (true);
+

@@ -13,7 +13,8 @@ import {
     ArrowLeftRight,
     Settings,
     Shield,
-    User
+    User,
+    ShoppingBag
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -29,6 +30,7 @@ const navGroups = [
             { icon: Package, label: 'Inventory', path: '/inventory' },
             { icon: ShoppingCart, label: 'Sales', path: '/sales' },
             { icon: ArrowLeftRight, label: 'Exchange', path: '/exchange' },
+            { icon: ShoppingBag, label: 'Online Orders', path: '/orders' },
         ]
     },
     {

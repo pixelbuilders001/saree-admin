@@ -26,6 +26,11 @@ export interface DashboardStats {
     recentActivities: { id: string; type: string; description: string; date: string; amount: number }[];
     recentExpenses: { id: string; category: string; description: string; amount: number; date: string }[];
     recentWeaverPayments: { id: string; weaverName: string; amount: number; method: string; date: string }[];
+
+    // Online order specific stats
+    totalOnlineOrders: number;
+    onlineOrdersPending: number;
+    onlineOrdersRevenue: number;
 }
 
 export const dashboardService = {
@@ -48,7 +53,7 @@ export const dashboardService = {
             .select('amount');
         if (expensesError) throw expensesError;
 
-        // 4. Fetch all sales
+        // 4. Fetch all POS sales
         const { data: sales, error: salesError } = await supabase
             .from('sales')
             .select(`
@@ -67,6 +72,30 @@ export const dashboardService = {
             `)
             .order('created_at', { ascending: false });
         if (salesError) throw salesError;
+
+        // 4.5 Fetch all online orders
+        const { data: onlineOrders, error: ordersError } = await supabase
+            .from('orders')
+            .select(`
+                id,
+                order_number,
+                subtotal,
+                shipping_fee,
+                discount,
+                total_amount,
+                order_status,
+                payment_status,
+                created_at,
+                order_items (
+                    product_name,
+                    quantity,
+                    unit_price,
+                    inventory (
+                        purchase_price
+                    )
+                )
+            `);
+        if (ordersError) throw ordersError;
 
         // 5. Fetch Weavers, weaver payments and purchases in parallel
         const { data: weaversData, error: weaversError } = await supabase
@@ -100,9 +129,31 @@ export const dashboardService = {
             .limit(5);
         if (recentExpensesError) throw recentExpensesError;
 
-        // Calculate Revenue and Profit
-        const totalRevenue = (sales || []).reduce((sum, s) => sum + Number(s.total_amount || 0), 0);
-        const grossProfit = (sales || []).reduce((sum, s) => sum + Number(s.profit || 0), 0);
+        // Calculate Online Orders revenue and profit
+        let onlineOrdersRevenue = 0;
+        let onlineOrdersProfit = 0;
+
+        (onlineOrders || []).forEach((order: any) => {
+            // Count delivered orders as completed revenue/profit
+            if (order.order_status === 'delivered') {
+                onlineOrdersRevenue += Number(order.total_amount || 0);
+
+                // Calculate profit: (subtotal_revenue - subtotal_cost) + shipping_fee - discount
+                const subtotalCost = (order.order_items || []).reduce((costSum: number, item: any) => {
+                    return costSum + (Number(item.inventory?.purchase_price || 0) * Number(item.quantity || 0));
+                }, 0);
+                const subtotalRevenue = Number(order.subtotal || 0);
+                const orderProfit = (subtotalRevenue - subtotalCost) + Number(order.shipping_fee || 0) - Number(order.discount || 0);
+                onlineOrdersProfit += orderProfit;
+            }
+        });
+
+        // Calculate Revenue and Profit (POS + Online combined)
+        const posRevenue = (sales || []).reduce((sum, s) => sum + Number(s.total_amount || 0), 0);
+        const posProfit = (sales || []).reduce((sum, s) => sum + Number(s.profit || 0), 0);
+
+        const totalRevenue = posRevenue + onlineOrdersRevenue;
+        const grossProfit = posProfit + onlineOrdersProfit;
         const totalExpenses = (expenses || []).reduce((sum, e) => sum + Number(e.amount || 0), 0);
 
         // Calculate Weaver Outstanding
@@ -168,7 +219,7 @@ export const dashboardService = {
             stock: fabMap[fabric].stock
         }));
 
-        // Monthly sales (for the last 6 months)
+        // Monthly sales (for the last 6 months) - Combined POS and Completed Online Orders
         const monthlyMap: Record<string, number> = {};
         const now = new Date();
         for (let i = 5; i >= 0; i--) {
@@ -177,6 +228,7 @@ export const dashboardService = {
             monthlyMap[monthName] = 0;
         }
 
+        // Add POS sales
         (sales || []).forEach(sale => {
             const date = new Date(sale.created_at);
             const month = date.toLocaleString('default', { month: 'short' });
@@ -185,13 +237,24 @@ export const dashboardService = {
             }
         });
 
+        // Add Online orders
+        (onlineOrders || []).forEach(order => {
+            if (order.order_status === 'delivered') {
+                const date = new Date(order.created_at);
+                const month = date.toLocaleString('default', { month: 'short' });
+                if (monthlyMap.hasOwnProperty(month)) {
+                    monthlyMap[month] += Number(order.total_amount || 0);
+                }
+            }
+        });
+
         const monthlySales = Object.keys(monthlyMap).map(month => ({
             month,
             sales: monthlyMap[month]
         }));
 
-        // Recent sales activities
-        const recentActivities = (sales || []).slice(0, 5).map(sale => {
+        // Recent sales activities (POS Sales)
+        const posActivities = (sales || []).map(sale => {
             const itemCount = (sale.sale_items || []).reduce((sum: number, item: any) => {
                 const qty = Number(item.quantity || 0);
                 const isRet = qty < 0 || Number(item.selling_price || 0) < 0;
@@ -207,12 +270,34 @@ export const dashboardService = {
 
             return {
                 id: friendlySaleId,
-                type: 'Sale',
+                type: 'POS Sale',
                 description,
                 date: sale.created_at,
                 amount: Number(sale.total_amount || 0)
             };
         });
+
+        // Recent sales activities (Online Orders)
+        const onlineActivities = (onlineOrders || []).map(order => {
+            const itemCount = (order.order_items || []).reduce((sum: number, item: any) => sum + Number(item.quantity || 0), 0);
+            const firstItemName = order.order_items?.[0]?.product_name || 'Product';
+            const description = itemCount > 1
+                ? `Online order of ${itemCount} items (inc. ${firstItemName})`
+                : `Online order of 1x ${firstItemName}`;
+
+            return {
+                id: order.order_number,
+                type: 'Online Order',
+                description: `${description} [Status: ${order.order_status.toUpperCase()}]`,
+                date: order.created_at,
+                amount: Number(order.total_amount || 0)
+            };
+        });
+
+        // Merge and sort activities by date
+        const recentActivities = [...posActivities, ...onlineActivities]
+            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+            .slice(0, 5);
 
         // Recent weaver payments
         const recentWeaverPayments = payments.slice(0, 5).map((pay: any) => {
@@ -255,7 +340,10 @@ export const dashboardService = {
             fabricDistribution,
             recentActivities,
             recentExpenses,
-            recentWeaverPayments
+            recentWeaverPayments,
+            totalOnlineOrders: (onlineOrders || []).length,
+            onlineOrdersPending: (onlineOrders || []).filter(o => ['placed', 'confirmed', 'processing', 'packed', 'shipped', 'out_for_delivery'].includes(o.order_status)).length,
+            onlineOrdersRevenue
         };
     }
 };

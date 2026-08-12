@@ -7,6 +7,7 @@ import { useAuthStore } from '@/store/useAuthStore';
 import LoginPage from '@/pages/Login';
 import InventoryPage from '@/pages/Inventory';
 import SalesPage from '@/pages/Sales';
+import OrdersPage from '@/pages/Orders';
 import PurchasesPage from '@/pages/Purchases';
 import CustomersPage from '@/pages/Customers';
 import DashboardPage from '@/pages/Dashboard';
@@ -126,6 +127,7 @@ function App() {
             <Route index element={<DashboardPage />} />
             <Route path="inventory" element={<InventoryPage />} />
             <Route path="sales" element={<SalesPage />} />
+            <Route path="orders" element={<OrdersPage />} />
             <Route path="purchases" element={<PurchasesPage />} />
             <Route path="customers" element={<CustomersPage />} />
             <Route path="reports" element={<ReportsPage />} />
