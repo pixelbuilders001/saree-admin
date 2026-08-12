@@ -22,7 +22,10 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Loader2, Star, Trash, Upload, Image as ImageIcon } from 'lucide-react';
+import { Loader2, Star, Trash, Upload, Image as ImageIcon, Plus } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { categoryService } from '@/services/inventoryService';
+import { CategoryManagementModal } from './CategoryManagementModal';
 
 const sareeSchema = z.object({
     sareeName: z.string().min(2, 'Name is required'),
@@ -60,6 +63,13 @@ export function SareeForm({ initialData, onSubmit, onCancel }: SareeFormProps) {
         isNew?: boolean;
         toDelete?: boolean;
     }[]>([]);
+
+    const [isManageCategoriesOpen, setIsManageCategoriesOpen] = React.useState(false);
+
+    const { data: categories } = useQuery({
+        queryKey: ['categories'],
+        queryFn: categoryService.getCategories
+    });
 
     React.useEffect(() => {
         if (initialData?.images) {
@@ -150,19 +160,48 @@ export function SareeForm({ initialData, onSubmit, onCancel }: SareeFormProps) {
                                 name="category"
                                 render={({ field }) => (
                                     <FormItem>
-                                        <FormLabel className="text-maroon font-semibold">Category</FormLabel>
-                                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                        <div className="flex items-center justify-between">
+                                            <FormLabel className="text-maroon font-semibold">Category</FormLabel>
+                                            <button
+                                                type="button"
+                                                onClick={() => setIsManageCategoriesOpen(true)}
+                                                className="text-[10px] text-maroon hover:text-maroon-dark font-bold uppercase flex items-center gap-1 hover:underline focus:outline-none"
+                                            >
+                                                <Plus className="h-3 w-3" /> Manage
+                                            </button>
+                                        </div>
+                                        <Select 
+                                            onValueChange={(val) => {
+                                                field.onChange(val);
+                                                const cat = categories?.find(c => c.name === val);
+                                                if (cat) {
+                                                    form.setValue('categoryId', cat.categoryId);
+                                                }
+                                            }} 
+                                            value={field.value || undefined}
+                                            defaultValue={field.value || undefined}
+                                        >
                                             <FormControl>
                                                 <SelectTrigger>
                                                     <SelectValue placeholder="Select Category" />
                                                 </SelectTrigger>
                                             </FormControl>
                                             <SelectContent>
-                                                <SelectItem value="Banarasi">Banarasi</SelectItem>
-                                                <SelectItem value="Kanjivaram">Kanjivaram</SelectItem>
-                                                <SelectItem value="Chiffon">Chiffon</SelectItem>
-                                                <SelectItem value="Cotton">Cotton</SelectItem>
-                                                <SelectItem value="Silk">Silk</SelectItem>
+                                                {categories && categories.length > 0 ? (
+                                                    categories.filter(c => c.status === 'active').map(cat => (
+                                                        <SelectItem key={cat.id} value={cat.name}>
+                                                            {cat.name}
+                                                        </SelectItem>
+                                                    ))
+                                                ) : (
+                                                    <>
+                                                        <SelectItem value="Banarasi">Banarasi</SelectItem>
+                                                        <SelectItem value="Kanjivaram">Kanjivaram</SelectItem>
+                                                        <SelectItem value="Chiffon">Chiffon</SelectItem>
+                                                        <SelectItem value="Cotton">Cotton</SelectItem>
+                                                        <SelectItem value="Silk">Silk</SelectItem>
+                                                    </>
+                                                )}
                                             </SelectContent>
                                         </Select>
                                         <FormMessage />
@@ -541,6 +580,10 @@ export function SareeForm({ initialData, onSubmit, onCancel }: SareeFormProps) {
                     </Button>
                 </div>
             </form>
+            <CategoryManagementModal 
+                isOpen={isManageCategoriesOpen} 
+                onClose={() => setIsManageCategoriesOpen(false)} 
+            />
         </Form>
     );
 }

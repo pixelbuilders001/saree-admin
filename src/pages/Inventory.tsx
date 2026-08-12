@@ -1,6 +1,6 @@
 import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { inventoryService, type Saree } from '@/services/inventoryService';
+import { inventoryService, categoryService, type Saree } from '@/services/inventoryService';
 import {
     Plus,
     Search,
@@ -180,11 +180,25 @@ export default function InventoryPage() {
             setEditingSaree(undefined);
         }
     });
+    const { data: dbCategories } = useQuery({
+        queryKey: ['categories'],
+        queryFn: categoryService.getCategories
+    });
 
     const categories = React.useMemo(() => {
-        if (!Array.isArray(sarees)) return [];
-        return Array.from(new Set(sarees.map(s => s.category).filter(Boolean))).sort();
-    }, [sarees]);
+        const set = new Set<string>();
+        if (Array.isArray(dbCategories)) {
+            dbCategories.forEach(c => {
+                if (c.status === 'active') set.add(c.name);
+            });
+        }
+        if (Array.isArray(sarees)) {
+            sarees.forEach(s => {
+                if (s.category) set.add(s.category);
+            });
+        }
+        return Array.from(set).sort();
+    }, [dbCategories, sarees]);
 
     const fabrics = React.useMemo(() => {
         if (!Array.isArray(sarees)) return [];

@@ -108,3 +108,38 @@ CREATE POLICY "Allow authenticated update on sbs-inventory-images" ON storage.ob
 -- Enable DELETE access for authenticated users
 CREATE POLICY "Allow authenticated delete on sbs-inventory-images" ON storage.objects
     FOR DELETE TO authenticated USING (bucket_id = 'sbs-inventory-images');
+
+
+-- 5. Create Categories Table
+CREATE TABLE public.categories (
+  id uuid not null default gen_random_uuid (),
+  category_id text not null,
+  name text not null,
+  slug text not null,
+  description text null,
+  image_url text null,
+  status text not null default 'active'::text,
+  sort_order integer null default 0,
+  created_at timestamp with time zone null default now(),
+  updated_at timestamp with time zone null default now(),
+  constraint categories_pkey primary key (id),
+  constraint categories_category_id_key unique (category_id),
+  constraint categories_slug_key unique (slug)
+);
+
+-- Enable Row Level Security (RLS) on Categories
+ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
+
+-- Allow public read access to categories
+CREATE POLICY "Allow public select on categories" ON public.categories
+    FOR SELECT TO public USING (true);
+
+-- Allow authenticated users to manage categories
+CREATE POLICY "Allow authenticated insert on categories" ON public.categories
+    FOR INSERT TO authenticated WITH CHECK (true);
+
+CREATE POLICY "Allow authenticated update on categories" ON public.categories
+    FOR UPDATE TO authenticated USING (true);
+
+CREATE POLICY "Allow authenticated delete on categories" ON public.categories
+    FOR DELETE TO authenticated USING (true);

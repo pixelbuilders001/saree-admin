@@ -552,3 +552,115 @@ export const inventoryService = {
         return { inserted: records.length, errors };
     },
 };
+
+export interface Category {
+    id: string;
+    categoryId: string;
+    name: string;
+    slug: string;
+    description?: string;
+    imageUrl?: string;
+    status: 'active' | 'inactive';
+    sortOrder?: number;
+    createdAt?: string;
+    updatedAt?: string;
+}
+
+export const categoryService = {
+    getCategories: async (): Promise<Category[]> => {
+        const { data, error } = await supabase
+            .from('categories')
+            .select('*')
+            .order('sort_order', { ascending: true })
+            .order('name', { ascending: true });
+
+        if (error) throw error;
+
+        return (data || []).map((item: any) => ({
+            id: item.id,
+            categoryId: item.category_id,
+            name: item.name,
+            slug: item.slug,
+            description: item.description || '',
+            imageUrl: item.image_url || '',
+            status: item.status as 'active' | 'inactive',
+            sortOrder: item.sort_order || 0,
+            createdAt: item.created_at,
+            updatedAt: item.updated_at
+        }));
+    },
+
+    createCategory: async (category: Omit<Category, 'id' | 'createdAt' | 'updatedAt'>): Promise<Category> => {
+        const { data, error } = await supabase
+            .from('categories')
+            .insert([{
+                category_id: category.categoryId,
+                name: category.name,
+                slug: category.slug,
+                description: category.description || null,
+                image_url: category.imageUrl || null,
+                status: category.status || 'active',
+                sort_order: category.sortOrder || 0
+            }])
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        return {
+            id: data.id,
+            categoryId: data.category_id,
+            name: data.name,
+            slug: data.slug,
+            description: data.description || '',
+            imageUrl: data.image_url || '',
+            status: data.status as 'active' | 'inactive',
+            sortOrder: data.sort_order || 0,
+            createdAt: data.created_at,
+            updatedAt: data.updated_at
+        };
+    },
+
+    updateCategory: async (id: string, category: Partial<Category>): Promise<Category> => {
+        const updateData: any = {};
+        if (category.categoryId !== undefined) updateData.category_id = category.categoryId;
+        if (category.name !== undefined) updateData.name = category.name;
+        if (category.slug !== undefined) updateData.slug = category.slug;
+        if (category.description !== undefined) updateData.description = category.description;
+        if (category.imageUrl !== undefined) updateData.image_url = category.imageUrl;
+        if (category.status !== undefined) updateData.status = category.status;
+        if (category.sortOrder !== undefined) updateData.sort_order = category.sortOrder;
+        updateData.updated_at = new Date().toISOString();
+
+        const { data, error } = await supabase
+            .from('categories')
+            .update(updateData)
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        return {
+            id: data.id,
+            categoryId: data.category_id,
+            name: data.name,
+            slug: data.slug,
+            description: data.description || '',
+            imageUrl: data.image_url || '',
+            status: data.status as 'active' | 'inactive',
+            sortOrder: data.sort_order || 0,
+            createdAt: data.created_at,
+            updatedAt: data.updated_at
+        };
+    },
+
+    deleteCategory: async (id: string): Promise<void> => {
+        const { error } = await supabase
+            .from('categories')
+            .delete()
+            .eq('id', id);
+
+        if (error) throw error;
+    }
+};
