@@ -41,6 +41,8 @@ export function CategoryManagementModal({ isOpen, onClose }: CategoryManagementM
     const [catDesc, setCatDesc] = React.useState('');
     const [catStatus, setCatStatus] = React.useState<'active' | 'inactive'>('active');
     const [catSortOrder, setCatSortOrder] = React.useState(0);
+    const [imageFile, setImageFile] = React.useState<File | null>(null);
+    const [imagePreview, setImagePreview] = React.useState<string>('');
 
     // Fetch categories
     const { data: categories, isLoading } = useQuery({
@@ -58,6 +60,8 @@ export function CategoryManagementModal({ isOpen, onClose }: CategoryManagementM
         setCatDesc('');
         setCatStatus('active');
         setCatSortOrder(0);
+        setImageFile(null);
+        setImagePreview('');
         setIsFormOpen(false);
     };
 
@@ -96,12 +100,15 @@ export function CategoryManagementModal({ isOpen, onClose }: CategoryManagementM
         setCatDesc(category.description || '');
         setCatStatus(category.status);
         setCatSortOrder(category.sortOrder || 0);
+        setImageFile(null);
+        setImagePreview(category.imageUrl || '');
         setIsFormOpen(true);
     };
 
     // Mutation: Create Category
     const createMutation = useMutation({
-        mutationFn: categoryService.createCategory,
+        mutationFn: ({ data, imageFile }: { data: Omit<Category, 'id' | 'createdAt' | 'updatedAt'>; imageFile?: File }) => 
+            categoryService.createCategory(data, imageFile),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['categories'] });
             toast.success('Category created successfully');
@@ -115,8 +122,8 @@ export function CategoryManagementModal({ isOpen, onClose }: CategoryManagementM
 
     // Mutation: Update Category
     const updateMutation = useMutation({
-        mutationFn: ({ id, data }: { id: string; data: Partial<Category> }) => 
-            categoryService.updateCategory(id, data),
+        mutationFn: ({ id, data, imageFile }: { id: string; data: Partial<Category>; imageFile?: File }) => 
+            categoryService.updateCategory(id, data, imageFile),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['categories'] });
             toast.success('Category updated successfully');
@@ -141,6 +148,18 @@ export function CategoryManagementModal({ isOpen, onClose }: CategoryManagementM
         }
     });
 
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            setImageFile(file);
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setImagePreview(reader.result as string);
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
     const handleFormSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         
@@ -163,13 +182,14 @@ export function CategoryManagementModal({ isOpen, onClose }: CategoryManagementM
             slug: catSlug.trim(),
             description: catDesc.trim() || undefined,
             status: catStatus,
-            sortOrder: Number(catSortOrder) || 0
+            sortOrder: Number(catSortOrder) || 0,
+            imageUrl: imagePreview && !imageFile ? imagePreview : (imagePreview === '' ? null : undefined)
         };
 
         if (editingCategory) {
-            updateMutation.mutate({ id: editingCategory.id, data: categoryData });
+            updateMutation.mutate({ id: editingCategory.id, data: categoryData, imageFile: imageFile || undefined });
         } else {
-            createMutation.mutate(categoryData);
+            createMutation.mutate({ data: categoryData, imageFile: imageFile || undefined });
         }
     };
 
@@ -268,6 +288,40 @@ export function CategoryManagementModal({ isOpen, onClose }: CategoryManagementM
                             />
                         </div>
 
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-maroon uppercase tracking-wider block">Category Image</label>
+                            <div className="flex items-center gap-4 border border-dashed border-gold/30 rounded-md p-3 bg-slate-50/50">
+                                {imagePreview ? (
+                                    <div className="relative w-16 h-16 border border-gold/20 rounded overflow-hidden shrink-0 bg-white">
+                                        <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setImageFile(null);
+                                                setImagePreview('');
+                                            }}
+                                            className="absolute top-0.5 right-0.5 bg-red-500 text-white rounded-full p-0.5 shadow hover:bg-red-650 transition-colors"
+                                        >
+                                            <X className="h-3 w-3" />
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="w-16 h-16 border border-dashed border-gold/20 rounded flex items-center justify-center shrink-0 bg-white text-gray-400">
+                                        <FolderPlus className="h-5 w-5" />
+                                    </div>
+                                )}
+                                <div className="space-y-1.5 flex-1">
+                                    <Input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={handleFileChange}
+                                        className="h-8 text-xs border-gold/30 file:text-xs file:bg-maroon/5 file:text-maroon file:border-0 file:rounded-md file:px-2 file:py-0.5 hover:file:bg-maroon/10 focus-visible:ring-maroon"
+                                    />
+                                    <p className="text-[9px] text-gray-400">Supported formats: JPG, PNG, WEBP. Image will be compressed before upload.</p>
+                                </div>
+                            </div>
+                        </div>
+
                         <div className="flex justify-end gap-2 pt-4 border-t border-gold/10">
                             <Button type="button" variant="ghost" onClick={() => setIsFormOpen(false)} className="h-9 text-xs font-bold">
                                 Cancel
@@ -321,12 +375,23 @@ export function CategoryManagementModal({ isOpen, onClose }: CategoryManagementM
                                             {categories.map((cat) => (
                                                 <tr key={cat.id} className="hover:bg-cream/5 transition-colors">
                                                     <td className="p-2.5 font-semibold text-gray-800">
-                                                        <div>{cat.name}</div>
-                                                        {cat.description && (
-                                                            <div className="text-[10px] text-gray-400 font-normal truncate max-w-[200px]" title={cat.description}>
-                                                                {cat.description}
+                                                        <div className="flex items-center gap-2">
+                                                            {cat.imageUrl ? (
+                                                                <img src={cat.imageUrl} alt={cat.name} className="w-8 h-8 object-cover rounded border border-gold/20" />
+                                                            ) : (
+                                                                <div className="w-8 h-8 bg-slate-100 rounded border border-gold/10 flex items-center justify-center text-[9px] font-bold text-gray-400">
+                                                                    N/A
+                                                                </div>
+                                                            )}
+                                                            <div>
+                                                                <div>{cat.name}</div>
+                                                                {cat.description && (
+                                                                    <div className="text-[10px] text-gray-400 font-normal truncate max-w-[200px]" title={cat.description}>
+                                                                        {cat.description}
+                                                                    </div>
+                                                                )}
                                                             </div>
-                                                        )}
+                                                        </div>
                                                     </td>
                                                     <td className="p-2.5 font-mono text-gray-500 text-[11px]">{cat.categoryId}</td>
                                                     <td className="p-2.5 text-center">

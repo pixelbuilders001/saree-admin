@@ -559,7 +559,7 @@ export interface Category {
     name: string;
     slug: string;
     description?: string;
-    imageUrl?: string;
+    imageUrl?: string | null;
     status: 'active' | 'inactive';
     sortOrder?: number;
     createdAt?: string;
@@ -590,7 +590,28 @@ export const categoryService = {
         }));
     },
 
-    createCategory: async (category: Omit<Category, 'id' | 'createdAt' | 'updatedAt'>): Promise<Category> => {
+    createCategory: async (category: Omit<Category, 'id' | 'createdAt' | 'updatedAt'>, imageFile?: File): Promise<Category> => {
+        let imageUrl = category.imageUrl || null;
+
+        if (imageFile) {
+            const compressedFile = await compressImage(imageFile);
+            const fileExt = compressedFile.name.split('.').pop();
+            const fileName = `${category.categoryId}/${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
+            const filePath = `${fileName}`;
+
+            const { error: uploadError } = await supabase.storage
+                .from('sbs-categories')
+                .upload(filePath, compressedFile);
+
+            if (uploadError) throw uploadError;
+
+            const { data: { publicUrl } } = supabase.storage
+                .from('sbs-categories')
+                .getPublicUrl(filePath);
+
+            imageUrl = publicUrl;
+        }
+
         const { data, error } = await supabase
             .from('categories')
             .insert([{
@@ -598,7 +619,7 @@ export const categoryService = {
                 name: category.name,
                 slug: category.slug,
                 description: category.description || null,
-                image_url: category.imageUrl || null,
+                image_url: imageUrl,
                 status: category.status || 'active',
                 sort_order: category.sortOrder || 0
             }])
@@ -621,16 +642,37 @@ export const categoryService = {
         };
     },
 
-    updateCategory: async (id: string, category: Partial<Category>): Promise<Category> => {
+    updateCategory: async (id: string, category: Partial<Category>, imageFile?: File): Promise<Category> => {
         const updateData: any = {};
         if (category.categoryId !== undefined) updateData.category_id = category.categoryId;
         if (category.name !== undefined) updateData.name = category.name;
         if (category.slug !== undefined) updateData.slug = category.slug;
         if (category.description !== undefined) updateData.description = category.description;
-        if (category.imageUrl !== undefined) updateData.image_url = category.imageUrl;
         if (category.status !== undefined) updateData.status = category.status;
         if (category.sortOrder !== undefined) updateData.sort_order = category.sortOrder;
         updateData.updated_at = new Date().toISOString();
+
+        if (imageFile) {
+            const catId = category.categoryId || (await supabase.from('categories').select('category_id').eq('id', id).single()).data?.category_id || 'category';
+            const compressedFile = await compressImage(imageFile);
+            const fileExt = compressedFile.name.split('.').pop();
+            const fileName = `${catId}/${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
+            const filePath = `${fileName}`;
+
+            const { error: uploadError } = await supabase.storage
+                .from('sbs-categories')
+                .upload(filePath, compressedFile);
+
+            if (uploadError) throw uploadError;
+
+            const { data: { publicUrl } } = supabase.storage
+                .from('sbs-categories')
+                .getPublicUrl(filePath);
+
+            updateData.image_url = publicUrl;
+        } else if (category.imageUrl !== undefined) {
+            updateData.image_url = category.imageUrl;
+        }
 
         const { data, error } = await supabase
             .from('categories')

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ordersService, type Order, type OrderItem } from '@/services/ordersService';
+import { ordersService, type Order, type OrderItem, type CartItem } from '@/services/ordersService';
 import { inventoryService, type Saree } from '@/services/inventoryService';
 import {
     ShoppingBag,
@@ -24,7 +24,8 @@ import {
     ListFilter,
     PackageOpen,
     Trash2,
-    Sparkles
+    Sparkles,
+    ShoppingCart
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -64,6 +65,11 @@ export default function OrdersPage() {
     const [searchQuery, setSearchQuery] = React.useState('');
     const [statusFilter, setStatusFilter] = React.useState<string>('all');
     const [paymentFilter, setPaymentFilter] = React.useState<string>('all');
+    
+    // Active Cart Modal State
+    const [isCartModalOpen, setIsCartModalOpen] = React.useState(false);
+    const [cartSearchQuery, setCartSearchQuery] = React.useState('');
+    const [expandedCartPhone, setExpandedCartPhone] = React.useState<string | null>(null);
     
     // Status update notes state
     const [statusNote, setStatusNote] = React.useState('');
@@ -144,6 +150,119 @@ export default function OrdersPage() {
             toast.error(err.message || 'Failed to create order');
         }
     });
+
+    // Fetch active cart items
+    const { data: cartItems, isLoading: isCartsLoading } = useQuery({
+        queryKey: ['activeCartItems'],
+        queryFn: ordersService.getActiveCartItems,
+        enabled: isCartModalOpen
+    });
+
+    const deleteCartItemMutation = useMutation({
+        mutationFn: ordersService.deleteCartItem,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['activeCartItems'] });
+            toast.success('Item removed from cart');
+        },
+        onError: (err: any) => {
+            toast.error(err.message || 'Failed to remove item');
+        }
+    });
+
+    const clearCartMutation = useMutation({
+        mutationFn: ordersService.clearCartForUser,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['activeCartItems'] });
+            toast.success('Cart cleared successfully');
+        },
+        onError: (err: any) => {
+            toast.error(err.message || 'Failed to clear cart');
+        }
+    });
+
+    // Group cart items by user_phone
+    const groupedCarts = React.useMemo(() => {
+        if (!cartItems) return {};
+        const groups: { [key: string]: CartItem[] } = {};
+        cartItems.forEach(item => {
+            if (!groups[item.userPhone]) {
+                groups[item.userPhone] = [];
+            }
+            groups[item.userPhone].push(item);
+        });
+        return groups;
+    }, [cartItems]);
+
+    // Format grouped carts for display with optional filters
+    const cartGroups = React.useMemo(() => {
+        return Object.entries(groupedCarts).map(([phone, items]) => {
+            const totalQty = items.reduce((sum, item) => sum + item.quantity, 0);
+            const totalValue = items.reduce((sum, item) => sum + (item.quantity * (item.product?.sellingPrice || 0)), 0);
+            const lastUpdated = new Date(Math.max(...items.map(item => new Date(item.updatedAt).getTime()))).toISOString();
+            
+            // Try to find if they have placed an order before to get their name
+            const order = orders?.find(o => o.customerPhone === phone);
+            const customerName = order ? order.customerName : 'Guest Customer';
+
+            return {
+                phone,
+                items,
+                totalQty,
+                totalValue,
+                lastUpdated,
+                customerName
+            };
+        }).filter(group => {
+            const term = cartSearchQuery.toLowerCase();
+            return group.phone.includes(term) || group.customerName.toLowerCase().includes(term);
+        });
+    }, [groupedCarts, cartSearchQuery, orders]);
+
+    const handleConvertCartToOrder = (phone: string, items: CartItem[]) => {
+        // Find matching name/address if any
+        const order = orders?.find(o => o.customerPhone === phone);
+        const name = order ? order.customerName : '';
+        const email = order ? order.customerEmail : '';
+        const address = order ? order.shippingAddress : null;
+
+        // Fill form fields
+        setFormCustomerPhone(phone);
+        setFormCustomerName(name);
+        setFormCustomerEmail(email || '');
+        if (address) {
+            setFormStreet(address.street || address.line1 || '');
+            setFormCity(address.city || '');
+            setFormState(address.state || '');
+            setFormZip(address.zip || address.pincode || '');
+            setFormCountry(address.country || 'India');
+        }
+
+        // Map items
+        const mappedItems = items.map(item => {
+            const inventoryProduct = sarees?.find(s => s.id === item.productId) || {
+                id: item.productId,
+                sareeName: item.product?.sareeName || 'Unknown Product',
+                category: '',
+                fabric: item.product?.fabric || '',
+                color: item.product?.color || '',
+                sellingPrice: item.product?.sellingPrice || 0,
+                purchasePrice: 0,
+                stock: item.product?.stock || 0,
+                barcode: item.product?.barcode || '',
+                status: 'active' as const
+            };
+            return {
+                saree: inventoryProduct as Saree,
+                quantity: item.quantity,
+                price: item.product?.sellingPrice || 0
+            };
+        });
+
+        setOrderItems(mappedItems);
+        setIsCartModalOpen(false);
+        setIsCreateModalOpen(true);
+        toast.success(`Loaded ${items.length} cart items for ${phone} into manual order draft.`);
+    };
 
     // Reset manual order form
     const resetForm = () => {
@@ -443,6 +562,16 @@ export default function OrdersPage() {
                     <Button 
                         variant="outline" 
                         size="sm" 
+                        onClick={() => setIsCartModalOpen(true)}
+                        className="h-8 text-xs border-gold/30 text-maroon gap-1.5 hover:bg-cream/10 font-bold uppercase tracking-wider"
+                    >
+                        <ShoppingCart className="h-3.5 w-3.5" />
+                        VIEW CARTS
+                    </Button>
+
+                    <Button 
+                        variant="outline" 
+                        size="sm" 
                         onClick={handleGenerateMockOrder}
                         disabled={createOrderMutation.isPending}
                         className="h-8 text-xs border-gold/30 text-maroon gap-1 hover:bg-cream/10 font-bold"
@@ -450,6 +579,152 @@ export default function OrdersPage() {
                         <Sparkles className="h-3.5 w-3.5" />
                         TEST ORDER
                     </Button>
+
+                    <Dialog open={isCartModalOpen} onOpenChange={setIsCartModalOpen}>
+                        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto border-gold/20 bg-white">
+                            <DialogHeader>
+                                <DialogTitle className="text-sm font-bold text-maroon uppercase tracking-wider flex items-center gap-1.5">
+                                    <ShoppingCart className="h-4 w-4" /> ACTIVE CUSTOMER CARTS
+                                </DialogTitle>
+                                <DialogDescription className="text-xs text-gray-500">
+                                    Monitor online shoppers' cart activity. View items, clear active carts, or convert them directly into manual orders.
+                                </DialogDescription>
+                            </DialogHeader>
+
+                            <div className="space-y-4 mt-2">
+                                <div className="relative">
+                                    <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-gray-400" />
+                                    <Input 
+                                        placeholder="Search by customer phone or name..." 
+                                        className="pl-8 h-8 text-xs border-gold/30 bg-white"
+                                        value={cartSearchQuery}
+                                        onChange={e => setCartSearchQuery(e.target.value)}
+                                    />
+                                </div>
+
+                                {isCartsLoading ? (
+                                    <div className="py-12 text-center text-maroon/50 text-xs italic">
+                                        <Loader2 className="h-6 w-6 animate-spin mx-auto mb-1" />
+                                        Loading active carts...
+                                    </div>
+                                ) : cartGroups.length === 0 ? (
+                                    <div className="py-8 text-center text-xs text-gray-500 italic border border-dashed border-gold/25 rounded-md">
+                                        No active carts found matching search criteria
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {cartGroups.map((group) => (
+                                            <div 
+                                                key={group.phone} 
+                                                className="border border-gold/15 rounded-md overflow-hidden bg-white shadow-sm hover:shadow transition-shadow"
+                                            >
+                                                <div className="p-3 bg-slate-50/50 flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-gold/5">
+                                                    <div className="space-y-1">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-bold text-xs text-maroon">{group.phone}</span>
+                                                            <span className="text-[10px] bg-maroon/5 text-maroon px-1.5 py-0.5 rounded border border-maroon/10 font-medium">
+                                                                {group.customerName}
+                                                            </span>
+                                                        </div>
+                                                        <div className="text-[10px] text-gray-500 font-mono">
+                                                            Last Active: {new Date(group.lastUpdated).toLocaleString()}
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="flex items-center gap-4 text-xs">
+                                                        <div className="text-right">
+                                                            <span className="text-gray-500 block text-[9px] uppercase font-bold">Items Count</span>
+                                                            <span className="font-bold font-mono text-gray-700">{group.totalQty}</span>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <span className="text-gray-500 block text-[9px] uppercase font-bold">Est. Value</span>
+                                                            <span className="font-bold font-mono text-maroon">₹{group.totalValue.toLocaleString()}</span>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                        <Button 
+                                                            variant="outline" 
+                                                            size="sm" 
+                                                            onClick={() => setExpandedCartPhone(expandedCartPhone === group.phone ? null : group.phone)}
+                                                            className="h-7 text-[10px] border-gold/30 hover:bg-cream/10 text-maroon font-bold"
+                                                        >
+                                                            {expandedCartPhone === group.phone ? 'Hide Items' : 'View Items'}
+                                                        </Button>
+                                                        
+                                                        <Button 
+                                                            size="sm" 
+                                                            onClick={() => handleConvertCartToOrder(group.phone, group.items)}
+                                                            className="h-7 text-[10px] bg-maroon hover:bg-maroon-dark text-gold font-bold"
+                                                        >
+                                                            Convert to Order
+                                                        </Button>
+
+                                                        <Button 
+                                                            variant="ghost" 
+                                                            size="sm" 
+                                                            disabled={clearCartMutation.isPending}
+                                                            onClick={() => {
+                                                                if(confirm('Are you sure you want to clear this customer\'s cart?')) {
+                                                                    clearCartMutation.mutate(group.phone);
+                                                                }
+                                                            }}
+                                                            className="h-7 text-[10px] text-red-500 hover:text-red-700 hover:bg-red-50"
+                                                        >
+                                                            Clear
+                                                        </Button>
+                                                    </div>
+                                                </div>
+
+                                                {expandedCartPhone === group.phone && (
+                                                    <div className="p-3 border-t border-gold/10 bg-white">
+                                                        <Table>
+                                                            <TableHeader className="bg-slate-50">
+                                                                <TableRow className="border-b border-gold/5">
+                                                                    <TableHead className="h-6 py-0.5 text-[9px] font-bold text-gray-500">Product</TableHead>
+                                                                    <TableHead className="h-6 py-0.5 text-[9px] font-bold text-gray-500 text-center">Qty</TableHead>
+                                                                    <TableHead className="h-6 py-0.5 text-[9px] font-bold text-gray-500 text-right">Price</TableHead>
+                                                                    <TableHead className="h-6 py-0.5 text-[9px] font-bold text-gray-500 text-right">Total</TableHead>
+                                                                    <TableHead className="h-6 py-0.5 text-[9px] font-bold text-gray-500 text-center w-8"></TableHead>
+                                                                </TableRow>
+                                                            </TableHeader>
+                                                            <TableBody>
+                                                                {group.items.map((item) => (
+                                                                    <TableRow key={item.id} className="border-b border-gold/5 h-8">
+                                                                        <TableCell className="py-1 text-xs">
+                                                                            <div className="font-semibold text-gray-800">{item.product?.sareeName || 'Unknown Product'}</div>
+                                                                            <div className="flex gap-2 text-[9px] text-gray-400 font-mono">
+                                                                                {item.product?.sku && <span>SKU: {item.product.sku}</span>}
+                                                                                {item.product?.fabric && <span>Fabric: {item.product.fabric}</span>}
+                                                                                {item.product?.color && <span>Color: {item.product.color}</span>}
+                                                                            </div>
+                                                                        </TableCell>
+                                                                        <TableCell className="py-1 text-xs text-center">{item.quantity}</TableCell>
+                                                                        <TableCell className="py-1 text-xs text-right font-mono">₹{(item.product?.sellingPrice || 0).toLocaleString()}</TableCell>
+                                                                        <TableCell className="py-1 text-xs text-right font-mono">₹{(item.quantity * (item.product?.sellingPrice || 0)).toLocaleString()}</TableCell>
+                                                                        <TableCell className="py-1 text-center">
+                                                                            <button 
+                                                                                type="button" 
+                                                                                disabled={deleteCartItemMutation.isPending}
+                                                                                onClick={() => deleteCartItemMutation.mutate(item.id)}
+                                                                                className="text-red-500 hover:text-red-700 disabled:opacity-50"
+                                                                            >
+                                                                                <Trash2 className="h-3.5 w-3.5" />
+                                                                            </button>
+                                                                        </TableCell>
+                                                                    </TableRow>
+                                                                ))}
+                                                            </TableBody>
+                                                        </Table>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </DialogContent>
+                    </Dialog>
 
                     <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
                         <DialogTrigger asChild>

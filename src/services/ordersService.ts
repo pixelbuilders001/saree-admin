@@ -287,5 +287,86 @@ export const ordersService = {
             .eq('id', orderId);
 
         if (error) throw error;
+    },
+
+    getActiveCartItems: async (): Promise<CartItem[]> => {
+        const { data, error } = await supabase
+            .from('cart_items')
+            .select(`
+                id,
+                user_phone,
+                product_id,
+                quantity,
+                created_at,
+                updated_at,
+                inventory (
+                    id,
+                    saree_name,
+                    selling_price,
+                    fabric,
+                    color,
+                    sku,
+                    barcode,
+                    stock
+                )
+            `)
+            .order('updated_at', { ascending: false });
+
+        if (error) throw error;
+
+        return (data || []).map((item: any) => ({
+            id: item.id,
+            userPhone: item.user_phone,
+            productId: item.product_id,
+            quantity: Number(item.quantity),
+            createdAt: item.created_at,
+            updatedAt: item.updated_at,
+            product: item.inventory ? {
+                sareeName: item.inventory.saree_name,
+                sellingPrice: Number(item.inventory.selling_price),
+                fabric: item.inventory.fabric,
+                color: item.inventory.color,
+                sku: item.inventory.sku || '',
+                barcode: item.inventory.barcode || '',
+                stock: Number(item.inventory.stock),
+            } : undefined
+        }));
+    },
+
+    deleteCartItem: async (id: string): Promise<void> => {
+        const { error } = await supabase
+            .from('cart_items')
+            .delete()
+            .eq('id', id);
+
+        if (error) throw error;
+    },
+
+    clearCartForUser: async (userPhone: string): Promise<void> => {
+        const { error } = await supabase
+            .from('cart_items')
+            .delete()
+            .eq('user_phone', userPhone);
+
+        if (error) throw error;
     }
 };
+
+export interface CartItem {
+    id: string;
+    userPhone: string;
+    productId: string;
+    quantity: number;
+    createdAt: string;
+    updatedAt: string;
+    product?: {
+        sareeName: string;
+        sellingPrice: number;
+        fabric: string;
+        color: string;
+        sku?: string;
+        barcode?: string;
+        stock: number;
+    };
+}
+

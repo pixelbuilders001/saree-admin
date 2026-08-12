@@ -110,6 +110,26 @@ CREATE POLICY "Allow authenticated delete on sbs-inventory-images" ON storage.ob
     FOR DELETE TO authenticated USING (bucket_id = 'sbs-inventory-images');
 
 
+-- 4b. Supabase Storage Policies for sbs-categories bucket
+-- Note: Make sure the bucket 'sbs-categories' is created in the Supabase Storage dashboard first.
+
+-- Enable SELECT (Read) access for everyone
+CREATE POLICY "Allow public read access on sbs-categories" ON storage.objects
+    FOR SELECT TO public USING (bucket_id = 'sbs-categories');
+
+-- Enable INSERT (Upload) access for authenticated users
+CREATE POLICY "Allow authenticated insert on sbs-categories" ON storage.objects
+    FOR INSERT TO authenticated WITH CHECK (bucket_id = 'sbs-categories');
+
+-- Enable UPDATE access for authenticated users
+CREATE POLICY "Allow authenticated update on sbs-categories" ON storage.objects
+    FOR UPDATE TO authenticated USING (bucket_id = 'sbs-categories');
+
+-- Enable DELETE access for authenticated users
+CREATE POLICY "Allow authenticated delete on sbs-categories" ON storage.objects
+    FOR DELETE TO authenticated USING (bucket_id = 'sbs-categories');
+
+
 -- 5. Create Categories Table
 CREATE TABLE public.categories (
   id uuid not null default gen_random_uuid (),
