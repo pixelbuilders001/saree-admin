@@ -290,11 +290,11 @@ export const ordersService = {
     },
 
     getActiveCartItems: async (): Promise<CartItem[]> => {
-        const { data, error } = await supabase
+        const { data: cartData, error: cartError } = await supabase
             .from('cart_items')
             .select(`
                 id,
-                user_phone,
+                user_id,
                 product_id,
                 quantity,
                 created_at,
@@ -312,25 +312,48 @@ export const ordersService = {
             `)
             .order('updated_at', { ascending: false });
 
-        if (error) throw error;
+        if (cartError) throw cartError;
 
-        return (data || []).map((item: any) => ({
-            id: item.id,
-            userPhone: item.user_phone,
-            productId: item.product_id,
-            quantity: Number(item.quantity),
-            createdAt: item.created_at,
-            updatedAt: item.updated_at,
-            product: item.inventory ? {
-                sareeName: item.inventory.saree_name,
-                sellingPrice: Number(item.inventory.selling_price),
-                fabric: item.inventory.fabric,
-                color: item.inventory.color,
-                sku: item.inventory.sku || '',
-                barcode: item.inventory.barcode || '',
-                stock: Number(item.inventory.stock),
-            } : undefined
-        }));
+        // Fetch profiles in-memory to prevent relationship-cache join issues
+        const userIds = [...new Set((cartData || []).map((item: any) => item.user_id).filter(Boolean))];
+        let profiles: any[] = [];
+        if (userIds.length > 0) {
+            const { data: profilesData, error: profilesError } = await supabase
+                .from('profiles')
+                .select('id, full_name, email, phone_number')
+                .in('id', userIds);
+            
+            if (!profilesError && profilesData) {
+                profiles = profilesData;
+            }
+        }
+
+        return (cartData || []).map((item: any) => {
+            const profile = profiles.find((p: any) => p.id === item.user_id);
+            const profilePhone = profile?.phone_number?.toString() || '';
+            const userPhoneVal = profilePhone || profile?.email || item.user_id || '';
+            const customerNameVal = profile?.full_name || '';
+
+            return {
+                id: item.id,
+                userPhone: userPhoneVal,
+                userId: item.user_id,
+                customerName: customerNameVal,
+                productId: item.product_id,
+                quantity: Number(item.quantity),
+                createdAt: item.created_at,
+                updatedAt: item.updated_at,
+                product: item.inventory ? {
+                    sareeName: item.inventory.saree_name,
+                    sellingPrice: Number(item.inventory.selling_price),
+                    fabric: item.inventory.fabric,
+                    color: item.inventory.color,
+                    sku: item.inventory.sku || '',
+                    barcode: item.inventory.barcode || '',
+                    stock: Number(item.inventory.stock),
+                } : undefined
+            };
+        });
     },
 
     deleteCartItem: async (id: string): Promise<void> => {
@@ -342,19 +365,46 @@ export const ordersService = {
         if (error) throw error;
     },
 
-    clearCartForUser: async (userPhone: string): Promise<void> => {
-        const { error } = await supabase
-            .from('cart_items')
-            .delete()
-            .eq('user_phone', userPhone);
-
-        if (error) throw error;
+    clearCartForUser: async (phoneOrUserId: string): Promise<void> => {
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(phoneOrUserId);
+        if (isUuid) {
+            const { error } = await supabase
+                .from('cart_items')
+                .delete()
+                .eq('user_id', phoneOrUserId);
+            if (error) throw error;
+        } else {
+            // Find user_id from profile phone_number or email
+            const phoneInt = parseInt(phoneOrUserId.replace(/\D/g, ''), 10);
+            const query = supabase
+                .from('profiles')
+                .select('id');
+            
+            let profilesQuery;
+            if (!isNaN(phoneInt)) {
+                profilesQuery = query.or(`phone_number.eq.${phoneInt},email.eq.${phoneOrUserId}`);
+            } else {
+                profilesQuery = query.eq('email', phoneOrUserId);
+            }
+            
+            const { data: profile } = await profilesQuery.maybeSingle();
+                
+            if (profile?.id) {
+                const { error } = await supabase
+                    .from('cart_items')
+                    .delete()
+                    .eq('user_id', profile.id);
+                if (error) throw error;
+            }
+        }
     }
 };
 
 export interface CartItem {
     id: string;
     userPhone: string;
+    userId?: string;
+    customerName?: string;
     productId: string;
     quantity: number;
     createdAt: string;

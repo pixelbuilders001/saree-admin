@@ -202,7 +202,8 @@ export default function OrdersPage() {
             
             // Try to find if they have placed an order before to get their name
             const order = orders?.find(o => o.customerPhone === phone);
-            const customerName = order ? order.customerName : 'Guest Customer';
+            const firstWithName = items.find(item => item.customerName);
+            const customerName = firstWithName?.customerName || (order ? order.customerName : 'Guest Customer');
 
             return {
                 phone,
