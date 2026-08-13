@@ -25,7 +25,8 @@ import {
     PackageOpen,
     Trash2,
     Sparkles,
-    ShoppingCart
+    ShoppingCart,
+    Printer
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -1254,6 +1255,17 @@ export default function OrdersPage() {
                                             <div className="flex justify-between font-bold text-maroon text-sm border-t border-gold/5 pt-1">
                                                 <span>Total Amount:</span>
                                                 <span className="font-mono">₹{selectedOrder.totalAmount.toLocaleString()}</span>
+                                            </div>
+                                            <div className="border-t border-gold/10 pt-2 flex gap-2">
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    className="w-full border-gold/30 hover:bg-gold/10 text-maroon text-xs font-semibold flex items-center justify-center gap-1.5 h-8"
+                                                    onClick={() => window.open(`/receipt/${selectedOrder.orderNumber}?print=true`, '_blank')}
+                                                >
+                                                    <Printer className="h-3.5 w-3.5" />
+                                                    Print / Save Receipt
+                                                </Button>
                                             </div>
                                         </div>
                                     </div>

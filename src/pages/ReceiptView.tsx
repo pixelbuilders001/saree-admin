@@ -35,6 +35,7 @@ interface ReceiptData {
     items: ReceiptItem[];
     totalAmount: number;
     discountAmount: number;
+    shippingFee?: number;
     issuedVoucherCode?: string | null;
     issuedVoucherAmount?: number | null;
     appliedVoucherCode?: string | null;
@@ -85,50 +86,89 @@ export default function ReceiptView() {
                 .maybeSingle();
 
             if (err) { setError('Failed to load receipt.'); setLoading(false); return; }
-            if (!data) { setError('Receipt not found. Please check the link.'); setLoading(false); return; }
 
-            // Query for store credits issued in this transaction (e.g. from exchange)
-            const { data: issuedCredits } = await supabase
-                .from('store_credits')
-                .select('voucher_code, original_amount')
-                .like('notes', `%${data.invoice_number}%`);
+            let receiptData: ReceiptData | null = null;
 
-            // Query for store credits applied/redeemed in this transaction
-            const { data: appliedCredits } = await supabase
-                .from('store_credits')
-                .select('voucher_code, original_amount')
-                .eq('used_in_sale_id', data.id);
+            if (data) {
+                // Query for store credits issued in this transaction (e.g. from exchange)
+                const { data: issuedCredits } = await supabase
+                    .from('store_credits')
+                    .select('voucher_code, original_amount')
+                    .like('notes', `%${data.invoice_number}%`);
 
-            const issuedVoucher = issuedCredits?.[0];
-            const appliedVoucher = appliedCredits?.[0];
+                // Query for store credits applied/redeemed in this transaction
+                const { data: appliedCredits } = await supabase
+                    .from('store_credits')
+                    .select('voucher_code, original_amount')
+                    .eq('used_in_sale_id', data.id);
 
-            const items: ReceiptItem[] = (data.sale_items || [])
-                .filter((i: any) => Number(i.quantity) !== 0)
-                .map((i: any) => {
-                    const qty = Number(i.quantity);
-                    const price = Number(i.selling_price);
-                    const isRet = qty < 0 || price < 0;
-                    return {
-                        sareeName: i.inventory?.saree_name || 'Item',
-                        quantity: Math.abs(qty),
-                        sellingPrice: isRet ? -Math.abs(price) : Math.abs(price),
-                    };
-                });
+                const issuedVoucher = issuedCredits?.[0];
+                const appliedVoucher = appliedCredits?.[0];
 
-            setReceipt({
-                invoiceNumber: data.invoice_number,
-                date: data.created_at,
-                paymentMode: data.payment_mode || 'cash',
-                customerName: (data.customers as any)?.name || null,
-                customerMobile: (data.customers as any)?.mobile || null,
-                items,
-                totalAmount: Number(data.total_amount),
-                discountAmount: Number(data.discount_amount || 0),
-                issuedVoucherCode: issuedVoucher?.voucher_code || null,
-                issuedVoucherAmount: issuedVoucher ? Number(issuedVoucher.original_amount) : null,
-                appliedVoucherCode: appliedVoucher?.voucher_code || null,
-                appliedVoucherAmount: appliedVoucher ? Number(appliedVoucher.original_amount) : null,
-            });
+                const items: ReceiptItem[] = (data.sale_items || [])
+                    .filter((i: any) => Number(i.quantity) !== 0)
+                    .map((i: any) => {
+                        const qty = Number(i.quantity);
+                        const price = Number(i.selling_price);
+                        const isRet = qty < 0 || price < 0;
+                        return {
+                            sareeName: i.inventory?.saree_name || 'Item',
+                            quantity: Math.abs(qty),
+                            sellingPrice: isRet ? -Math.abs(price) : Math.abs(price),
+                        };
+                    });
+
+                receiptData = {
+                    invoiceNumber: data.invoice_number,
+                    date: data.created_at,
+                    paymentMode: data.payment_mode || 'cash',
+                    customerName: (data.customers as any)?.name || null,
+                    customerMobile: (data.customers as any)?.mobile || null,
+                    items,
+                    totalAmount: Number(data.total_amount),
+                    discountAmount: Number(data.discount_amount || 0),
+                    issuedVoucherCode: issuedVoucher?.voucher_code || null,
+                    issuedVoucherAmount: issuedVoucher ? Number(issuedVoucher.original_amount) : null,
+                    appliedVoucherCode: appliedVoucher?.voucher_code || null,
+                    appliedVoucherAmount: appliedVoucher ? Number(appliedVoucher.original_amount) : null,
+                };
+            } else {
+                // Fallback: Check online orders table
+                const { data: orderData, error: orderErr } = await supabase
+                    .from('orders')
+                    .select(`
+                        id,
+                        order_number, created_at, payment_method, total_amount, discount, shipping_fee,
+                        customer_name, customer_phone,
+                        order_items ( quantity, unit_price, product_name )
+                    `)
+                    .eq('order_number', invoiceNumber)
+                    .maybeSingle();
+
+                if (orderErr) { setError('Failed to load receipt.'); setLoading(false); return; }
+                if (!orderData) { setError('Receipt not found. Please check the link.'); setLoading(false); return; }
+
+                const items: ReceiptItem[] = (orderData.order_items || [])
+                    .map((i: any) => ({
+                        sareeName: i.product_name || 'Item',
+                        quantity: Number(i.quantity),
+                        sellingPrice: Number(i.unit_price),
+                    }));
+
+                receiptData = {
+                    invoiceNumber: orderData.order_number,
+                    date: orderData.created_at,
+                    paymentMode: orderData.payment_method || 'cod',
+                    customerName: orderData.customer_name || null,
+                    customerMobile: orderData.customer_phone || null,
+                    items,
+                    totalAmount: Number(orderData.total_amount),
+                    discountAmount: Number(orderData.discount || 0),
+                    shippingFee: Number(orderData.shipping_fee || 0),
+                };
+            }
+
+            setReceipt(receiptData);
             setLoading(false);
         })();
     }, [invoiceNumber]);
@@ -289,17 +329,25 @@ export default function ReceiptView() {
 
                     {/* ── TOTALS ──────────────────────────────────────── */}
                     <div style={{ borderTop: '2px solid #111', paddingTop: '12px', marginTop: '4px' }}>
+                        {(receipt.discountAmount > 0 || (receipt.shippingFee && receipt.shippingFee > 0)) && (
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '48px', padding: '5px 0', borderBottom: '1px dashed #ccc', fontSize: '12.5px' }}>
+                                <span style={{ fontWeight: 'bold', letterSpacing: '0.5px' }}>SUBTOTAL</span>
+                                <span style={{ minWidth: '80px', textAlign: 'right' }}>
+                                    {fmtCurrency(receipt.items.reduce((s, i) => s + i.quantity * i.sellingPrice, 0))}
+                                </span>
+                            </div>
+                        )}
                         {receipt.discountAmount > 0 && (
-                            <>
-                                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '48px', padding: '5px 0', borderBottom: '1px dashed #ccc', fontSize: '12.5px' }}>
-                                    <span style={{ fontWeight: 'bold', letterSpacing: '0.5px' }}>SUBTOTAL</span>
-                                    <span style={{ minWidth: '80px', textAlign: 'right' }}>{fmtCurrency(subtotal)}</span>
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '48px', padding: '5px 0', borderBottom: '1px dashed #ccc', fontSize: '12.5px' }}>
-                                    <span style={{ fontWeight: 'bold', letterSpacing: '0.5px' }}>DISCOUNT</span>
-                                    <span style={{ minWidth: '80px', textAlign: 'right' }}>− {fmtCurrency(receipt.discountAmount)}</span>
-                                </div>
-                            </>
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '48px', padding: '5px 0', borderBottom: '1px dashed #ccc', fontSize: '12.5px' }}>
+                                <span style={{ fontWeight: 'bold', letterSpacing: '0.5px' }}>DISCOUNT</span>
+                                <span style={{ minWidth: '80px', textAlign: 'right' }}>− {fmtCurrency(receipt.discountAmount)}</span>
+                            </div>
+                        )}
+                        {receipt.shippingFee && receipt.shippingFee > 0 && (
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '48px', padding: '5px 0', borderBottom: '1px dashed #ccc', fontSize: '12.5px' }}>
+                                <span style={{ fontWeight: 'bold', letterSpacing: '0.5px' }}>SHIPPING FEE</span>
+                                <span style={{ minWidth: '80px', textAlign: 'right' }}>+ {fmtCurrency(receipt.shippingFee)}</span>
+                            </div>
                         )}
                         {receipt.appliedVoucherCode && (
                             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '48px', padding: '5px 0', borderBottom: '1px dashed #ccc', fontSize: '12.5px' }}>
@@ -315,7 +363,7 @@ export default function ReceiptView() {
                         )}
                         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '48px', padding: '7px 0', borderBottom: '1px dashed #ccc', fontSize: '13px' }}>
                             <span style={{ fontWeight: 'bold', letterSpacing: '0.5px' }}>
-                                {(receipt.discountAmount > 0 || receipt.appliedVoucherCode || receipt.issuedVoucherCode) ? 'TOTAL PAID' : 'SUBTOTAL'}
+                                {(receipt.discountAmount > 0 || receipt.appliedVoucherCode || receipt.issuedVoucherCode || (receipt.shippingFee && receipt.shippingFee > 0)) ? 'TOTAL PAID' : 'SUBTOTAL'}
                             </span>
                             <span style={{ fontWeight: 'bold', minWidth: '80px', textAlign: 'right' }}>
                                 {fmtCurrency(receipt.totalAmount)}

@@ -49,6 +49,7 @@ export default function CustomersPage() {
     const [selectedCustomerId, setSelectedCustomerId] = React.useState<string | null>(null);
     const [isDialogOpen, setIsDialogOpen] = React.useState(false);
     const [isEditing, setIsEditing] = React.useState(false);
+    const [customerTypeFilter, setCustomerTypeFilter] = React.useState<'all' | 'instore' | 'online'>('all');
 
     // Add Customer Form states
     const [name, setName] = React.useState('');
@@ -73,8 +74,12 @@ export default function CustomersPage() {
     // Fetch invoices for selected customer
     const { data: invoices, isLoading: isLoadingInvoices } = useQuery({
         queryKey: ['customerInvoices', selectedCustomerId],
-        queryFn: () => customerService.getCustomerInvoices(selectedCustomerId!),
-        enabled: !!selectedCustomerId
+        queryFn: () => {
+            const customer = customers?.find(c => c.customerId === selectedCustomerId);
+            const type = customer?.type || 'instore';
+            return customerService.getCustomerInvoices(selectedCustomerId!, type);
+        },
+        enabled: !!selectedCustomerId && !!customers
     });
 
     // Invoice Pagination Logic
@@ -208,21 +213,27 @@ export default function CustomersPage() {
     const filteredCustomers = React.useMemo(() => {
         if (!customers) return [];
         const term = searchTerm.toLowerCase();
-        return customers.filter(customer =>
-            customer.name.toLowerCase().includes(term) ||
-            customer.mobile.includes(term) ||
-            customer.city.toLowerCase().includes(term)
-        );
-    }, [customers, searchTerm]);
+        return customers.filter(customer => {
+            const matchesSearch = customer.name.toLowerCase().includes(term) ||
+                customer.mobile.includes(term) ||
+                customer.city.toLowerCase().includes(term) ||
+                (customer.email && customer.email.toLowerCase().includes(term));
+            
+            const matchesType = customerTypeFilter === 'all' || customer.type === customerTypeFilter;
+            
+            return matchesSearch && matchesType;
+        });
+    }, [customers, searchTerm, customerTypeFilter]);
 
     // Aggregate statistics
     const stats = React.useMemo(() => {
         if (!customers) return { totalCount: 0, totalOutlay: 0, avgSpent: 0 };
-        const totalCount = customers.length;
-        const totalOutlay = customers.reduce((sum, c) => sum + (c.totalSpent || 0), 0);
+        const filtered = customers.filter(c => customerTypeFilter === 'all' || c.type === customerTypeFilter);
+        const totalCount = filtered.length;
+        const totalOutlay = filtered.reduce((sum, c) => sum + (c.totalSpent || 0), 0);
         const avgSpent = totalCount > 0 ? Math.round(totalOutlay / totalCount) : 0;
         return { totalCount, totalOutlay, avgSpent };
-    }, [customers]);
+    }, [customers, customerTypeFilter]);
 
     const formatCurrency = (val: number) => `₹${val.toLocaleString('en-IN')}`;
 
@@ -327,15 +338,50 @@ export default function CustomersPage() {
                     </div>
 
                     <Card className="border-gold/15 shadow-sm overflow-hidden bg-white">
-                        <CardHeader className="bg-cream/10 border-b border-gold/10 p-2.5">
+                        <CardHeader className="bg-cream/10 border-b border-gold/10 p-2.5 space-y-2">
                             <div className="relative">
                                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-450" />
                                 <Input
-                                    placeholder="Search directory name, mobile, city..."
+                                    placeholder="Search name, phone, city, email..."
                                     className="pl-8 h-8 text-[11px] border-gold/20 focus-visible:ring-maroon bg-white/70"
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                 />
+                            </div>
+                            <div className="flex border border-gold/15 rounded-md overflow-hidden text-[8px] font-bold uppercase tracking-wider bg-white">
+                                <button
+                                    type="button"
+                                    onClick={() => setCustomerTypeFilter('all')}
+                                    className={`flex-1 py-1 text-center border-r border-gold/15 transition-all cursor-pointer ${
+                                        customerTypeFilter === 'all' 
+                                            ? 'bg-maroon text-gold' 
+                                            : 'text-gray-500 hover:bg-cream/5'
+                                    }`}
+                                >
+                                    All ({customers?.length || 0})
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setCustomerTypeFilter('instore')}
+                                    className={`flex-1 py-1 text-center border-r border-gold/15 transition-all cursor-pointer ${
+                                        customerTypeFilter === 'instore' 
+                                            ? 'bg-maroon text-gold' 
+                                            : 'text-gray-500 hover:bg-cream/5'
+                                    }`}
+                                >
+                                    In-store ({customers?.filter(c => c.type === 'instore').length || 0})
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setCustomerTypeFilter('online')}
+                                    className={`flex-1 py-1 text-center transition-all cursor-pointer ${
+                                        customerTypeFilter === 'online' 
+                                            ? 'bg-maroon text-gold' 
+                                            : 'text-gray-500 hover:bg-cream/5'
+                                    }`}
+                                >
+                                    Online ({customers?.filter(c => c.type === 'online').length || 0})
+                                </button>
                             </div>
                         </CardHeader>
                         <CardContent className="p-0">
@@ -375,7 +421,9 @@ export default function CustomersPage() {
                                                     </div>
                                                     <div className="min-w-0">
                                                         <h4 className="text-xs font-bold text-gray-800 truncate">{customer.name}</h4>
-                                                        <span className="text-[9px] text-gray-450 font-mono mt-0.5 block">{customer.mobile}</span>
+                                                        <span className="text-[9px] text-gray-450 font-mono mt-0.5 block truncate max-w-[150px]">
+                                                            {customer.mobile || customer.email || 'No contact info'}
+                                                        </span>
                                                     </div>
                                                 </div>
 
@@ -383,8 +431,13 @@ export default function CustomersPage() {
                                                     <div className="text-[10px] font-black font-mono text-maroon">
                                                         {formatCurrency(customer.totalSpent || 0)}
                                                     </div>
-                                                    <span className="text-[8px] text-gray-400 font-sans mt-0.5 block">
-                                                        {customer.city || 'WALK-IN'} • {customer.totalPurchases} visit(s)
+                                                    <span className="text-[8px] text-gray-405 font-sans mt-0.5 flex items-center justify-end gap-1">
+                                                        {customer.type === 'online' ? (
+                                                            <span className="px-1 py-0.2 rounded text-[7px] font-bold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-100">Online</span>
+                                                        ) : (
+                                                            <span className="px-1 py-0.2 rounded text-[7px] font-bold uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-100">In-store</span>
+                                                        )}
+                                                        <span>• {customer.type === 'online' ? 'Web' : (customer.city || 'WALK-IN')} • {customer.totalPurchases} order(s)</span>
                                                     </span>
                                                 </div>
                                             </div>
@@ -434,7 +487,11 @@ export default function CustomersPage() {
                                         </div>
 
                                         <div className="flex items-center gap-1.5">
-                                            {!isEditing ? (
+                                            {selectedCustomer?.type === 'online' ? (
+                                                <span className="text-[8px] bg-blue-50 text-blue-700 font-bold uppercase tracking-wider px-2 py-0.5 border border-blue-200 rounded">
+                                                    Managed Online
+                                                </span>
+                                            ) : !isEditing ? (
                                                 <>
                                                     <Button
                                                         variant="outline"
@@ -478,13 +535,26 @@ export default function CustomersPage() {
                                                         {selectedCustomer?.name?.charAt(0).toUpperCase()}
                                                     </div>
                                                     <div className="space-y-1">
-                                                        <h2 className="text-sm font-bold text-gray-900 leading-none">{selectedCustomer?.name}</h2>
+                                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                                            <h2 className="text-sm font-bold text-gray-900 leading-none">{selectedCustomer?.name}</h2>
+                                                            {selectedCustomer?.type === 'online' ? (
+                                                                <span className="px-1 py-0.2 rounded text-[7px] font-bold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-100">Online Profile</span>
+                                                            ) : (
+                                                                <span className="px-1 py-0.2 rounded text-[7px] font-bold uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-100">In-store Profile</span>
+                                                            )}
+                                                        </div>
                                                         
                                                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
                                                             <div className="flex items-center text-[10px] text-gray-600 font-mono">
                                                                 <Phone className="h-3 w-3 text-gold mr-1" />
-                                                                {selectedCustomer?.mobile}
+                                                                {selectedCustomer?.mobile || 'No Phone'}
                                                             </div>
+                                                            {selectedCustomer?.email && (
+                                                                <div className="flex items-center text-[10px] text-gray-600 font-mono">
+                                                                    <span className="text-gold mr-1">✉</span>
+                                                                    {selectedCustomer?.email}
+                                                                </div>
+                                                            )}
                                                             {selectedCustomer?.city && (
                                                                 <div className="flex items-center text-[10px] text-gray-600">
                                                                     <MapPin className="h-3 w-3 text-gold mr-1" />
@@ -505,13 +575,15 @@ export default function CustomersPage() {
                                                         </span>
                                                     </div>
                                                     <div className="text-center border-l border-r border-gold/10">
-                                                        <span className="text-[7.5px] uppercase font-bold text-gray-450 block">Visit Frequency</span>
+                                                        <span className="text-[7.5px] uppercase font-bold text-gray-450 block">
+                                                            {selectedCustomer?.type === 'online' ? 'Order Count' : 'Visit Frequency'}
+                                                        </span>
                                                         <span className="text-xs font-black font-mono text-maroon block mt-0.5">
-                                                            {selectedCustomer?.totalPurchases || 0} bills
+                                                            {selectedCustomer?.totalPurchases || 0} {selectedCustomer?.type === 'online' ? 'orders' : 'bills'}
                                                         </span>
                                                     </div>
                                                     <div className="text-center">
-                                                        <span className="text-[7.5px] uppercase font-bold text-gray-450 block">Average Ticket (ATV)</span>
+                                                        <span className="text-[7.5px] uppercase font-bold text-gray-455 block">Average Ticket (ATV)</span>
                                                         <span className="text-xs font-black font-mono text-emerald-700 block mt-0.5">
                                                             {formatCurrency(
                                                                 selectedCustomer && selectedCustomer.totalPurchases > 0 
@@ -587,18 +659,18 @@ export default function CustomersPage() {
                                     <CardHeader className="bg-cream/10 border-b border-gold/10 p-3">
                                         <CardTitle className="text-xs font-bold uppercase tracking-widest text-maroon font-serif flex items-center gap-1.5">
                                             <Receipt className="h-3.5 w-3.5" />
-                                            Purchase Timeline Ledger
+                                            {selectedCustomer?.type === 'online' ? 'Online Orders Ledger' : 'Purchase Timeline Ledger'}
                                         </CardTitle>
                                     </CardHeader>
                                     <CardContent className="p-0">
                                         {isLoadingInvoices ? (
                                             <div className="py-8 text-center text-gray-400 text-xs italic">
                                                 <Loader2 className="h-4 w-4 animate-spin mx-auto mb-1 text-maroon" />
-                                                Loading invoices...
+                                                Loading records...
                                             </div>
                                         ) : !invoices || invoices.length === 0 ? (
                                             <div className="py-8 text-center text-gray-400 text-xs italic">
-                                                No invoices registered for this profile.
+                                                {selectedCustomer?.type === 'online' ? 'No online orders registered for this profile.' : 'No invoices registered for this profile.'}
                                             </div>
                                         ) : (
                                             <div className="overflow-x-auto">
@@ -606,7 +678,9 @@ export default function CustomersPage() {
                                                     <TableHeader className="bg-cream/5">
                                                         <TableRow className="border-b border-gold/10 hover:bg-transparent">
                                                             <TableHead className="h-7 text-[8px] font-bold text-maroon py-0.5">Date</TableHead>
-                                                            <TableHead className="h-7 text-[8px] font-bold text-maroon py-0.5">Invoice #</TableHead>
+                                                            <TableHead className="h-7 text-[8px] font-bold text-maroon py-0.5">
+                                                                {selectedCustomer?.type === 'online' ? 'Order #' : 'Invoice #'}
+                                                            </TableHead>
                                                             <TableHead className="h-7 text-[8px] font-bold text-maroon py-0.5">Details (Saree Models)</TableHead>
                                                             <TableHead className="h-7 text-[8px] font-bold text-maroon text-right py-0.5">Amount</TableHead>
                                                         </TableRow>
@@ -626,10 +700,10 @@ export default function CustomersPage() {
                                                                             <button
                                                                                 onClick={() => {
                                                                                     navigator.clipboard.writeText(inv.invoice_number || '');
-                                                                                    toast.success('Invoice # copied!');
+                                                                                    toast.success(selectedCustomer?.type === 'online' ? 'Order # copied!' : 'Invoice # copied!');
                                                                                 }}
                                                                                 className="text-gray-400 hover:text-maroon p-0.5 rounded hover:bg-gray-100 transition-all cursor-pointer flex-shrink-0"
-                                                                                title="Copy Invoice Number"
+                                                                                title={selectedCustomer?.type === 'online' ? 'Copy Order Number' : 'Copy Invoice Number'}
                                                                             >
                                                                                 <Copy className="h-2.5 w-2.5" />
                                                                             </button>
