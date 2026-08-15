@@ -296,3 +296,111 @@ CREATE POLICY "Allow authenticated update on order_status_history" ON public.ord
 CREATE POLICY "Allow authenticated delete on order_status_history" ON public.order_status_history
     FOR DELETE TO authenticated USING (true);
 
+
+-- 7. Create Product Reviews Table
+create table public.product_reviews (
+  id uuid not null default gen_random_uuid (),
+  product_id text not null,
+  user_id uuid not null,
+  order_id uuid not null,
+  rating integer not null,
+  title text null,
+  review_text text null,
+  status text not null default 'pending'::text,
+  is_verified_purchase boolean not null default true,
+  helpful_count integer not null default 0,
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now(),
+  constraint product_reviews_pkey primary key (id),
+  constraint product_reviews_unique_review unique (user_id, order_id, product_id),
+  constraint product_reviews_user_id_fkey foreign KEY (user_id) references auth.users (id) on delete CASCADE,
+  constraint product_reviews_product_id_fkey foreign KEY (product_id) references inventory (id) on delete CASCADE,
+  constraint product_reviews_order_id_fkey foreign KEY (order_id) references orders (id) on delete CASCADE,
+  constraint product_reviews_rating_check check (
+    (
+      (rating >= 1)
+      and (rating <= 5)
+    )
+  ),
+  constraint product_reviews_status_check check (
+    (
+      status = any (
+        array[
+          'pending'::text,
+          'approved'::text,
+          'rejected'::text
+        ]
+      )
+    )
+  )
+) TABLESPACE pg_default;
+
+create index IF not exists idx_product_reviews_product_id on public.product_reviews using btree (product_id) TABLESPACE pg_default;
+create index IF not exists idx_product_reviews_status on public.product_reviews using btree (status) TABLESPACE pg_default;
+create index IF not exists idx_product_reviews_user_id on public.product_reviews using btree (user_id) TABLESPACE pg_default;
+create index IF not exists idx_product_reviews_order_id on public.product_reviews using btree (order_id) TABLESPACE pg_default;
+
+-- Enable Row Level Security (RLS) on Product Reviews
+ALTER TABLE public.product_reviews ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow public select on product_reviews" ON public.product_reviews
+    FOR SELECT TO public USING (true);
+
+CREATE POLICY "Allow authenticated insert on product_reviews" ON public.product_reviews
+    FOR INSERT TO authenticated WITH CHECK (
+        (auth.uid() = user_id) OR
+        (EXISTS (SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.role = 'admin'))
+    );
+
+CREATE POLICY "Allow authenticated update on product_reviews" ON public.product_reviews
+    FOR UPDATE TO authenticated USING (
+        (auth.uid() = user_id) OR
+        (EXISTS (SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.role = 'admin'))
+    );
+
+CREATE POLICY "Allow authenticated delete on product_reviews" ON public.product_reviews
+    FOR DELETE TO authenticated USING (
+        (auth.uid() = user_id) OR
+        (EXISTS (SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.role = 'admin'))
+    );
+
+
+-- 8. Create Wishlist Table
+create table public.wishlist (
+  id uuid not null default gen_random_uuid (),
+  user_id uuid not null,
+  product_id text not null,
+  created_at timestamp with time zone not null default now(),
+  constraint wishlist_pkey primary key (id),
+  constraint unique_user_product unique (user_id, product_id),
+  constraint wishlist_product_id_fkey foreign KEY (product_id) references inventory (id) on delete CASCADE,
+  constraint wishlist_user_id_fkey foreign KEY (user_id) references auth.users (id) on delete CASCADE
+) TABLESPACE pg_default;
+
+-- Enable Row Level Security (RLS) on Wishlist
+ALTER TABLE public.wishlist ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow public select on wishlist" ON public.wishlist
+    FOR SELECT TO public USING (
+        (auth.uid() = user_id) OR
+        (EXISTS (SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.role = 'admin'))
+    );
+
+CREATE POLICY "Allow authenticated insert on wishlist" ON public.wishlist
+    FOR INSERT TO authenticated WITH CHECK (
+        (auth.uid() = user_id) OR
+        (EXISTS (SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.role = 'admin'))
+    );
+
+CREATE POLICY "Allow authenticated update on wishlist" ON public.wishlist
+    FOR UPDATE TO authenticated USING (
+        (auth.uid() = user_id) OR
+        (EXISTS (SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.role = 'admin'))
+    );
+
+CREATE POLICY "Allow authenticated delete on wishlist" ON public.wishlist
+    FOR DELETE TO authenticated USING (
+        (auth.uid() = user_id) OR
+        (EXISTS (SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.role = 'admin'))
+    );
+

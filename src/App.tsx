@@ -17,6 +17,9 @@ import ExpensesPage from '@/pages/Expenses';
 import WeaversPage from '@/pages/Weavers';
 import SettingsPage from '@/pages/Settings';
 import ReceiptView from '@/pages/ReceiptView';
+import ReviewsPage from '@/pages/Reviews';
+import WishlistPage from '@/pages/Wishlist';
+import StorefrontReportsPage from '@/pages/StorefrontReports';
 import { supabase } from '@/lib/supabase';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -135,6 +138,9 @@ function App() {
             <Route path="expenses" element={<ExpensesPage />} />
             <Route path="weavers" element={<WeaversPage />} />
             <Route path="settings" element={<SettingsPage />} />
+            <Route path="reviews" element={<ReviewsPage />} />
+            <Route path="wishlist" element={<WishlistPage />} />
+            <Route path="storefront-reports" element={<StorefrontReportsPage />} />
           </Route>
           <Route path="/receipt/:invoiceNumber" element={<ReceiptView />} />
           <Route path="*" element={<Navigate to="/" replace />} />

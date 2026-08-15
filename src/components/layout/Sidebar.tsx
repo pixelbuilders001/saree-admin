@@ -14,7 +14,9 @@ import {
     Settings,
     Shield,
     User,
-    ShoppingBag
+    ShoppingBag,
+    MessageSquare,
+    Heart
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -38,6 +40,14 @@ const navGroups = [
         items: [
             { icon: Truck, label: 'Weavers Ledger', path: '/weavers' },
             { icon: Users, label: 'Customers', path: '/customers' },
+        ]
+    },
+    {
+        title: "Storefront & Engagement",
+        items: [
+            { icon: MessageSquare, label: 'Reviews', path: '/reviews' },
+            { icon: Heart, label: 'Wishlists', path: '/wishlist' },
+            { icon: BarChart3, label: 'Online Reports', path: '/storefront-reports' },
         ]
     },
     {

@@ -1,6 +1,8 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { dashboardService } from '@/services/dashboardService';
+import { storefrontService } from '@/services/storefrontService';
+import { ordersService } from '@/services/ordersService';
 import { motion } from 'framer-motion';
 import {
     TrendingUp,
@@ -18,7 +20,9 @@ import {
     Scale,
     Activity,
     Layers3,
-    ArrowUpRight
+    ArrowUpRight,
+    Heart,
+    ShoppingCart
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -33,10 +37,22 @@ import {
 } from 'recharts';
 
 export default function DashboardPage() {
-    const { data: stats, isLoading, isFetching, refetch } = useQuery({
+    const { data: stats, isLoading: isStatsLoading, isFetching, refetch } = useQuery({
         queryKey: ['dashboardStats'],
         queryFn: dashboardService.getStats
     });
+
+    const { data: wishlistItems, isLoading: isWishlistLoading } = useQuery({
+        queryKey: ['wishlistItems'],
+        queryFn: storefrontService.getWishlistItems
+    });
+
+    const { data: cartItems, isLoading: isCartsLoading } = useQuery({
+        queryKey: ['activeCartItems'],
+        queryFn: ordersService.getActiveCartItems
+    });
+
+    const isLoading = isStatsLoading || isWishlistLoading || isCartsLoading;
 
     const [activeTab, setActiveTab] = React.useState<'sales' | 'expenses' | 'weavers'>('sales');
 
@@ -52,6 +68,9 @@ export default function DashboardPage() {
     }
 
     const formatCurrency = (val: number) => `₹${(val || 0).toLocaleString('en-IN')}`;
+
+    const activeCartCount = cartItems ? new Set(cartItems.map(item => item.userPhone)).size : 0;
+    const totalCartItemsCount = cartItems?.reduce((sum, item) => sum + item.quantity, 0) || 0;
 
     // Metric cards configured for high-density, smaller height layout
     const statCards = [
@@ -80,18 +99,18 @@ export default function DashboardPage() {
             iconColor: 'bg-emerald-100 text-emerald-700'
         },
         {
-            title: 'OVERHEAD EXPENSES',
-            value: formatCurrency(stats?.totalExpenses || 0),
-            subtitle: 'Rent, utility bills, salaries',
-            icon: ArrowDownRight,
+            title: 'WISHLIST INTEREST',
+            value: `${wishlistItems?.length || 0} Items`,
+            subtitle: 'Products saved by customers',
+            icon: Heart,
             color: 'text-rose-700 bg-rose-50/60 border-rose-200/50',
             iconColor: 'bg-rose-100 text-rose-700'
         },
         {
-            title: 'WEAVER OUTSTANDINGS',
-            value: formatCurrency(stats?.weaverOutstanding || 0),
-            subtitle: `Due across ${stats?.totalWeavers || 0} weavers`,
-            icon: Layers,
+            title: 'ACTIVE SHOPPING CARTS',
+            value: `${activeCartCount} Carts`,
+            subtitle: `${totalCartItemsCount} items left in carts`,
+            icon: ShoppingCart,
             color: 'text-amber-700 bg-amber-50/60 border-amber-200/50',
             iconColor: 'bg-amber-100 text-amber-700'
         },
