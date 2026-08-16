@@ -17,7 +17,8 @@ import {
     ShoppingBag,
     MessageSquare,
     Heart,
-    Megaphone
+    Megaphone,
+    Bell
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -47,6 +48,7 @@ const navGroups = [
         title: "Marketing",
         items: [
             { icon: Megaphone, label: 'Campaigns', path: '/campaigns' },
+            { icon: Bell, label: 'Push Notifications', path: '/push-notifications' },
         ]
     },
     {
