@@ -436,7 +436,7 @@ CREATE TABLE IF NOT EXISTS public.campaigns (
   id uuid not null default gen_random_uuid (),
   name text not null,
   slug text not null,
-  title text not null,
+  title text null,
   subtitle text null,
   desktop_banner_url text null,
   mobile_banner_url text null,
@@ -515,6 +515,37 @@ DROP POLICY IF EXISTS "Allow authenticated delete on campaign_products" ON publi
 CREATE POLICY "Allow campaign_products authenticated delete" ON public.campaign_products
     FOR DELETE TO authenticated USING (true);
 
+-- 11. Create Homepage Campaign Slots Table and Policies
+CREATE TABLE IF NOT EXISTS public.homepage_campaign_slots (
+  id uuid not null default gen_random_uuid (),
+  slot_key text not null,
+  slot_name text not null,
+  campaign_id uuid references public.campaigns (id) on delete set null,
+  is_visible boolean not null default false,
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now(),
+  constraint homepage_campaign_slots_pkey primary key (id),
+  constraint homepage_campaign_slots_slot_key_key unique (slot_key)
+);
+
+ALTER TABLE public.homepage_campaign_slots ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow public select on homepage_campaign_slots" ON public.homepage_campaign_slots;
+CREATE POLICY "Allow public select on homepage_campaign_slots" ON public.homepage_campaign_slots
+    FOR SELECT TO public USING (true);
+
+DROP POLICY IF EXISTS "Allow authenticated insert on homepage_campaign_slots" ON public.homepage_campaign_slots;
+CREATE POLICY "Allow homepage_campaign_slots authenticated insert" ON public.homepage_campaign_slots
+    FOR INSERT TO authenticated WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow authenticated update on homepage_campaign_slots" ON public.homepage_campaign_slots;
+CREATE POLICY "Allow homepage_campaign_slots authenticated update" ON public.homepage_campaign_slots
+    FOR UPDATE TO authenticated USING (true);
+
+DROP POLICY IF EXISTS "Allow authenticated delete on homepage_campaign_slots" ON public.homepage_campaign_slots;
+CREATE POLICY "Allow homepage_campaign_slots authenticated delete" ON public.homepage_campaign_slots
+    FOR DELETE TO authenticated USING (true);
+
 
 -- OPTIONAL: IF YOU PREFER NOT TO USE ANY ROW LEVEL SECURITY (RLS) FOR CAMPAIGNS & BANNERS,
 -- RUN THESE STATEMENT BLOCKS IN YOUR SUPABASE SQL EDITOR TO MAKE EVERYTHING COMPLETELY PUBLIC.
@@ -523,6 +554,7 @@ CREATE POLICY "Allow campaign_products authenticated delete" ON public.campaign_
 -- 1. Disable database table RLS (Allows read & write for anyone)
 ALTER TABLE public.campaigns DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.campaign_products DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.homepage_campaign_slots DISABLE ROW LEVEL SECURITY;
 
 -- 2. Grant public read & write access to the storage bucket
 DROP POLICY IF EXISTS "Allow public read access on campaign-banners" ON storage.objects;
@@ -544,6 +576,7 @@ DROP POLICY IF EXISTS "Allow authenticated delete on campaign-banners" ON storag
 CREATE POLICY "Allow public delete on campaign-banners" ON storage.objects
     FOR DELETE TO public USING (bucket_id = 'campaign-banners');
 */
+
 
 
 

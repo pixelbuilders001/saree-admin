@@ -1,7 +1,8 @@
 import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { campaignService, type Campaign } from '@/services/campaignService';
+import { campaignService, type Campaign, type HomepageSlot } from '@/services/campaignService';
 import { inventoryService, type Saree } from '@/services/inventoryService';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
     Megaphone,
     Plus,
@@ -73,6 +74,9 @@ export default function CampaignsPage() {
     const [formSortOrder, setFormSortOrder] = React.useState('0');
     const [selectedProductIds, setSelectedProductIds] = React.useState<string[]>([]);
 
+    // Slot placements state
+    const [slotEdits, setSlotEdits] = React.useState<Record<string, { campaignId: string | null; isVisible: boolean }>>({});
+
     // Banner file upload (used for both desktop & mobile views)
     const [bannerFile, setBannerFile] = React.useState<File | null>(null);
     const [bannerPreviewUrl, setBannerPreviewUrl] = React.useState<string | null>(null);
@@ -91,6 +95,73 @@ export default function CampaignsPage() {
         queryKey: ['sarees'],
         queryFn: inventoryService.getSarees
     });
+
+    const { data: slots, isLoading: isSlotsLoading } = useQuery({
+        queryKey: ['homepage-slots'],
+        queryFn: campaignService.getHomepageSlots
+    });
+
+    React.useEffect(() => {
+        if (slots) {
+            const initialEdits: Record<string, { campaignId: string | null; isVisible: boolean }> = {};
+            slots.forEach(slot => {
+                initialEdits[slot.id] = {
+                    campaignId: slot.campaignId,
+                    isVisible: slot.isVisible
+                };
+            });
+            setSlotEdits(initialEdits);
+        }
+    }, [slots]);
+
+    const saveSlotMutation = useMutation({
+        mutationFn: async ({ id, campaignId, isVisible }: { id: string; campaignId: string | null; isVisible: boolean }) => {
+            return campaignService.updateHomepageSlot(id, campaignId, isVisible);
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['homepage-slots'] });
+            toast.success('Homepage slot placement updated successfully');
+        },
+        onError: (err: any) => {
+            toast.error(err.message || 'Failed to update slot placement');
+        }
+    });
+
+    const handleSlotCampaignChange = (slotId: string, campaignId: string) => {
+        setSlotEdits(prev => ({
+            ...prev,
+            [slotId]: {
+                ...prev[slotId],
+                campaignId: campaignId === 'none' ? null : campaignId
+            }
+        }));
+    };
+
+    const handleSlotVisibilityToggle = (slotId: string) => {
+        setSlotEdits(prev => ({
+            ...prev,
+            [slotId]: {
+                ...prev[slotId],
+                isVisible: !prev[slotId]?.isVisible
+            }
+        }));
+    };
+
+    const handleSaveSlot = (slotId: string) => {
+        const edit = slotEdits[slotId];
+        if (!edit) return;
+        saveSlotMutation.mutate({
+            id: slotId,
+            campaignId: edit.campaignId,
+            isVisible: edit.isVisible
+        });
+    };
+
+    const isSlotDirty = (slot: HomepageSlot) => {
+        const edit = slotEdits[slot.id];
+        if (!edit) return false;
+        return edit.campaignId !== slot.campaignId || edit.isVisible !== slot.isVisible;
+    };
 
     // Automatically generate slug from name
     const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -141,7 +212,7 @@ export default function CampaignsPage() {
         setEditingCampaign(campaign);
         setFormName(campaign.name);
         setFormSlug(campaign.slug);
-        setFormTitle(campaign.title);
+        setFormTitle(campaign.title || '');
         setFormSubtitle(campaign.subtitle || '');
         setFormStartDate(formatToDateTimeLocal(campaign.startDate));
         setFormEndDate(formatToDateTimeLocal(campaign.endDate));
@@ -168,7 +239,6 @@ export default function CampaignsPage() {
             // Validation
             if (!formName.trim()) throw new Error('Campaign Name is required');
             if (!formSlug.trim()) throw new Error('Campaign Slug is required');
-            if (!formTitle.trim()) throw new Error('Campaign Title is required');
             if (!formStartDate) throw new Error('Start Date is required');
             if (!formEndDate) throw new Error('End Date is required');
 
@@ -179,7 +249,7 @@ export default function CampaignsPage() {
             const campaignData = {
                 name: formName.trim(),
                 slug: formSlug.trim(),
-                title: formTitle.trim(),
+                title: formTitle.trim() || null,
                 subtitle: formSubtitle.trim() || null,
                 startDate: new Date(formStartDate).toISOString(),
                 endDate: new Date(formEndDate).toISOString(),
@@ -296,204 +366,440 @@ export default function CampaignsPage() {
 
     return (
         <div className="space-y-4 max-w-7xl mx-auto px-2">
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-gold/10 pb-3 gap-2">
-                <div className="flex items-center gap-2">
-                    <div className="p-1.5 bg-maroon/10 text-maroon rounded">
-                        <Megaphone className="h-5 w-5" />
+            <Tabs defaultValue="list" className="space-y-4">
+                {/* Header */}
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-gold/10 pb-3 gap-2">
+                    <div className="flex items-center gap-2">
+                        <div className="p-1.5 bg-maroon/10 text-maroon rounded">
+                            <Megaphone className="h-5 w-5" />
+                        </div>
+                        <div>
+                            <h1 className="text-xl font-bold font-serif text-maroon tracking-wider">CAMPAIGNS & PLACEMENTS</h1>
+                            <p className="text-xs text-gray-500 font-sans font-medium">Manage homepage banner slots, flash sales, collections and promotion campaigns</p>
+                        </div>
                     </div>
-                    <div>
-                        <h1 className="text-xl font-bold font-serif text-maroon tracking-wider">CAMPAIGNS</h1>
-                        <p className="text-xs text-gray-500 font-sans">Manage homepage banners, flash sales, collections and promotion campaigns</p>
-                    </div>
+                    
+                    <TabsList className="bg-slate-100 p-0.5 border border-slate-200 h-9 rounded-lg">
+                        <TabsTrigger value="list" className="text-xs font-bold px-3 py-1.5 uppercase tracking-wider data-[state=active]:bg-white data-[state=active]:text-maroon">
+                            Campaigns
+                        </TabsTrigger>
+                        <TabsTrigger value="placements" className="text-xs font-bold px-3 py-1.5 uppercase tracking-wider data-[state=active]:bg-white data-[state=active]:text-maroon">
+                            Slot Placements
+                        </TabsTrigger>
+                    </TabsList>
                 </div>
-                <Button 
-                    onClick={handleCreateOpen}
-                    className="bg-maroon hover:bg-maroon-dark text-white font-bold text-xs uppercase tracking-wider py-1.5 h-9"
-                >
-                    <Plus className="h-4 w-4 mr-1.5" />
-                    Create Campaign
-                </Button>
-            </div>
 
-            {/* Campaign Table */}
-            <Card className="border-gold/10 shadow-sm bg-white overflow-hidden">
-                {isCampaignsLoading ? (
-                    <div className="py-24 text-center text-maroon/50 text-xs italic">
-                        <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2 text-maroon" />
-                        Fetching marketing campaigns...
-                    </div>
-                ) : !campaigns || campaigns.length === 0 ? (
-                    <div className="py-16 text-center">
-                        <Megaphone className="h-8 w-8 mx-auto text-gray-400 mb-2" />
-                        <p className="text-xs text-gray-500 italic mb-3">No campaigns created yet</p>
+                <TabsContent value="list" className="space-y-4 outline-none">
+                    {/* Campaign Action bar */}
+                    <div className="flex justify-between items-center bg-slate-50 border border-gold/5 p-3 rounded-lg">
+                        <span className="text-xs font-semibold text-gray-600">Total active & draft campaigns: {campaigns?.length || 0}</span>
                         <Button 
-                            variant="outline"
                             onClick={handleCreateOpen}
-                            className="border-maroon/20 text-maroon hover:bg-maroon/5 text-xs font-semibold"
+                            className="bg-maroon hover:bg-maroon-dark text-white font-bold text-xs uppercase tracking-wider py-1.5 h-9"
                         >
-                            Create Your First Campaign
+                            <Plus className="h-4 w-4 mr-1.5" />
+                            Create Campaign
                         </Button>
                     </div>
-                ) : (
-                    <div className="overflow-x-auto">
-                        <Table>
-                            <TableHeader className="bg-slate-50">
-                                <TableRow className="border-b border-gold/10">
-                                    <TableHead className="w-[180px] text-xs font-bold text-maroon uppercase tracking-wider">Campaign Details</TableHead>
-                                    <TableHead className="w-[100px] text-xs font-bold text-maroon uppercase tracking-wider">Banner</TableHead>
-                                    <TableHead className="w-[150px] text-xs font-bold text-maroon uppercase tracking-wider">Campaign Title</TableHead>
-                                    <TableHead className="w-[180px] text-xs font-bold text-maroon uppercase tracking-wider">Duration</TableHead>
-                                    <TableHead className="w-[90px] text-xs font-bold text-maroon uppercase tracking-wider">Products</TableHead>
-                                    <TableHead className="w-[80px] text-xs font-bold text-maroon uppercase tracking-wider">Sort</TableHead>
-                                    <TableHead className="w-[90px] text-xs font-bold text-maroon uppercase tracking-wider">Status</TableHead>
-                                    <TableHead className="w-[140px] text-right text-xs font-bold text-maroon uppercase tracking-wider">Actions</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {campaigns.map((camp) => {
-                                    const now = new Date();
-                                    const start = new Date(camp.startDate);
-                                    const end = new Date(camp.endDate);
-                                    const isCurrentlyRunning = camp.status === 'active' && now >= start && now <= end;
-                                    const isUpcoming = camp.status === 'active' && now < start;
-                                    const isEnded = now > end;
 
-                                    return (
-                                        <TableRow key={camp.id} className="border-b border-gold/5 hover:bg-slate-50/50">
-                                            {/* Details */}
-                                            <TableCell className="py-3">
-                                                <div className="font-bold text-xs text-gray-900 truncate" title={camp.name}>
-                                                    {camp.name}
-                                                </div>
-                                                <div className="text-[10px] text-gray-500 font-mono flex items-center gap-1 mt-0.5">
-                                                    <Tag className="h-2.5 w-2.5 text-gold/80" />
-                                                    {camp.slug}
-                                                </div>
-                                            </TableCell>
-
-                                            {/* Banner */}
-                                            <TableCell className="py-3">
-                                                <div className="relative group cursor-zoom-in" onClick={() => handlePreviewOpen(camp)}>
-                                                    {camp.desktopBannerUrl ? (
-                                                        <img 
-                                                            src={camp.desktopBannerUrl} 
-                                                            alt="Campaign Banner" 
-                                                            className="h-8 w-16 object-cover rounded border border-gray-200"
-                                                        />
-                                                    ) : (
-                                                        <div className="h-8 w-16 bg-gray-100 flex items-center justify-center rounded border border-gray-200 text-gray-400">
-                                                            <Monitor className="h-3.5 w-3.5" />
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </TableCell>
-
-                                            {/* Text headings */}
-                                            <TableCell className="py-3">
-                                                <div className="text-xs font-semibold text-gray-800 line-clamp-1">
-                                                    {camp.title}
-                                                </div>
-                                                <div className="text-[10px] text-gray-400 line-clamp-1">
-                                                    {camp.subtitle || '—'}
-                                                </div>
-                                            </TableCell>
-
-                                            {/* Dates */}
-                                            <TableCell className="py-3">
-                                                <div className="text-[10.5px] text-gray-700 flex items-center gap-1">
-                                                    <Calendar className="h-3 w-3 text-maroon/60" />
-                                                    <span>{new Date(camp.startDate).toLocaleDateString()}</span>
-                                                    <span className="text-gray-400">to</span>
-                                                    <span>{new Date(camp.endDate).toLocaleDateString()}</span>
-                                                </div>
-                                                <div className="mt-1 flex items-center gap-1">
-                                                    {camp.status === 'active' && (
-                                                        isCurrentlyRunning ? (
-                                                            <span className="text-[8px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-1 py-0.2 rounded uppercase tracking-wider">
-                                                                Running Now
-                                                            </span>
-                                                        ) : isUpcoming ? (
-                                                            <span className="text-[8px] font-bold bg-blue-50 text-blue-700 border border-blue-200 px-1 py-0.2 rounded uppercase tracking-wider">
-                                                                Upcoming
-                                                            </span>
-                                                        ) : isEnded ? (
-                                                            <span className="text-[8px] font-bold bg-gray-50 text-gray-600 border border-gray-200 px-1 py-0.2 rounded uppercase tracking-wider">
-                                                                Ended
-                                                            </span>
-                                                        ) : null
-                                                    )}
-                                                </div>
-                                            </TableCell>
-
-                                            {/* Products count */}
-                                            <TableCell className="py-3 font-mono text-xs text-gray-700">
-                                                <Badge variant="secondary" className="bg-slate-100 text-slate-800 font-bold border border-slate-200 px-2 py-0.5">
-                                                    {camp.productIds?.length || 0} Items
-                                                </Badge>
-                                            </TableCell>
-
-                                            {/* Sort Order */}
-                                            <TableCell className="py-3 font-mono text-xs text-gray-600">
-                                                {camp.sortOrder}
-                                            </TableCell>
-
-                                            {/* Status */}
-                                            <TableCell className="py-3">
-                                                <span className={`inline-flex px-2 py-0.5 rounded text-[9.5px] font-bold uppercase tracking-wider border ${
-                                                    camp.status === 'active'
-                                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                                        : camp.status === 'inactive'
-                                                        ? 'bg-rose-50 text-rose-700 border-rose-200'
-                                                        : 'bg-amber-50 text-amber-700 border-amber-200'
-                                                }`}>
-                                                    {camp.status}
-                                                </span>
-                                            </TableCell>
-
-                                            {/* Actions */}
-                                            <TableCell className="py-3 text-right">
-                                                <div className="flex items-center justify-end gap-1.5">
-                                                    <Button
-                                                        size="icon"
-                                                        variant="outline"
-                                                        onClick={() => handlePreviewOpen(camp)}
-                                                        className="h-7 w-7 border-slate-200 text-slate-600 hover:bg-slate-50"
-                                                        title="Preview storefront layout"
-                                                    >
-                                                        <Eye className="h-3.5 w-3.5" />
-                                                    </Button>
-
-                                                    <Button
-                                                        size="icon"
-                                                        variant="outline"
-                                                        onClick={() => handleEditOpen(camp)}
-                                                        className="h-7 w-7 border-gold/35 text-maroon hover:bg-cream-light"
-                                                        title="Edit Campaign"
-                                                    >
-                                                        <Edit2 className="h-3.5 w-3.5" />
-                                                    </Button>
-
-                                                    <Button
-                                                        size="icon"
-                                                        variant="outline"
-                                                        onClick={() => handleDeleteCampaign(camp.id)}
-                                                        disabled={deleteCampaignMutation.isPending}
-                                                        className="h-7 w-7 border-gray-200 text-gray-500 hover:bg-red-50 hover:text-red-600 hover:border-red-200"
-                                                        title="Delete Campaign"
-                                                    >
-                                                        <Trash2 className="h-3.5 w-3.5" />
-                                                    </Button>
-                                                </div>
-                                            </TableCell>
+                    {/* Campaign Table */}
+                    <Card className="border-gold/10 shadow-sm bg-white overflow-hidden">
+                        {isCampaignsLoading ? (
+                            <div className="py-24 text-center text-maroon/50 text-xs italic">
+                                <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2 text-maroon" />
+                                Fetching marketing campaigns...
+                            </div>
+                        ) : !campaigns || campaigns.length === 0 ? (
+                            <div className="py-16 text-center">
+                                <Megaphone className="h-8 w-8 mx-auto text-gray-400 mb-2" />
+                                <p className="text-xs text-gray-500 italic mb-3">No campaigns created yet</p>
+                                <Button 
+                                    variant="outline"
+                                    onClick={handleCreateOpen}
+                                    className="border-maroon/20 text-maroon hover:bg-maroon/5 text-xs font-semibold"
+                                >
+                                    Create Your First Campaign
+                                </Button>
+                            </div>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <Table>
+                                    <TableHeader className="bg-slate-50">
+                                        <TableRow className="border-b border-gold/10">
+                                            <TableHead className="w-[180px] text-xs font-bold text-maroon uppercase tracking-wider">Campaign Details</TableHead>
+                                            <TableHead className="w-[100px] text-xs font-bold text-maroon uppercase tracking-wider">Banner</TableHead>
+                                            <TableHead className="w-[150px] text-xs font-bold text-maroon uppercase tracking-wider">Campaign Title</TableHead>
+                                            <TableHead className="w-[180px] text-xs font-bold text-maroon uppercase tracking-wider">Duration</TableHead>
+                                            <TableHead className="w-[90px] text-xs font-bold text-maroon uppercase tracking-wider">Products</TableHead>
+                                            <TableHead className="w-[80px] text-xs font-bold text-maroon uppercase tracking-wider">Sort</TableHead>
+                                            <TableHead className="w-[90px] text-xs font-bold text-maroon uppercase tracking-wider">Status</TableHead>
+                                            <TableHead className="w-[140px] text-right text-xs font-bold text-maroon uppercase tracking-wider">Actions</TableHead>
                                         </TableRow>
-                                    );
-                                })}
-                            </TableBody>
-                        </Table>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {campaigns.map((camp) => {
+                                            const now = new Date();
+                                            const start = new Date(camp.startDate);
+                                            const end = new Date(camp.endDate);
+                                            const isCurrentlyRunning = camp.status === 'active' && now >= start && now <= end;
+                                            const isUpcoming = camp.status === 'active' && now < start;
+                                            const isEnded = now > end;
+
+                                            return (
+                                                <TableRow key={camp.id} className="border-b border-gold/5 hover:bg-slate-50/50">
+                                                    {/* Details */}
+                                                    <TableCell className="py-3">
+                                                        <div className="font-bold text-xs text-gray-900 truncate" title={camp.name}>
+                                                            {camp.name}
+                                                        </div>
+                                                        <div className="text-[10px] text-gray-500 font-mono flex items-center gap-1 mt-0.5">
+                                                            <Tag className="h-2.5 w-2.5 text-gold/80" />
+                                                            {camp.slug}
+                                                        </div>
+                                                    </TableCell>
+
+                                                    {/* Banner */}
+                                                    <TableCell className="py-3">
+                                                        <div className="relative group cursor-zoom-in" onClick={() => handlePreviewOpen(camp)}>
+                                                            {camp.desktopBannerUrl ? (
+                                                                <img 
+                                                                    src={camp.desktopBannerUrl} 
+                                                                    alt="Campaign Banner" 
+                                                                    className="h-8 w-16 object-cover rounded border border-gray-200"
+                                                                />
+                                                            ) : (
+                                                                <div className="h-8 w-16 bg-gray-100 flex items-center justify-center rounded border border-gray-200 text-gray-400">
+                                                                    <Monitor className="h-3.5 w-3.5" />
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </TableCell>
+
+                                                    {/* Text headings */}
+                                                    <TableCell className="py-3">
+                                                        <div className="text-xs font-semibold text-gray-800 line-clamp-1">
+                                                            {camp.title}
+                                                        </div>
+                                                        <div className="text-[10px] text-gray-400 line-clamp-1">
+                                                            {camp.subtitle || '—'}
+                                                        </div>
+                                                    </TableCell>
+
+                                                    {/* Dates */}
+                                                    <TableCell className="py-3">
+                                                        <div className="text-[10.5px] text-gray-700 flex items-center gap-1">
+                                                            <Calendar className="h-3 w-3 text-maroon/60" />
+                                                            <span>{new Date(camp.startDate).toLocaleDateString()}</span>
+                                                            <span className="text-gray-400">to</span>
+                                                            <span>{new Date(camp.endDate).toLocaleDateString()}</span>
+                                                        </div>
+                                                        <div className="mt-1 flex items-center gap-1">
+                                                            {camp.status === 'active' && (
+                                                                isCurrentlyRunning ? (
+                                                                    <span className="text-[8px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-1 py-0.2 rounded uppercase tracking-wider">
+                                                                        Running Now
+                                                                    </span>
+                                                                ) : isUpcoming ? (
+                                                                    <span className="text-[8px] font-bold bg-blue-50 text-blue-700 border border-blue-200 px-1 py-0.2 rounded uppercase tracking-wider">
+                                                                        Upcoming
+                                                                    </span>
+                                                                ) : isEnded ? (
+                                                                    <span className="text-[8px] font-bold bg-gray-50 text-gray-600 border border-gray-200 px-1 py-0.2 rounded uppercase tracking-wider">
+                                                                        Ended
+                                                                    </span>
+                                                                ) : null
+                                                            )}
+                                                        </div>
+                                                    </TableCell>
+
+                                                    {/* Products count */}
+                                                    <TableCell className="py-3 font-mono text-xs text-gray-700">
+                                                        <Badge variant="secondary" className="bg-slate-100 text-slate-800 font-bold border border-slate-200 px-2 py-0.5">
+                                                            {camp.productIds?.length || 0} Items
+                                                        </Badge>
+                                                    </TableCell>
+
+                                                    {/* Sort Order */}
+                                                    <TableCell className="py-3 font-mono text-xs text-gray-600">
+                                                        {camp.sortOrder}
+                                                    </TableCell>
+
+                                                    {/* Status */}
+                                                    <TableCell className="py-3">
+                                                        <span className={`inline-flex px-2 py-0.5 rounded text-[9.5px] font-bold uppercase tracking-wider border ${
+                                                            camp.status === 'active'
+                                                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                                                : camp.status === 'inactive'
+                                                                ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                                                : 'bg-amber-50 text-amber-700 border-amber-200'
+                                                        }`}>
+                                                            {camp.status}
+                                                        </span>
+                                                    </TableCell>
+
+                                                    {/* Actions */}
+                                                    <TableCell className="py-3 text-right">
+                                                        <div className="flex items-center justify-end gap-1.5">
+                                                            <Button
+                                                                size="icon"
+                                                                variant="outline"
+                                                                onClick={() => handlePreviewOpen(camp)}
+                                                                className="h-7 w-7 border-slate-200 text-slate-600 hover:bg-slate-50"
+                                                                title="Preview storefront layout"
+                                                            >
+                                                                <Eye className="h-3.5 w-3.5" />
+                                                            </Button>
+
+                                                            <Button
+                                                                size="icon"
+                                                                variant="outline"
+                                                                onClick={() => handleEditOpen(camp)}
+                                                                className="h-7 w-7 border-gold/35 text-maroon hover:bg-cream-light"
+                                                                title="Edit Campaign"
+                                                            >
+                                                                <Edit2 className="h-3.5 w-3.5" />
+                                                            </Button>
+
+                                                            <Button
+                                                                size="icon"
+                                                                variant="outline"
+                                                                onClick={() => handleDeleteCampaign(camp.id)}
+                                                                disabled={deleteCampaignMutation.isPending}
+                                                                className="h-7 w-7 border-gray-200 text-gray-500 hover:bg-red-50 hover:text-red-600 hover:border-red-200"
+                                                                title="Delete Campaign"
+                                                            >
+                                                                <Trash2 className="h-3.5 w-3.5" />
+                                                            </Button>
+                                                        </div>
+                                                    </TableCell>
+                                                </TableRow>
+                                            );
+                                        })}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        )}
+                    </Card>
+                </TabsContent>
+
+                <TabsContent value="placements" className="space-y-4 outline-none">
+                    <div className="bg-slate-50 border border-gold/5 p-4 rounded-lg">
+                        <h3 className="text-sm font-bold text-maroon font-serif">HOMEPAGE SLOT PLACEMENTS</h3>
+                        <p className="text-xs text-gray-500 mt-1 font-sans">
+                            Configure campaigns to display in specific promotional slots on the storefront homepage and set visibility.
+                        </p>
                     </div>
-                )}
-            </Card>
+
+                    {isSlotsLoading ? (
+                        <div className="py-24 text-center text-maroon/50 text-xs italic">
+                            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2 text-maroon" />
+                            Fetching slot placements...
+                        </div>
+                    ) : !slots || slots.length === 0 ? (
+                        <div className="py-16 text-center border border-dashed border-gold/15 rounded-lg bg-white">
+                            <p className="text-xs text-gray-500 italic">No homepage placement slots found in the database.</p>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 gap-6">
+                            {slots.map((slot) => {
+                                const edit = slotEdits[slot.id] || { campaignId: slot.campaignId, isVisible: slot.isVisible };
+                                const dirty = isSlotDirty(slot);
+                                const assignedCampaign = campaigns?.find(c => c.id === edit.campaignId);
+                                
+                                const slotLocations: Record<string, { label: string; desc: string }> = {
+                                    top: { 
+                                        label: "After Categories (Top Slot)", 
+                                        desc: "Appears right below the homepage product categories row" 
+                                    },
+                                    middle: { 
+                                        label: "After Featured Products (Middle Slot)", 
+                                        desc: "Appears below the Featured Products showcasing section" 
+                                    },
+                                    bottom: { 
+                                        label: "After New Arrivals (Bottom Slot)", 
+                                        desc: "Appears near the bottom of the page, below the New Arrivals list" 
+                                    }
+                                };
+                                
+                                const location = slotLocations[slot.slotKey] || { label: slot.slotName, desc: `Key: ${slot.slotKey}` };
+
+                                return (
+                                    <Card key={slot.id} className="border-gold/15 shadow-sm overflow-hidden bg-white hover:shadow-md transition-shadow">
+                                        <div className="border-b border-gold/10 bg-slate-50/50 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                                            <div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className={`h-2 w-2 rounded-full ${edit.isVisible ? 'bg-emerald-500' : 'bg-gray-300'}`}></span>
+                                                    <h4 className="font-bold text-sm text-maroon font-serif tracking-wide">
+                                                        {location.label}
+                                                    </h4>
+                                                    {edit.isVisible ? (
+                                                        <span className="text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded uppercase tracking-wider">
+                                                            Live
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-[9px] font-bold bg-gray-50 text-gray-500 border border-gray-200 px-1.5 py-0.5 rounded uppercase tracking-wider">
+                                                            Hidden
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <p className="text-[11px] text-gray-500 mt-0.5 font-sans">{location.desc}</p>
+                                            </div>
+                                            
+                                            <div className="flex items-center gap-2 self-end sm:self-auto">
+                                                {dirty && (
+                                                    <span className="text-[10px] text-amber-600 font-semibold italic mr-1">
+                                                        Unsaved changes
+                                                    </span>
+                                                )}
+                                                <Button
+                                                    size="sm"
+                                                    disabled={!dirty || saveSlotMutation.isPending}
+                                                    onClick={() => handleSaveSlot(slot.id)}
+                                                    className={`h-8 text-xs font-bold uppercase px-4 tracking-wider ${
+                                                        dirty 
+                                                            ? 'bg-maroon hover:bg-maroon-dark text-white shadow-sm' 
+                                                            : 'bg-slate-100 text-gray-400 cursor-not-allowed border border-slate-200'
+                                                    }`}
+                                                >
+                                                    {saveSlotMutation.isPending ? (
+                                                        <>
+                                                            <Loader2 className="h-3 w-3 animate-spin mr-1.5" />
+                                                            Saving...
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <Check className="h-3.5 w-3.5 mr-1" />
+                                                            Save Placement
+                                                        </>
+                                                    )}
+                                                </Button>
+                                            </div>
+                                        </div>
+                                        
+                                        <CardContent className="p-4 grid grid-cols-1 md:grid-cols-12 gap-6">
+                                            {/* Settings Form */}
+                                            <div className="md:col-span-5 space-y-4">
+                                                <div className="space-y-1.5">
+                                                    <label className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">Select Campaign</label>
+                                                    <Select
+                                                        value={edit.campaignId || 'none'}
+                                                        onValueChange={(val) => handleSlotCampaignChange(slot.id, val)}
+                                                    >
+                                                        <SelectTrigger className="h-9 text-xs border-gold/20 bg-white">
+                                                            <SelectValue placeholder="No Campaign Selected" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="none" className="text-xs text-gray-500 italic">No Campaign (Empty Slot)</SelectItem>
+                                                            {campaigns?.map(camp => (
+                                                                <SelectItem key={camp.id} value={camp.id} className="text-xs">
+                                                                    <div className="flex items-center justify-between w-full gap-2">
+                                                                        <span>{camp.name}</span>
+                                                                        <span className={`text-[8.5px] uppercase px-1.5 py-0.2 rounded font-bold border ${
+                                                                            camp.status === 'active' 
+                                                                                ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                                                                                : camp.status === 'inactive' 
+                                                                                ? 'bg-rose-50 text-rose-700 border-rose-100'
+                                                                                : 'bg-amber-50 text-amber-700 border-amber-100'
+                                                                        }`}>
+                                                                            {camp.status}
+                                                                        </span>
+                                                                    </div>
+                                                                </SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+
+                                                <div className="flex items-center justify-between p-3 border border-gold/10 rounded-lg bg-slate-50/50">
+                                                    <div>
+                                                        <label className="text-[11px] font-bold text-gray-700 uppercase tracking-wider block">Visibility Status</label>
+                                                        <span className="text-[10px] text-gray-400">Control if this banner displays on the live website</span>
+                                                    </div>
+                                                    
+                                                    {/* Custom Premium Toggle Switch */}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleSlotVisibilityToggle(slot.id)}
+                                                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                                                            edit.isVisible ? 'bg-maroon' : 'bg-slate-200'
+                                                        }`}
+                                                    >
+                                                        <span
+                                                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                                                                edit.isVisible ? 'translate-x-5' : 'translate-x-0'
+                                                            }`}
+                                                        />
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {/* Banner / Campaign Preview Card */}
+                                            <div className="md:col-span-7 border border-gold/10 rounded-lg overflow-hidden bg-slate-50/50 flex flex-col justify-center min-h-[140px] relative">
+                                                {assignedCampaign ? (
+                                                    <div className="p-3 space-y-3">
+                                                        <div className="flex items-center justify-between border-b border-gold/5 pb-2">
+                                                            <span className="text-[9.5px] font-bold text-maroon uppercase tracking-widest font-mono">Assigned Campaign Preview</span>
+                                                            <span className={`inline-flex px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider border ${
+                                                                assignedCampaign.status === 'active'
+                                                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                                                    : assignedCampaign.status === 'inactive'
+                                                                    ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                                                    : 'bg-amber-50 text-amber-700 border-amber-200'
+                                                            }`}>
+                                                                {assignedCampaign.status}
+                                                            </span>
+                                                        </div>
+                                                        
+                                                        <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
+                                                            <div className="sm:col-span-4 aspect-[16/10] bg-slate-900 rounded overflow-hidden border border-gray-250 relative group">
+                                                                {assignedCampaign.desktopBannerUrl ? (
+                                                                    <img 
+                                                                        src={assignedCampaign.desktopBannerUrl} 
+                                                                        alt="Campaign Banner" 
+                                                                        className="w-full h-full object-cover"
+                                                                    />
+                                                                ) : (
+                                                                    <div className="w-full h-full flex items-center justify-center text-gold/30 bg-gradient-to-r from-red-950 to-maroon">
+                                                                        <ImageIcon className="h-6 w-6" />
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                            
+                                                            <div className="sm:col-span-8 space-y-1">
+                                                                <h5 className="font-bold text-xs text-gray-900 leading-tight">
+                                                                    {assignedCampaign.name}
+                                                                </h5>
+                                                                <p className="text-xs font-serif text-maroon font-semibold italic">
+                                                                    {assignedCampaign.title}
+                                                                </p>
+                                                                {assignedCampaign.subtitle && (
+                                                                    <p className="text-[10px] text-gray-500 font-sans line-clamp-1 leading-normal">
+                                                                        {assignedCampaign.subtitle}
+                                                                    </p>
+                                                                )}
+                                                                <div className="text-[9.5px] text-gray-400 font-mono mt-1 flex items-center gap-1">
+                                                                    <Calendar className="h-2.5 w-2.5" />
+                                                                    {new Date(assignedCampaign.startDate).toLocaleDateString()} - {new Date(assignedCampaign.endDate).toLocaleDateString()}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <div className="p-8 text-center text-gray-400">
+                                                        <Megaphone className="h-6 w-6 mx-auto text-gray-300 mb-1.5" />
+                                                        <p className="text-xs italic">No campaign assigned to this slot</p>
+                                                        <p className="text-[10px] text-gray-400 mt-0.5">Use the dropdown to assign a campaign</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                );
+                            })}
+                        </div>
+                    )}
+                </TabsContent>
+            </Tabs>
 
             {/* CREATE / EDIT FORM DIALOG */}
             <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
@@ -540,7 +846,7 @@ export default function CampaignsPage() {
                                 </div>
 
                                 <div className="space-y-1.5">
-                                    <Label htmlFor="camp-title" className="text-xs font-semibold text-gray-700">Display Title *</Label>
+                                    <Label htmlFor="camp-title" className="text-xs font-semibold text-gray-700">Display Title (Optional)</Label>
                                     <Input 
                                         id="camp-title" 
                                         placeholder="e.g. The Royal Silk Banarasi Collection" 

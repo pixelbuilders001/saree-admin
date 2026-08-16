@@ -5,7 +5,7 @@ export interface Campaign {
     id: string;
     name: string;
     slug: string;
-    title: string;
+    title: string | null;
     subtitle: string | null;
     desktopBannerUrl: string | null;
     mobileBannerUrl: string | null;
@@ -16,6 +16,17 @@ export interface Campaign {
     createdAt: string;
     updatedAt: string;
     productIds?: string[];
+}
+
+export interface HomepageSlot {
+    id: string;
+    slotKey: 'top' | 'middle' | 'bottom';
+    slotName: string;
+    campaignId: string | null;
+    isVisible: boolean;
+    createdAt: string;
+    updatedAt: string;
+    campaign?: Campaign | null;
 }
 
 export const campaignService = {
@@ -316,5 +327,78 @@ export const campaignService = {
             .eq('id', id);
 
         if (error) throw error;
+    },
+
+    getHomepageSlots: async (): Promise<HomepageSlot[]> => {
+        const { data, error } = await supabase
+            .from('homepage_campaign_slots')
+            .select('*, campaign:campaigns(*)');
+
+        if (error) throw error;
+
+        return (data || []).map((item: any) => ({
+            id: item.id,
+            slotKey: item.slot_key as 'top' | 'middle' | 'bottom',
+            slotName: item.slot_name,
+            campaignId: item.campaign_id,
+            isVisible: item.is_visible,
+            createdAt: item.created_at,
+            updatedAt: item.updated_at,
+            campaign: item.campaign ? {
+                id: item.campaign.id,
+                name: item.campaign.name,
+                slug: item.campaign.slug,
+                title: item.campaign.title,
+                subtitle: item.campaign.subtitle,
+                desktopBannerUrl: item.campaign.desktop_banner_url,
+                mobileBannerUrl: item.campaign.mobile_banner_url,
+                startDate: item.campaign.start_date,
+                endDate: item.campaign.end_date,
+                status: item.campaign.status,
+                sortOrder: Number(item.campaign.sort_order),
+                createdAt: item.campaign.created_at,
+                updatedAt: item.campaign.updated_at
+            } : null
+        }));
+    },
+
+    updateHomepageSlot: async (id: string, campaignId: string | null, isVisible: boolean): Promise<HomepageSlot> => {
+        const { data, error } = await supabase
+            .from('homepage_campaign_slots')
+            .update({
+                campaign_id: campaignId,
+                is_visible: isVisible,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', id)
+            .select('*, campaign:campaigns(*)')
+            .single();
+
+        if (error) throw error;
+
+        return {
+            id: data.id,
+            slotKey: data.slot_key as 'top' | 'middle' | 'bottom',
+            slotName: data.slot_name,
+            campaignId: data.campaign_id,
+            isVisible: data.is_visible,
+            createdAt: data.created_at,
+            updatedAt: data.updated_at,
+            campaign: data.campaign ? {
+                id: data.campaign.id,
+                name: data.campaign.name,
+                slug: data.campaign.slug,
+                title: data.campaign.title,
+                subtitle: data.campaign.subtitle,
+                desktopBannerUrl: data.campaign.desktop_banner_url,
+                mobileBannerUrl: data.campaign.mobile_banner_url,
+                startDate: data.campaign.start_date,
+                endDate: data.campaign.end_date,
+                status: data.campaign.status,
+                sortOrder: Number(data.campaign.sort_order),
+                createdAt: data.campaign.created_at,
+                updatedAt: data.campaign.updated_at
+            } : null
+        };
     }
 };
