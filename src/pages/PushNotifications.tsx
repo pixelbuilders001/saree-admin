@@ -9,15 +9,17 @@ import {
     Search,
     Loader2,
     ShieldAlert,
-    Clock,
     History,
     Sparkles,
     CheckCircle2,
     AlertCircle,
-    HelpCircle,
     ChevronLeft,
     ChevronRight,
-    Smartphone
+    Smartphone,
+    Image,
+    ImageOff,
+    UploadCloud,
+    X
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -53,6 +55,11 @@ export default function PushNotificationsPage() {
     const [profileSearch, setProfileSearch] = React.useState('');
     const [isSearchFocused, setIsSearchFocused] = React.useState(false);
 
+    // Banner Image State
+    const [imageUrl, setImageUrl] = React.useState<string | null>(null);
+    const [isUploadingImage, setIsUploadingImage] = React.useState(false);
+    const imageInputRef = React.useRef<HTMLInputElement>(null);
+
     // Confirmation Dialog
     const [isConfirmOpen, setIsConfirmOpen] = React.useState(false);
 
@@ -85,13 +92,12 @@ export default function PushNotificationsPage() {
         onSuccess: (res) => {
             queryClient.invalidateQueries({ queryKey: ['pushNotifications'] });
             queryClient.invalidateQueries({ queryKey: ['subscribedTokenCount'] });
-            
             toast.success(`Notification sent! Sent: ${res.sentCount} | Failed: ${res.failedCount}`);
-            
             // Reset Form on Success
             setTitle('');
             setBody('');
             setUrl('');
+            setImageUrl(null);
             setSelectedProfile(null);
             setProfileSearch('');
         },
@@ -157,12 +163,40 @@ export default function PushNotificationsPage() {
         }
     };
 
+    const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const validationError = pushNotificationService.validateBannerImage(file);
+        if (validationError) {
+            toast.error(validationError);
+            if (imageInputRef.current) imageInputRef.current.value = '';
+            return;
+        }
+        setIsUploadingImage(true);
+        try {
+            const publicUrl = await pushNotificationService.uploadBannerImage(file);
+            setImageUrl(publicUrl);
+            toast.success('Banner image uploaded successfully');
+        } catch (err: any) {
+            toast.error(err.message || 'Failed to upload image. Please try again.');
+        } finally {
+            setIsUploadingImage(false);
+            if (imageInputRef.current) imageInputRef.current.value = '';
+        }
+    };
+
+    const handleRemoveImage = () => {
+        setImageUrl(null);
+        if (imageInputRef.current) imageInputRef.current.value = '';
+    };
+
     const executeSend = () => {
         setIsConfirmOpen(false);
         sendMutation.mutate({
             title: title.trim(),
             body: body.trim(),
             url: url.trim() || undefined,
+            imageUrl: imageUrl ?? null,
             audience,
             targetUserId: audience === 'user' ? selectedProfile?.id : undefined
         });
@@ -440,11 +474,54 @@ export default function PushNotificationsPage() {
                                 </div>
                             )}
 
+                            {/* Banner Image Upload */}
+                            <div className="space-y-1.5">
+                                <label className="text-[8.5px] font-bold text-gray-500 uppercase tracking-wide">Banner Image <span className="text-gray-400 lowercase italic font-normal">(optional · JPG, PNG, WebP · max 2 MB)</span></label>
+                                {imageUrl ? (
+                                    <div className="relative rounded-md overflow-hidden border border-gold/20 bg-gray-50">
+                                        <img
+                                            src={imageUrl}
+                                            alt="Notification banner"
+                                            className="w-full object-cover max-h-28"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={handleRemoveImage}
+                                            disabled={sendMutation.isPending || isUploadingImage}
+                                            className="absolute top-1 right-1 bg-black/60 hover:bg-black/80 text-white rounded-full p-0.5 cursor-pointer transition-colors"
+                                            title="Remove image"
+                                        >
+                                            <X className="h-3 w-3" />
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        onClick={() => imageInputRef.current?.click()}
+                                        disabled={isUploadingImage || sendMutation.isPending}
+                                        className="w-full flex items-center justify-center gap-1.5 border border-dashed border-gold/30 rounded-md py-3 text-[9px] text-gray-400 hover:border-maroon/40 hover:text-maroon/60 hover:bg-cream/5 transition-all cursor-pointer disabled:opacity-50"
+                                    >
+                                        {isUploadingImage ? (
+                                            <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading image...</>
+                                        ) : (
+                                            <><UploadCloud className="h-3.5 w-3.5" /> Upload Banner Image</>
+                                        )}
+                                    </button>
+                                )}
+                                <input
+                                    ref={imageInputRef}
+                                    type="file"
+                                    accept="image/jpeg,image/png,image/webp"
+                                    className="hidden"
+                                    onChange={handleImageSelect}
+                                />
+                            </div>
+
                             {/* Submit Button */}
                             <Button
                                 type="submit"
                                 className="w-full bg-maroon hover:bg-maroon-dark text-gold font-bold h-8 text-xs mt-2 uppercase tracking-wider cursor-pointer flex items-center justify-center gap-1.5"
-                                disabled={sendMutation.isPending || !isUrlValid || (audience === 'user' && !selectedProfile)}
+                                disabled={sendMutation.isPending || isUploadingImage || !isUrlValid || (audience === 'user' && !selectedProfile)}
                             >
                                 {sendMutation.isPending ? (
                                     <>
@@ -487,15 +564,30 @@ export default function PushNotificationsPage() {
                                 <Table>
                                     <TableHeader className="bg-cream/5">
                                         <TableRow className="border-b border-gold/10">
+                                            <TableHead className="text-[8px] font-bold text-maroon py-1.5 uppercase w-14">Image</TableHead>
                                             <TableHead className="text-[8px] font-bold text-maroon py-1.5 uppercase">Timestamp</TableHead>
                                             <TableHead className="text-[8px] font-bold text-maroon py-1.5 uppercase">Details</TableHead>
                                             <TableHead className="text-[8px] font-bold text-maroon py-1.5 uppercase">Audience</TableHead>
-                                            <TableHead className="text-[8px] font-bold text-maroon py-1.5 uppercase text-right">Delivery Metrics</TableHead>
+                                            <TableHead className="text-[8px] font-bold text-maroon py-1.5 uppercase text-right">Delivery</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                         {paginatedHistory.map((item) => (
-                                            <TableRow key={item.id} className="hover:bg-cream/3 border-b border-gold/5 h-10">
+                                            <TableRow key={item.id} className="hover:bg-cream/3 border-b border-gold/5">
+                                                {/* Image Thumbnail */}
+                                                <TableCell className="py-1.5 align-middle">
+                                                    {item.imageUrl ? (
+                                                        <img
+                                                            src={item.imageUrl}
+                                                            alt="banner"
+                                                            className="w-10 h-7 object-cover rounded border border-gold/15"
+                                                        />
+                                                    ) : (
+                                                        <span className="text-[7.5px] text-gray-400 italic flex items-center gap-0.5">
+                                                            <ImageOff className="h-2.5 w-2.5" /> None
+                                                        </span>
+                                                    )}
+                                                </TableCell>
                                                 {/* Date & Time */}
                                                 <TableCell className="py-1.5 text-[9px] font-mono text-gray-500 whitespace-nowrap">
                                                     <div>{new Date(item.createdAt).toLocaleDateString()}</div>
@@ -597,18 +689,23 @@ export default function PushNotificationsPage() {
                         <AlertCircle className="h-5 w-5 text-maroon flex-shrink-0" />
                         <DialogTitle className="text-xs font-bold uppercase tracking-wider text-maroon font-serif">Confirm Mass Broadcast</DialogTitle>
                     </DialogHeader>
-                    <DialogDescription className="text-[10px] text-gray-500 pt-2 leading-relaxed">
-                        You are about to send this push notification to <span className="font-bold text-maroon font-mono">{subscriberCount}</span> active subscribed customer devices.
-                        <br />
-                        <br />
-                        <span className="font-semibold text-gray-700">Notification Preview:</span>
-                        <div className="border border-gold/15 p-2 rounded bg-cream/3 mt-1.5 font-sans">
-                            <p className="font-bold text-gray-800 text-[10px]">{title}</p>
-                            <p className="text-[9px] text-gray-600 mt-0.5">{body}</p>
-                            {url && <p className="text-[8px] text-amber-800 font-mono mt-1">{url}</p>}
+                    <DialogDescription asChild>
+                        <div className="text-[10px] text-gray-500 pt-2 leading-relaxed space-y-2">
+                            <p>You are about to send this push notification to <span className="font-bold text-maroon font-mono">{subscriberCount}</span> active subscribed devices.</p>
+                            <div className="border border-gold/15 rounded bg-cream/3 overflow-hidden">
+                                {imageUrl && (
+                                    <img src={imageUrl} alt="Banner preview" className="w-full max-h-24 object-cover" />
+                                )}
+                                <div className="p-2 space-y-0.5">
+                                    <p className="font-bold text-gray-800 text-[10px]">{title}</p>
+                                    <p className="text-[9px] text-gray-600">{body}</p>
+                                    {url && <p className="text-[8px] text-amber-800 font-mono">🔗 {url}</p>}
+                                    <p className="text-[8px] text-purple-700 font-semibold uppercase tracking-wide">{audience === 'all' ? 'All Customers' : `→ ${selectedProfile?.fullName || selectedProfile?.email || 'Target Customer'}`}</p>
+                                    {!imageUrl && <p className="text-[8px] text-gray-400 italic">No banner image</p>}
+                                </div>
+                            </div>
+                            <p className="text-[8.5px] text-gray-400">This action cannot be undone.</p>
                         </div>
-                        <br />
-                        This action cannot be undone. Please confirm you would like to proceed with the broadcast.
                     </DialogDescription>
                     <DialogFooter className="mt-3 gap-2 sm:gap-0">
                         <Button

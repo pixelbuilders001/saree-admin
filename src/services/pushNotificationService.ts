@@ -1,10 +1,15 @@
 import { supabase } from '@/lib/supabase';
 
+// Reuse existing public bucket with a subfolder for notification banners
+const NOTIFICATION_BANNER_BUCKET = 'campaign-banners';
+const NOTIFICATION_BANNER_FOLDER = 'notification-banners';
+
 export interface PushNotification {
     id: string;
     title: string;
     body: string;
     url: string | null;
+    imageUrl: string | null;
     audience: string; // 'all' or 'user'
     targetUserId: string | null;
     notificationType: string;
@@ -21,7 +26,45 @@ export interface OnlineProfile {
     phoneNumber: string | null;
 }
 
+const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const MAX_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB
+
 export const pushNotificationService = {
+    validateBannerImage: (file: File): string | null => {
+        if (!ALLOWED_TYPES.includes(file.type)) {
+            return 'Image must be JPG, PNG or WebP and under 2 MB.';
+        }
+        if (file.size > MAX_SIZE_BYTES) {
+            return 'Image must be JPG, PNG or WebP and under 2 MB.';
+        }
+        return null;
+    },
+
+    uploadBannerImage: async (file: File): Promise<string> => {
+        const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+        const uniqueName = `${Date.now()}_${Math.random().toString(36).substring(2, 10)}.${ext}`;
+        const filePath = `${NOTIFICATION_BANNER_FOLDER}/${uniqueName}`;
+
+        const { error: uploadError } = await supabase.storage
+            .from(NOTIFICATION_BANNER_BUCKET)
+            .upload(filePath, file, {
+                cacheControl: '3600',
+                upsert: false,
+                contentType: file.type
+            });
+
+        if (uploadError) {
+            console.error('Banner upload error:', uploadError);
+            throw new Error(uploadError.message || 'Failed to upload banner image.');
+        }
+
+        const { data: { publicUrl } } = supabase.storage
+            .from(NOTIFICATION_BANNER_BUCKET)
+            .getPublicUrl(filePath);
+
+        return publicUrl;
+    },
+
     getNotifications: async (): Promise<PushNotification[]> => {
         const { data, error } = await supabase
             .from('push_notifications')
@@ -35,6 +78,7 @@ export const pushNotificationService = {
             title: item.title,
             body: item.body,
             url: item.url,
+            imageUrl: item.image_url ?? null,
             audience: item.audience,
             targetUserId: item.target_user_id,
             notificationType: item.notification_type,
@@ -75,6 +119,7 @@ export const pushNotificationService = {
         title: string;
         body: string;
         url?: string;
+        imageUrl?: string | null;
         audience: 'all' | 'user';
         targetUserId?: string;
     }): Promise<{ success: boolean; sentCount: number; failedCount: number; message?: string }> => {
@@ -83,8 +128,10 @@ export const pushNotificationService = {
                 title: payload.title,
                 body: payload.body,
                 url: payload.url || null,
+                image_url: payload.imageUrl ?? null,
                 audience: payload.audience,
-                target_user_id: payload.targetUserId || null
+                target_user_id: payload.targetUserId || null,
+                notification_type: 'marketing'
             }
         });
 
@@ -106,4 +153,3 @@ export const pushNotificationService = {
         };
     }
 };
-
