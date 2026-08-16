@@ -130,6 +130,32 @@ CREATE POLICY "Allow authenticated delete on sbs-categories" ON storage.objects
     FOR DELETE TO authenticated USING (bucket_id = 'sbs-categories');
 
 
+-- 4c. Supabase Storage Policies for campaign-banners bucket
+-- Note: Ensures the bucket is created and allows authenticated users to manage campaign banners.
+
+-- Ensure bucket exists
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('campaign-banners', 'campaign-banners', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- Enable SELECT (Read) access for everyone
+CREATE POLICY "Allow public read access on campaign-banners" ON storage.objects
+    FOR SELECT TO public USING (bucket_id = 'campaign-banners');
+
+-- Enable INSERT (Upload) access for authenticated users
+CREATE POLICY "Allow authenticated insert on campaign-banners" ON storage.objects
+    FOR INSERT TO authenticated WITH CHECK (bucket_id = 'campaign-banners');
+
+-- Enable UPDATE access for authenticated users
+CREATE POLICY "Allow authenticated update on campaign-banners" ON storage.objects
+    FOR UPDATE TO authenticated USING (bucket_id = 'campaign-banners');
+
+-- Enable DELETE access for authenticated users
+CREATE POLICY "Allow authenticated delete on campaign-banners" ON storage.objects
+    FOR DELETE TO authenticated USING (bucket_id = 'campaign-banners');
+
+
+
 -- 5. Create Categories Table
 CREATE TABLE public.categories (
   id uuid not null default gen_random_uuid (),
@@ -403,4 +429,121 @@ CREATE POLICY "Allow authenticated delete on wishlist" ON public.wishlist
         (auth.uid() = user_id) OR
         (EXISTS (SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.role = 'admin'))
     );
+
+
+-- 9. Create Campaigns Table and Policies
+CREATE TABLE IF NOT EXISTS public.campaigns (
+  id uuid not null default gen_random_uuid (),
+  name text not null,
+  slug text not null,
+  title text not null,
+  subtitle text null,
+  desktop_banner_url text null,
+  mobile_banner_url text null,
+  start_date timestamp with time zone not null,
+  end_date timestamp with time zone not null,
+  status text not null default 'draft'::text,
+  sort_order integer not null default 0,
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now(),
+  constraint campaigns_pkey primary key (id),
+  constraint campaigns_slug_key unique (slug),
+  constraint campaigns_status_check check (
+    (
+      status = any (
+        array['draft'::text, 'active'::text, 'inactive'::text]
+      )
+    )
+  ),
+  constraint campaigns_valid_dates check ((end_date >= start_date))
+);
+
+CREATE INDEX IF NOT EXISTS campaigns_status_idx on public.campaigns using btree (status);
+CREATE INDEX IF NOT EXISTS campaigns_dates_idx on public.campaigns using btree (start_date, end_date);
+CREATE INDEX IF NOT EXISTS campaigns_sort_order_idx on public.campaigns using btree (sort_order);
+
+ALTER TABLE public.campaigns ENABLE ROW LEVEL SECURITY;
+
+-- If policy exists, drop it before recreating to avoid duplicate name error
+DROP POLICY IF EXISTS "Allow public select on campaigns" ON public.campaigns;
+CREATE POLICY "Allow public select on campaigns" ON public.campaigns
+    FOR SELECT TO public USING (true);
+
+DROP POLICY IF EXISTS "Allow authenticated insert on campaigns" ON public.campaigns;
+CREATE POLICY "Allow authenticated insert on campaigns" ON public.campaigns
+    FOR INSERT TO authenticated WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow authenticated update on campaigns" ON public.campaigns;
+CREATE POLICY "Allow authenticated update on campaigns" ON public.campaigns
+    FOR UPDATE TO authenticated USING (true);
+
+DROP POLICY IF EXISTS "Allow authenticated delete on campaigns" ON public.campaigns;
+CREATE POLICY "Allow authenticated delete on campaigns" ON public.campaigns
+    FOR DELETE TO authenticated USING (true);
+
+
+-- 10. Create Campaign Products Table and Policies
+CREATE TABLE IF NOT EXISTS public.campaign_products (
+  id uuid not null default gen_random_uuid (),
+  campaign_id uuid not null,
+  inventory_id text not null,
+  created_at timestamp with time zone not null default now(),
+  constraint campaign_products_pkey primary key (id),
+  constraint campaign_products_campaign_id_inventory_id_key unique (campaign_id, inventory_id),
+  constraint campaign_products_campaign_id_fkey foreign KEY (campaign_id) references campaigns (id) on delete CASCADE,
+  constraint campaign_products_inventory_id_fkey foreign KEY (inventory_id) references inventory (id) on delete CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS campaign_products_campaign_id_idx on public.campaign_products using btree (campaign_id);
+CREATE INDEX IF NOT EXISTS campaign_products_inventory_id_idx on public.campaign_products using btree (inventory_id);
+
+ALTER TABLE public.campaign_products ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow public select on campaign_products" ON public.campaign_products;
+CREATE POLICY "Allow public select on campaign_products" ON public.campaign_products
+    FOR SELECT TO public USING (true);
+
+DROP POLICY IF EXISTS "Allow authenticated insert on campaign_products" ON public.campaign_products;
+CREATE POLICY "Allow campaign_products authenticated insert" ON public.campaign_products
+    FOR INSERT TO authenticated WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow authenticated update on campaign_products" ON public.campaign_products;
+CREATE POLICY "Allow campaign_products authenticated update" ON public.campaign_products
+    FOR UPDATE TO authenticated USING (true);
+
+DROP POLICY IF EXISTS "Allow authenticated delete on campaign_products" ON public.campaign_products;
+CREATE POLICY "Allow campaign_products authenticated delete" ON public.campaign_products
+    FOR DELETE TO authenticated USING (true);
+
+
+-- OPTIONAL: IF YOU PREFER NOT TO USE ANY ROW LEVEL SECURITY (RLS) FOR CAMPAIGNS & BANNERS,
+-- RUN THESE STATEMENT BLOCKS IN YOUR SUPABASE SQL EDITOR TO MAKE EVERYTHING COMPLETELY PUBLIC.
+
+/*
+-- 1. Disable database table RLS (Allows read & write for anyone)
+ALTER TABLE public.campaigns DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.campaign_products DISABLE ROW LEVEL SECURITY;
+
+-- 2. Grant public read & write access to the storage bucket
+DROP POLICY IF EXISTS "Allow public read access on campaign-banners" ON storage.objects;
+CREATE POLICY "Allow public read access on campaign-banners" ON storage.objects
+    FOR SELECT TO public USING (bucket_id = 'campaign-banners');
+
+DROP POLICY IF EXISTS "Allow public insert on campaign-banners" ON storage.objects;
+DROP POLICY IF EXISTS "Allow authenticated insert on campaign-banners" ON storage.objects;
+CREATE POLICY "Allow public insert on campaign-banners" ON storage.objects
+    FOR INSERT TO public WITH CHECK (bucket_id = 'campaign-banners');
+
+DROP POLICY IF EXISTS "Allow public update on campaign-banners" ON storage.objects;
+DROP POLICY IF EXISTS "Allow authenticated update on campaign-banners" ON storage.objects;
+CREATE POLICY "Allow public update on campaign-banners" ON storage.objects
+    FOR UPDATE TO public USING (bucket_id = 'campaign-banners');
+
+DROP POLICY IF EXISTS "Allow public delete on campaign-banners" ON storage.objects;
+DROP POLICY IF EXISTS "Allow authenticated delete on campaign-banners" ON storage.objects;
+CREATE POLICY "Allow public delete on campaign-banners" ON storage.objects
+    FOR DELETE TO public USING (bucket_id = 'campaign-banners');
+*/
+
+
 

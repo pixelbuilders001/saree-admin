@@ -16,7 +16,8 @@ import {
     User,
     ShoppingBag,
     MessageSquare,
-    Heart
+    Heart,
+    Megaphone
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -40,6 +41,12 @@ const navGroups = [
         items: [
             { icon: Truck, label: 'Weavers Ledger', path: '/weavers' },
             { icon: Users, label: 'Customers', path: '/customers' },
+        ]
+    },
+    {
+        title: "Marketing",
+        items: [
+            { icon: Megaphone, label: 'Campaigns', path: '/campaigns' },
         ]
     },
     {
