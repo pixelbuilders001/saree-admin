@@ -142,7 +142,7 @@ export default function OrdersPage() {
             await pushNotificationService.sendNotification({
                 title,
                 body,
-                url: `/account/orders/${orderId}`,
+                url: `/account`,
                 imageUrl: null,
                 audience: 'user',
                 targetUserId,
