@@ -22,6 +22,7 @@ import WishlistPage from '@/pages/Wishlist';
 import StorefrontReportsPage from '@/pages/StorefrontReports';
 import CampaignsPage from '@/pages/Campaigns';
 import PushNotificationsPage from '@/pages/PushNotifications';
+import HeroBannersPage from '@/pages/HeroBanners';
 import { supabase } from '@/lib/supabase';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -145,6 +146,7 @@ function App() {
             <Route path="storefront-reports" element={<StorefrontReportsPage />} />
             <Route path="campaigns" element={<CampaignsPage />} />
             <Route path="push-notifications" element={<PushNotificationsPage />} />
+            <Route path="hero-banners" element={<HeroBannersPage />} />
           </Route>
           <Route path="/receipt/:invoiceNumber" element={<ReceiptView />} />
           <Route path="*" element={<Navigate to="/" replace />} />

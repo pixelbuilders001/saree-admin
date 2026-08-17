@@ -18,7 +18,8 @@ import {
     MessageSquare,
     Heart,
     Megaphone,
-    Bell
+    Bell,
+    Presentation
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -49,6 +50,7 @@ const navGroups = [
         items: [
             { icon: Megaphone, label: 'Campaigns', path: '/campaigns' },
             { icon: Bell, label: 'Push Notifications', path: '/push-notifications' },
+            { icon: Presentation, label: 'Hero Banners', path: '/hero-banners' },
         ]
     },
     {
