@@ -42,7 +42,7 @@ function BannerModal({
     const [form, setForm] = useState<FormState>(
         banner ? {
             eyebrow: banner.eyebrow ?? '',
-            title: banner.title,
+            title: banner.title ?? '',
             subtitle: banner.subtitle ?? '',
             button_text: banner.buttonText ?? '',
             button_link: banner.buttonLink ?? '',
@@ -389,7 +389,7 @@ export default function HeroBannersPage() {
                                     {/* Image preview */}
                                     <div className="flex-shrink-0 w-full sm:w-28 h-16 rounded-md overflow-hidden border border-gold/15 bg-gray-50">
                                         {banner.imageUrl ? (
-                                            <img src={banner.imageUrl} alt={banner.title} className="w-full h-full object-cover" />
+                                            <img src={banner.imageUrl} alt={banner.title ?? undefined} className="w-full h-full object-cover" />
                                         ) : (
                                             <div className="w-full h-full flex items-center justify-center">
                                                 <Image className="h-5 w-5 text-gray-200" />
