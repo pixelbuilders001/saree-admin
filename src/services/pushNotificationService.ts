@@ -122,6 +122,7 @@ export const pushNotificationService = {
         imageUrl?: string | null;
         audience: 'all' | 'user';
         targetUserId?: string;
+        notificationType?: string;
     }): Promise<{ success: boolean; sentCount: number; failedCount: number; message?: string }> => {
         const { data, error } = await supabase.functions.invoke('send-push', {
             body: {
@@ -131,7 +132,7 @@ export const pushNotificationService = {
                 image_url: payload.imageUrl ?? null,
                 audience: payload.audience,
                 target_user_id: payload.targetUserId || null,
-                notification_type: 'marketing'
+                notification_type: payload.notificationType ?? 'marketing'
             }
         });
 
