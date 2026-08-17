@@ -100,19 +100,27 @@ export const pushNotificationService = {
     },
 
     getOnlineProfiles: async (): Promise<OnlineProfile[]> => {
-        const { data, error } = await supabase
-            .from('profiles')
-            .select('id, full_name, email, phone_number')
-            .order('full_name', { ascending: true });
+        try {
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('id, full_name, email, phone_number')
+                .order('full_name', { ascending: true });
 
-        if (error) throw error;
+            if (error) {
+                console.warn('[PushNotifications] Could not fetch profiles:', error.message);
+                return [];
+            }
 
-        return (data || []).map((p: any) => ({
-            id: p.id,
-            fullName: p.full_name,
-            email: p.email,
-            phoneNumber: p.phone_number
-        }));
+            return (data || []).map((p: any) => ({
+                id: p.id,
+                fullName: p.full_name,
+                email: p.email,
+                phoneNumber: p.phone_number
+            }));
+        } catch (e) {
+            console.warn('[PushNotifications] Profile fetch exception:', e);
+            return [];
+        }
     },
 
     sendNotification: async (payload: {
