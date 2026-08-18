@@ -28,7 +28,8 @@ import {
     Trash2,
     Sparkles,
     ShoppingCart,
-    Printer
+    Printer,
+    Gift
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -949,7 +950,16 @@ export default function OrdersPage() {
                                                 className={`hover:bg-cream/5 border-b border-gold/5 cursor-pointer h-10 ${selectedOrderId === order.id ? 'bg-gold/10 hover:bg-gold/15' : ''}`}
                                                 onClick={() => setSelectedOrderId(order.id)}
                                             >
-                                                <TableCell className="py-1 text-xs font-mono font-bold text-maroon">{order.orderNumber}</TableCell>
+                                                <TableCell className="py-1 text-xs font-mono font-bold text-maroon">
+                                                    <div className="flex items-center gap-1.5">
+                                                        {order.orderNumber}
+                                                        {order.isGift && (
+                                                            <span className="inline-flex items-center gap-0.5 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full border bg-pink-50 text-pink-700 border-pink-200 whitespace-nowrap">
+                                                                <Gift className="h-2.5 w-2.5" /> Gift
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </TableCell>
                                                 <TableCell className="py-1 text-xs">
                                                     <div>
                                                         <div className="font-semibold text-gray-800">{order.customerName}</div>
@@ -1005,13 +1015,54 @@ export default function OrdersPage() {
                                                 {selectedOrder.orderStatus.replace('_', ' ')}
                                             </span>
                                         </div>
-                                        <div className="space-y-0.5 text-right">
-                                            <span className="text-[9px] font-bold text-gray-500 uppercase block">Payment (COD)</span>
-                                            <span className={`inline-block text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${getPaymentStatusBadgeClass(selectedOrder.paymentStatus)}`}>
-                                                {selectedOrder.paymentStatus}
-                                            </span>
+                                        <div className="flex flex-col items-end gap-1">
+                                            <div className="space-y-0.5 text-right">
+                                                <span className="text-[9px] font-bold text-gray-500 uppercase block">Payment (COD)</span>
+                                                <span className={`inline-block text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${getPaymentStatusBadgeClass(selectedOrder.paymentStatus)}`}>
+                                                    {selectedOrder.paymentStatus}
+                                                </span>
+                                            </div>
+                                            {selectedOrder.isGift && (
+                                                <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border bg-pink-50 text-pink-700 border-pink-200">
+                                                    <Gift className="h-3 w-3" /> Gift Order
+                                                </span>
+                                            )}
                                         </div>
                                     </div>
+
+                                    {/* Gift Details — visible only for gift orders */}
+                                    {selectedOrder.isGift && (
+                                        <div className="border-2 border-pink-200 bg-pink-50/60 rounded-lg p-3 space-y-2.5">
+                                            <div className="flex items-center gap-2 border-b border-pink-200/60 pb-2">
+                                                <span className="text-lg">🎁</span>
+                                                <span className="text-[11px] font-bold text-pink-800 uppercase tracking-widest">Gift Order — Packing Instructions</span>
+                                            </div>
+                                            <div className="grid grid-cols-1 gap-2 text-xs">
+                                                <div className="flex flex-col gap-0.5">
+                                                    <span className="text-[9px] font-bold text-pink-600 uppercase tracking-wider">Gift Recipient</span>
+                                                    <span className="font-semibold text-gray-800">
+                                                        {selectedOrder.giftRecipientName || <em className="text-gray-400 font-normal">Not specified</em>}
+                                                    </span>
+                                                </div>
+                                                <div className="flex flex-col gap-0.5">
+                                                    <span className="text-[9px] font-bold text-pink-600 uppercase tracking-wider">Gift Message</span>
+                                                    {selectedOrder.giftMessage ? (
+                                                        <p className="text-gray-700 italic leading-relaxed bg-white/70 border border-pink-100 rounded px-2 py-1.5">
+                                                            "{selectedOrder.giftMessage}"
+                                                        </p>
+                                                    ) : (
+                                                        <em className="text-gray-400">No message provided</em>
+                                                    )}
+                                                </div>
+                                                <div className="flex items-center justify-between bg-white/70 border border-pink-100 rounded px-2.5 py-1.5">
+                                                    <span className="text-[9px] font-bold text-pink-600 uppercase tracking-wider">Gift Wrapping</span>
+                                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                                                        <CheckCircle2 className="h-3 w-3" /> Yes — Include Gift Wrap
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
 
                                     {/* Customer & Shipping Information */}
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

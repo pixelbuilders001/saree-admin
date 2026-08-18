@@ -3,11 +3,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Image, Plus, Pencil, Trash2, ToggleLeft, ToggleRight,
-    Loader2, X, ChevronUp, ChevronDown, AlertTriangle, Check
+    Loader2, X, ChevronUp, ChevronDown, AlertTriangle, Check, FileImage
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { heroBannerService } from '@/services/heroBannerService';
 import type { HeroBanner } from '@/services/heroBannerService';
+import { compressImage } from '@/lib/imageCompressor';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -55,13 +56,42 @@ function BannerModal({
     const [imageFile, setImageFile] = useState<File | null>(null);
     const [preview, setPreview] = useState<string | null>(banner?.imageUrl ?? null);
     const [saving, setSaving] = useState(false);
+    const [compressing, setCompressing] = useState(false);
+    const [sizeInfo, setSizeInfo] = useState<{ originalKB: number; compressedKB: number } | null>(null);
     const fileRef = useRef<HTMLInputElement>(null);
 
-    const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
-        setImageFile(file);
-        setPreview(URL.createObjectURL(file));
+
+        const originalKB = Math.round(file.size / 1024);
+        setSizeInfo(null);
+        setCompressing(true);
+
+        // Show raw preview immediately for responsiveness
+        const rawUrl = URL.createObjectURL(file);
+        setPreview(rawUrl);
+
+        try {
+            // Compress: max 800 KB threshold, max 2400px (matches service settings)
+            const compressed = await compressImage(file, 800, 2400);
+            const compressedKB = Math.round(compressed.size / 1024);
+
+            // Replace preview with compressed blob URL for accuracy
+            URL.revokeObjectURL(rawUrl);
+            setPreview(URL.createObjectURL(compressed));
+            setImageFile(compressed);
+            setSizeInfo({ originalKB, compressedKB });
+        } catch {
+            // Compression failed — fall back to original
+            setImageFile(file);
+            setSizeInfo({ originalKB, compressedKB: originalKB });
+        } finally {
+            setCompressing(false);
+        }
+
+        // Reset input so the same file can be re-selected
+        e.target.value = '';
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -129,25 +159,53 @@ function BannerModal({
                     <div>
                         <label className={lbl}>Banner Image *</label>
                         <div
-                            onClick={() => fileRef.current?.click()}
-                            className="relative cursor-pointer border-2 border-dashed border-gold/25 rounded-lg overflow-hidden bg-cream/5 hover:bg-cream/10 transition-colors"
+                            onClick={() => !compressing && fileRef.current?.click()}
+                            className={`relative border-2 border-dashed rounded-lg overflow-hidden bg-cream/5 transition-colors ${
+                                compressing ? 'border-amber-300 cursor-wait' : 'border-gold/25 cursor-pointer hover:bg-cream/10'
+                            }`}
                             style={{ minHeight: 160 }}
                         >
                             {preview ? (
                                 <img src={preview} alt="Preview" className="w-full object-cover" style={{ maxHeight: 220 }} />
                             ) : (
                                 <div className="flex flex-col items-center justify-center h-40 gap-2">
-                                    <Image className="h-8 w-8 text-gold/40" />
+                                    <FileImage className="h-8 w-8 text-gold/40" />
                                     <p className="text-xs text-gray-400">Click to upload banner image</p>
-                                    <p className="text-[10px] text-gray-300">JPG, PNG, WebP — auto compressed</p>
+                                    <p className="text-[10px] text-gray-300">JPG, PNG, WebP — auto compressed before upload</p>
                                 </div>
                             )}
-                            {preview && (
+
+                            {/* Compressing overlay */}
+                            {compressing && (
+                                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/40 backdrop-blur-[2px]">
+                                    <Loader2 className="h-7 w-7 animate-spin text-white" />
+                                    <span className="text-white text-xs font-bold tracking-wider">Compressing…</span>
+                                </div>
+                            )}
+
+                            {/* Change image overlay (when not compressing) */}
+                            {preview && !compressing && (
                                 <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 bg-black/30 transition-opacity">
                                     <span className="text-white text-xs font-bold bg-black/50 px-3 py-1 rounded">Change Image</span>
                                 </div>
                             )}
                         </div>
+
+                        {/* Size info pill */}
+                        {sizeInfo && !compressing && (
+                            <div className={`mt-1.5 inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full border ${
+                                sizeInfo.compressedKB < sizeInfo.originalKB
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                    : 'bg-blue-50 text-blue-700 border-blue-200'
+                            }`}>
+                                <Check className="h-3 w-3" />
+                                {sizeInfo.compressedKB < sizeInfo.originalKB
+                                    ? `Compressed: ${sizeInfo.originalKB} KB → ${sizeInfo.compressedKB} KB (saved ${Math.round((1 - sizeInfo.compressedKB / sizeInfo.originalKB) * 100)}%)`
+                                    : `Image ready: ${sizeInfo.compressedKB} KB (already optimised)`
+                                }
+                            </div>
+                        )}
+
                         <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
                     </div>
 
@@ -213,10 +271,10 @@ function BannerModal({
                             className="px-4 py-1.5 text-xs font-bold uppercase tracking-wider border border-gray-200 rounded text-gray-500 hover:bg-gray-50 transition-colors cursor-pointer">
                             Cancel
                         </button>
-                        <button type="submit" disabled={saving}
+                        <button type="submit" disabled={saving || compressing}
                             className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold uppercase tracking-wider bg-maroon text-white rounded hover:bg-maroon/90 disabled:opacity-50 transition-colors cursor-pointer">
                             {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                            {saving ? 'Saving…' : isEdit ? 'Update Banner' : 'Create Banner'}
+                            {saving ? 'Saving…' : compressing ? 'Compressing…' : isEdit ? 'Update Banner' : 'Create Banner'}
                         </button>
                     </div>
                 </form>

@@ -49,6 +49,10 @@ export interface Order {
     paymentStatus: 'pending' | 'paid' | 'failed' | 'refunded';
     orderStatus: 'placed' | 'confirmed' | 'processing' | 'packed' | 'shipped' | 'out_for_delivery' | 'delivered' | 'cancelled' | 'returned';
     notes?: string;
+    // Gift order fields
+    isGift?: boolean;
+    giftRecipientName?: string;
+    giftMessage?: string;
     createdAt: string;
     updatedAt: string;
     items?: OrderItem[];
@@ -86,6 +90,9 @@ export const ordersService = {
             paymentStatus: order.payment_status,
             orderStatus: order.order_status,
             notes: order.notes,
+            isGift: order.is_gift === true,
+            giftRecipientName: order.gift_recipient_name || undefined,
+            giftMessage: order.gift_message || undefined,
             createdAt: order.created_at,
             updatedAt: order.updated_at,
             items: (order.order_items || []).map((item: any) => ({
@@ -143,6 +150,9 @@ export const ordersService = {
             paymentStatus: data.payment_status,
             orderStatus: data.order_status,
             notes: data.notes,
+            isGift: data.is_gift === true,
+            giftRecipientName: data.gift_recipient_name || undefined,
+            giftMessage: data.gift_message || undefined,
             createdAt: data.created_at,
             updatedAt: data.updated_at,
             items: (data.order_items || []).map((item: any) => ({
