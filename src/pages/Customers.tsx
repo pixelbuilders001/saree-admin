@@ -8,21 +8,23 @@ import {
     MapPin,
     Phone,
     Loader2,
-    Calendar,
     Receipt,
     ChevronRight,
     ChevronLeft,
     Trash2,
-
     Edit3,
     TrendingUp,
-    Coins,
-    FileText,
-    CheckCircle,
     X,
     Save,
-    Copy
+    Copy,
+    IndianRupee,
+    Filter,
+    Globe,
+    Store,
+    ClipboardList,
+    Wallet
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -237,67 +239,76 @@ export default function CustomersPage() {
 
     const formatCurrency = (val: number) => `₹${val.toLocaleString('en-IN')}`;
 
+    // Helper: initials
+    const getInitials = (name: string) => {
+        if (!name) return '?';
+        return name.split(' ').map(n => n[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
+    };
+
+    const instoreCount = customers?.filter(c => c.type === 'instore').length || 0;
+    const onlineCount = customers?.filter(c => c.type === 'online').length || 0;
+
     return (
-        <div className="space-y-4 max-w-7xl mx-auto px-4 py-2">
-            {/* Header Section */}
-            <div className="flex items-center justify-between border-b border-gold/15 pb-3">
-                <div className="flex items-center gap-2">
-                    <div className="p-1 bg-maroon/5 rounded-md border border-gold/20">
-                        <Users className="h-4.5 w-4.5 text-maroon" />
+        <div className="space-y-5 max-w-7xl mx-auto px-2 pb-10">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div className="flex items-center gap-3">
+                    <div className="p-2.5 bg-gradient-to-br from-maroon to-maroon-dark text-gold rounded-xl shadow-md shadow-maroon/20">
+                        <Users className="h-6 w-6" />
                     </div>
                     <div>
-                        <h1 className="text-lg font-black font-serif text-maroon tracking-wider uppercase">CRM Customer Registry</h1>
-                        <p className="text-[10px] text-gray-500 font-sans mt-0.5">Manage customer directory profiles, spent aggregations, and individual purchase logs</p>
+                        <h1 className="text-xl md:text-2xl font-bold font-serif text-maroon tracking-wide">Customer Registry</h1>
+                        <p className="text-xs text-gray-500 font-sans">Manage customer profiles, spend analytics & purchase logs</p>
                     </div>
                 </div>
 
                 <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                     <DialogTrigger asChild>
-                        <Button className="bg-maroon hover:bg-maroon-dark text-gold font-bold h-7.5 text-[9px] gap-1 px-3 uppercase tracking-wider cursor-pointer">
-                            <Plus className="h-3.5 w-3.5" />
+                        <Button className="bg-gradient-to-r from-maroon to-maroon-dark text-gold h-9 text-xs font-bold shadow-md shadow-maroon/20 gap-1.5 hover:shadow-lg hover:shadow-maroon/30 transition-all">
+                            <Plus className="h-4 w-4" />
                             Add Profile
                         </Button>
                     </DialogTrigger>
                     <DialogContent className="border-gold/20 max-w-sm">
                         <DialogHeader className="border-b border-gold/10 pb-2">
-                            <DialogTitle className="text-xs font-bold uppercase tracking-wider text-maroon font-serif">Register Customer Profile</DialogTitle>
+                            <DialogTitle className="text-sm font-bold uppercase tracking-wider text-maroon font-serif">Register Customer Profile</DialogTitle>
                         </DialogHeader>
                         <form onSubmit={handleCreateSubmit} className="space-y-3 pt-2">
                             <div className="space-y-1">
-                                <label className="text-[9px] font-bold text-gray-500 uppercase">Customer Name *</label>
+                                <label className="text-[10px] font-bold text-gray-500 uppercase">Customer Name *</label>
                                 <Input
                                     required
                                     placeholder="Enter full name"
-                                    className="h-8 text-xs border-gold/30 focus-visible:ring-maroon bg-white"
+                                    className="h-9 text-xs border-gold/30 focus-visible:ring-maroon bg-white"
                                     value={name}
                                     onChange={(e) => setName(e.target.value)}
                                 />
                             </div>
                             <div className="space-y-1">
-                                <label className="text-[9px] font-bold text-gray-500 uppercase">Mobile Number *</label>
+                                <label className="text-[10px] font-bold text-gray-500 uppercase">Mobile Number *</label>
                                 <Input
                                     required
                                     placeholder="10-digit mobile"
-                                    className="h-8 text-xs border-gold/30 font-mono focus-visible:ring-maroon bg-white"
+                                    className="h-9 text-xs border-gold/30 font-mono focus-visible:ring-maroon bg-white"
                                     value={mobile}
                                     onChange={(e) => setMobile(e.target.value)}
                                 />
                             </div>
                             <div className="grid grid-cols-2 gap-2">
                                 <div className="space-y-1">
-                                    <label className="text-[9px] font-bold text-gray-500 uppercase">City</label>
+                                    <label className="text-[10px] font-bold text-gray-500 uppercase">City</label>
                                     <Input
                                         placeholder="City"
-                                        className="h-8 text-xs border-gold/30 focus-visible:ring-maroon bg-white"
+                                        className="h-9 text-xs border-gold/30 focus-visible:ring-maroon bg-white"
                                         value={city}
                                         onChange={(e) => setCity(e.target.value)}
                                     />
                                 </div>
                                 <div className="space-y-1">
-                                    <label className="text-[9px] font-bold text-gray-500 uppercase">Address / Street</label>
+                                    <label className="text-[10px] font-bold text-gray-500 uppercase">Address / Street</label>
                                     <Input
                                         placeholder="Address"
-                                        className="h-8 text-xs border-gold/30 focus-visible:ring-maroon bg-white"
+                                        className="h-9 text-xs border-gold/30 focus-visible:ring-maroon bg-white"
                                         value={address}
                                         onChange={(e) => setAddress(e.target.value)}
                                     />
@@ -305,139 +316,244 @@ export default function CustomersPage() {
                             </div>
                             <Button
                                 type="submit"
-                                className="w-full bg-maroon hover:bg-maroon-dark text-gold font-bold h-8 text-xs mt-2 uppercase tracking-wider cursor-pointer"
+                                className="w-full bg-gradient-to-r from-maroon to-maroon-dark hover:from-maroon-dark hover:to-maroon-dark text-gold font-bold h-9 text-xs mt-2 uppercase tracking-wider cursor-pointer gap-1.5"
                                 disabled={createMutation.isPending}
                             >
-                                {createMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : 'Register Profile'}
+                                {createMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+                                Register Profile
                             </Button>
                         </form>
                     </DialogContent>
                 </Dialog>
             </div>
 
-            {/* Asymmetric Split Workspace */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-                
-                {/* LEFT COLUMN: REGISTRY DIRECTORY (col-span-5) */}
-                <div className="lg:col-span-5 space-y-3">
-                    
-                    {/* Small stats banner */}
-                    <div className="grid grid-cols-3 gap-2">
-                        <Card className="border-gold/15 p-2 bg-cream/5 shadow-none flex flex-col justify-center">
-                            <span className="text-[7.5px] uppercase font-bold text-gray-400">Profiles</span>
-                            <span className="text-xs font-black font-mono text-maroon mt-0.5">{stats.totalCount}</span>
-                        </Card>
-                        <Card className="border-gold/15 p-2 bg-cream/5 shadow-none flex flex-col justify-center">
-                            <span className="text-[7.5px] uppercase font-bold text-gray-400">Total Spent</span>
-                            <span className="text-xs font-black font-mono text-maroon mt-0.5">{formatCurrency(stats.totalOutlay)}</span>
-                        </Card>
-                        <Card className="border-gold/15 p-2 bg-cream/5 shadow-none flex flex-col justify-center">
-                            <span className="text-[7.5px] uppercase font-bold text-gray-400">Avg Outlay</span>
-                            <span className="text-xs font-black font-mono text-emerald-700 mt-0.5">{formatCurrency(stats.avgSpent)}</span>
-                        </Card>
-                    </div>
+            {/* KPI Stats Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <motion.div
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3 }}
+                >
+                    <Card className="border-gold/20 shadow-sm hover:shadow-md transition-shadow bg-white">
+                        <CardContent className="p-4 flex items-center justify-between">
+                            <div className="space-y-1">
+                                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Total Profiles</span>
+                                <span className="text-2xl font-bold font-mono text-gray-800">{stats.totalCount}</span>
+                                <span className="text-[10px] text-gray-400 block">Registered directory</span>
+                            </div>
+                            <div className="p-2.5 bg-gradient-to-br from-slate-600 to-slate-800 rounded-xl text-white shadow">
+                                <Users className="h-5 w-5" />
+                            </div>
+                        </CardContent>
+                    </Card>
+                </motion.div>
 
-                    <Card className="border-gold/15 shadow-sm overflow-hidden bg-white">
-                        <CardHeader className="bg-cream/10 border-b border-gold/10 p-2.5 space-y-2">
-                            <div className="relative">
-                                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-450" />
-                                <Input
-                                    placeholder="Search name, phone, city, email..."
-                                    className="pl-8 h-8 text-[11px] border-gold/20 focus-visible:ring-maroon bg-white/70"
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                />
+                <motion.div
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: 0.05 }}
+                >
+                    <Card className="border-gold/20 shadow-sm hover:shadow-md transition-shadow bg-white">
+                        <CardContent className="p-4 flex items-center justify-between">
+                            <div className="space-y-1">
+                                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">In-Store</span>
+                                <span className="text-2xl font-bold font-mono text-amber-600">{instoreCount}</span>
+                                <span className="text-[10px] text-gray-400 block">Walk-in customers</span>
                             </div>
-                            <div className="flex border border-gold/15 rounded-md overflow-hidden text-[8px] font-bold uppercase tracking-wider bg-white">
-                                <button
-                                    type="button"
-                                    onClick={() => setCustomerTypeFilter('all')}
-                                    className={`flex-1 py-1 text-center border-r border-gold/15 transition-all cursor-pointer ${
-                                        customerTypeFilter === 'all' 
-                                            ? 'bg-maroon text-gold' 
-                                            : 'text-gray-500 hover:bg-cream/5'
-                                    }`}
-                                >
-                                    All ({customers?.length || 0})
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setCustomerTypeFilter('instore')}
-                                    className={`flex-1 py-1 text-center border-r border-gold/15 transition-all cursor-pointer ${
-                                        customerTypeFilter === 'instore' 
-                                            ? 'bg-maroon text-gold' 
-                                            : 'text-gray-500 hover:bg-cream/5'
-                                    }`}
-                                >
-                                    In-store ({customers?.filter(c => c.type === 'instore').length || 0})
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setCustomerTypeFilter('online')}
-                                    className={`flex-1 py-1 text-center transition-all cursor-pointer ${
-                                        customerTypeFilter === 'online' 
-                                            ? 'bg-maroon text-gold' 
-                                            : 'text-gray-500 hover:bg-cream/5'
-                                    }`}
-                                >
-                                    Online ({customers?.filter(c => c.type === 'online').length || 0})
-                                </button>
+                            <div className="p-2.5 bg-gradient-to-br from-amber-400 to-amber-600 rounded-xl text-white shadow">
+                                <Store className="h-5 w-5" />
                             </div>
+                        </CardContent>
+                    </Card>
+                </motion.div>
+
+                <motion.div
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: 0.1 }}
+                >
+                    <Card className="border-gold/20 shadow-sm hover:shadow-md transition-shadow bg-white">
+                        <CardContent className="p-4 flex items-center justify-between">
+                            <div className="space-y-1">
+                                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Online</span>
+                                <span className="text-2xl font-bold font-mono text-sky-600">{onlineCount}</span>
+                                <span className="text-[10px] text-gray-400 block">Web store profiles</span>
+                            </div>
+                            <div className="p-2.5 bg-gradient-to-br from-sky-500 to-sky-700 rounded-xl text-white shadow">
+                                <Globe className="h-5 w-5" />
+                            </div>
+                        </CardContent>
+                    </Card>
+                </motion.div>
+
+                <motion.div
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: 0.15 }}
+                >
+                    <Card className="border-gold/20 shadow-sm hover:shadow-md transition-shadow bg-white">
+                        <CardContent className="p-4 flex items-center justify-between">
+                            <div className="space-y-1">
+                                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Total Spend</span>
+                                <span className="text-2xl font-bold font-mono text-emerald-600">{formatCurrency(stats.totalOutlay)}</span>
+                                <span className="text-[10px] text-gray-400 block">Across all profiles</span>
+                            </div>
+                            <div className="p-2.5 bg-gradient-to-br from-emerald-500 to-emerald-700 rounded-xl text-white shadow">
+                                <TrendingUp className="h-5 w-5" />
+                            </div>
+                        </CardContent>
+                    </Card>
+                </motion.div>
+            </div>
+
+            {/* Filters toolbar */}
+            <Card className="border-gold/20 shadow-sm bg-white">
+                <CardContent className="p-3.5 space-y-3">
+                    <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+                        <div className="relative flex-1 max-w-md">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                            <Input
+                                placeholder="Search name, phone, city, email..."
+                                className="pl-9 h-10 text-sm border-gold/30 bg-white"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                        </div>
+
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <div className="flex items-center gap-1.5">
+                                <Filter className="h-4 w-4 text-maroon" />
+                                <span className="text-[10px] font-bold text-gray-500 uppercase">Type:</span>
+                            </div>
+                            {([
+                                { value: 'all', label: 'All', count: customers?.length || 0 },
+                                { value: 'instore', label: 'In-Store', count: instoreCount },
+                                { value: 'online', label: 'Online', count: onlineCount },
+                            ] as const).map(opt => {
+                                const active = customerTypeFilter === opt.value;
+                                return (
+                                    <button
+                                        key={opt.value}
+                                        type="button"
+                                        onClick={() => setCustomerTypeFilter(opt.value)}
+                                        className={cn(
+                                            "shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all border",
+                                            active
+                                                ? "bg-gradient-to-r from-maroon to-maroon-dark text-gold border-maroon shadow-sm shadow-maroon/20"
+                                                : "bg-white text-gray-600 border-gold/30 hover:border-maroon/50 hover:text-maroon"
+                                        )}
+                                    >
+                                        {opt.label}
+                                        <span className={cn(
+                                            "px-1.5 py-0.5 rounded-full text-[10px] font-bold font-mono",
+                                            active ? "bg-gold/20 text-gold" : "bg-gray-100 text-gray-500"
+                                        )}>
+                                            {opt.count}
+                                        </span>
+                                    </button>
+                                );
+                            })}
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-10 text-xs text-gray-500 gap-1.5"
+                                onClick={() => {
+                                    setSearchTerm('');
+                                    setCustomerTypeFilter('all');
+                                }}
+                            >
+                                <X className="h-3.5 w-3.5" />
+                                Clear
+                            </Button>
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
+
+            {/* Master-Detail Layout */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                {/* Master List (Left Column) */}
+                <div className="lg:col-span-5">
+                    <Card className="border-gold/20 shadow-md bg-white overflow-hidden">
+                        <CardHeader className="bg-gradient-to-r from-cream/40 to-transparent border-b border-gold/10 px-4 py-3">
+                            <CardTitle className="text-sm font-bold text-maroon uppercase tracking-wider flex items-center justify-between">
+                                <span className="flex items-center gap-2">
+                                    <ClipboardList className="h-4 w-4 text-maroon/70" />
+                                    Customer Directory
+                                    <span className="text-[10px] font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full font-mono">
+                                        {filteredCustomers.length}
+                                    </span>
+                                </span>
+                                <span className="text-[10px] text-gray-500 normal-case font-normal hidden md:inline">Click a profile to view details</span>
+                            </CardTitle>
                         </CardHeader>
                         <CardContent className="p-0">
                             {isLoading ? (
                                 <div className="py-12 text-center text-maroon/50 text-xs italic">
-                                    <Loader2 className="h-5 w-5 animate-spin mx-auto mb-1 text-maroon" />
-                                    Loading customer ledger profiles...
+                                    <Loader2 className="h-6 w-6 animate-spin mx-auto mb-1 text-maroon" />
+                                    Loading customer profiles...
                                 </div>
                             ) : filteredCustomers.length === 0 ? (
-                                <div className="py-12 text-center text-gray-400 text-xs italic">
-                                    No profile matches the query criteria
+                                <div className="py-12 text-center">
+                                    <div className="flex flex-col items-center gap-2">
+                                        <div className="p-3 bg-gray-100 rounded-full">
+                                            <Search className="h-5 w-5 text-gray-400" />
+                                        </div>
+                                        <p className="text-sm text-gray-500">No matching customers found</p>
+                                        <p className="text-xs text-gray-400">Try adjusting your search or filters</p>
+                                    </div>
                                 </div>
                             ) : (
-                                <div className="max-h-[60vh] overflow-y-auto divide-y divide-gold/10">
+                                <div className="max-h-[calc(100vh-280px)] overflow-y-auto divide-y divide-gold/10">
                                     {filteredCustomers.map((customer) => {
                                         const isSelected = customer.customerId === selectedCustomerId;
                                         return (
                                             <div
                                                 key={customer.customerId}
-                                                className={`p-2.5 flex items-center justify-between cursor-pointer transition-all duration-150 ${
-                                                    isSelected 
-                                                        ? 'bg-cream/20 border-l-4 border-maroon' 
-                                                        : 'hover:bg-cream/5 border-l-4 border-transparent'
-                                                }`}
+                                                className={cn(
+                                                    "p-3 flex items-center justify-between cursor-pointer transition-all duration-150 border-l-4",
+                                                    isSelected
+                                                        ? "bg-gold/10 border-maroon"
+                                                        : "hover:bg-cream/10 border-transparent"
+                                                )}
                                                 onClick={() => {
                                                     setSelectedCustomerId(customer.customerId);
                                                     setIsEditing(false);
                                                 }}
                                             >
-                                                <div className="flex items-center gap-2.5 min-w-0">
-                                                    <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-[10px] flex-shrink-0 border ${
-                                                        isSelected 
-                                                            ? 'bg-maroon text-gold border-gold/50' 
-                                                            : 'bg-gold/10 text-maroon border-gold/25'
-                                                    }`}>
-                                                        {customer.name?.charAt(0).toUpperCase()}
+                                                <div className="flex items-center gap-3 min-w-0">
+                                                    <div className={cn(
+                                                        "h-10 w-10 shrink-0 rounded-full flex items-center justify-center text-xs font-bold border",
+                                                        isSelected
+                                                            ? "bg-gradient-to-br from-maroon to-maroon-dark text-gold border-gold/50 shadow-sm"
+                                                            : "bg-gold/10 text-maroon border-gold/25"
+                                                    )}>
+                                                        {getInitials(customer.name)}
                                                     </div>
                                                     <div className="min-w-0">
-                                                        <h4 className="text-xs font-bold text-gray-800 truncate">{customer.name}</h4>
-                                                        <span className="text-[9px] text-gray-450 font-mono mt-0.5 block truncate max-w-[150px]">
+                                                        <h4 className="text-sm font-semibold text-gray-800 truncate">{customer.name}</h4>
+                                                        <span className="text-[11px] text-gray-500 font-mono mt-0.5 block truncate max-w-[150px]">
                                                             {customer.mobile || customer.email || 'No contact info'}
                                                         </span>
                                                     </div>
                                                 </div>
 
                                                 <div className="text-right flex-shrink-0 pl-2">
-                                                    <div className="text-[10px] font-black font-mono text-maroon">
-                                                        {formatCurrency(customer.totalSpent || 0)}
+                                                    <div className="flex items-center justify-end gap-1 text-sm font-bold font-mono text-maroon">
+                                                        <IndianRupee className="h-3 w-3" />
+                                                        {(customer.totalSpent || 0).toLocaleString('en-IN')}
                                                     </div>
-                                                    <span className="text-[8px] text-gray-405 font-sans mt-0.5 flex items-center justify-end gap-1">
+                                                    <span className="text-[10px] text-gray-500 mt-1 flex items-center justify-end gap-1.5">
                                                         {customer.type === 'online' ? (
-                                                            <span className="px-1 py-0.2 rounded text-[7px] font-bold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-100">Online</span>
+                                                            <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-sky-50 text-sky-700 border border-sky-200 inline-flex items-center gap-0.5">
+                                                                <Globe className="h-2.5 w-2.5" /> Online
+                                                            </span>
                                                         ) : (
-                                                            <span className="px-1 py-0.2 rounded text-[7px] font-bold uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-100">In-store</span>
+                                                            <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200 inline-flex items-center gap-0.5">
+                                                                <Store className="h-2.5 w-2.5" /> In-store
+                                                            </span>
                                                         )}
-                                                        <span>• {customer.type === 'online' ? 'Web' : (customer.city || 'WALK-IN')} • {customer.totalPurchases} order(s)</span>
+                                                        <span className="text-gray-400">• {customer.totalPurchases} {customer.type === 'online' ? 'orders' : 'bills'}</span>
                                                     </span>
                                                 </div>
                                             </div>
@@ -449,7 +565,7 @@ export default function CustomersPage() {
                     </Card>
                 </div>
 
-                {/* RIGHT COLUMN: DETAIL WORKSPACE (col-span-7) */}
+                {/* Detail Workspace (Right Column) */}
                 <div className="lg:col-span-7">
                     <AnimatePresence mode="wait">
                         {!selectedCustomerId ? (
@@ -460,13 +576,13 @@ export default function CustomersPage() {
                                 exit={{ opacity: 0, y: -10 }}
                                 className="h-full"
                             >
-                                <Card className="border-gold/15 border-dashed border-2 bg-cream-light/5 h-full flex flex-col items-center justify-center text-center p-8 min-h-[300px]">
-                                    <div className="p-3 bg-cream/20 rounded-full border border-gold/20 mb-3 text-gold">
-                                        <Users className="h-6 w-6 text-maroon" />
+                                <Card className="border-gold/15 border-dashed border-2 bg-cream-light/5 h-full flex flex-col items-center justify-center text-center p-8 min-h-[420px]">
+                                    <div className="p-4 bg-gradient-to-br from-maroon to-maroon-dark rounded-2xl text-gold shadow-lg shadow-maroon/25 mb-4">
+                                        <Users className="h-8 w-8" />
                                     </div>
-                                    <h3 className="text-xs font-bold uppercase tracking-wider text-maroon font-serif">Inspect CRM Registry Profile</h3>
-                                    <p className="text-[10px] text-gray-400 max-w-sm mt-1">
-                                        Select a customer from the left-side database catalog to review contact credentials, gross purchases, and detailed transaction ledger history.
+                                    <h3 className="text-sm font-bold uppercase tracking-wider text-maroon font-serif">Inspect Customer Profile</h3>
+                                    <p className="text-xs text-gray-400 max-w-sm mt-1.5">
+                                        Select a customer from the directory to review contact credentials, gross purchases, and detailed transaction ledger history.
                                     </p>
                                 </Card>
                             </motion.div>
@@ -479,24 +595,24 @@ export default function CustomersPage() {
                                 className="space-y-4"
                             >
                                 {/* CRM Info / Edit Card */}
-                                <Card className="border-gold/15 shadow-sm bg-white overflow-hidden">
-                                    <CardHeader className="bg-cream/10 border-b border-gold/10 p-3 flex flex-row items-center justify-between">
+                                <Card className="border-gold/20 shadow-md bg-white overflow-hidden">
+                                    <CardHeader className="bg-gradient-to-r from-cream/40 to-transparent border-b border-gold/10 p-4 flex flex-row items-center justify-between">
                                         <div>
-                                            <CardTitle className="text-xs font-bold uppercase tracking-widest text-maroon font-serif">Customer File</CardTitle>
-                                            <CardDescription className="text-[8px] text-gray-400 mt-0.5">ID: {selectedCustomerId}</CardDescription>
+                                            <CardTitle className="text-sm font-bold uppercase tracking-widest text-maroon font-serif">Customer File</CardTitle>
+                                            <CardDescription className="text-[10px] text-gray-400 mt-0.5 font-mono">ID: {selectedCustomerId}</CardDescription>
                                         </div>
 
                                         <div className="flex items-center gap-1.5">
                                             {selectedCustomer?.type === 'online' ? (
-                                                <span className="text-[8px] bg-blue-50 text-blue-700 font-bold uppercase tracking-wider px-2 py-0.5 border border-blue-200 rounded">
-                                                    Managed Online
+                                                <span className="text-[9px] bg-sky-50 text-sky-700 font-bold uppercase tracking-wider px-2 py-0.5 border border-sky-200 rounded-full inline-flex items-center gap-1">
+                                                    <Globe className="h-2.5 w-2.5" /> Managed Online
                                                 </span>
                                             ) : !isEditing ? (
                                                 <>
                                                     <Button
                                                         variant="outline"
                                                         size="sm"
-                                                        className="h-7 text-[9px] border-gold/30 text-maroon hover:bg-gold/5 font-bold uppercase px-2 gap-1 cursor-pointer"
+                                                        className="h-8 text-[10px] border-gold/30 text-maroon hover:bg-gold/5 font-bold uppercase px-2.5 gap-1 cursor-pointer"
                                                         onClick={() => setIsEditing(true)}
                                                     >
                                                         <Edit3 className="h-3 w-3" />
@@ -505,7 +621,7 @@ export default function CustomersPage() {
                                                     <Button
                                                         variant="ghost"
                                                         size="sm"
-                                                        className="h-7 text-[9px] text-red-750 hover:bg-red-50 hover:text-red-800 font-bold uppercase px-2 gap-1 cursor-pointer"
+                                                        className="h-8 text-[10px] text-red-500 hover:bg-red-50 hover:text-red-700 font-bold uppercase px-2.5 gap-1 cursor-pointer"
                                                         onClick={handleDelete}
                                                         disabled={deleteMutation.isPending}
                                                     >
@@ -517,7 +633,7 @@ export default function CustomersPage() {
                                                 <Button
                                                     variant="outline"
                                                     size="sm"
-                                                    className="h-7 text-[9px] border-gold/30 text-gray-500 hover:bg-gray-50 font-bold uppercase px-2 cursor-pointer"
+                                                    className="h-8 text-[10px] border-gold/30 text-gray-500 hover:bg-gray-50 font-bold uppercase px-2.5 cursor-pointer"
                                                     onClick={() => setIsEditing(false)}
                                                 >
                                                     Cancel
@@ -526,40 +642,44 @@ export default function CustomersPage() {
                                         </div>
                                     </CardHeader>
 
-                                    <CardContent className="p-3">
+                                    <CardContent className="p-4">
                                         {!isEditing ? (
                                             <div className="space-y-4">
                                                 {/* Customer Card header */}
                                                 <div className="flex items-start gap-4">
-                                                    <div className="w-12 h-12 rounded-full bg-maroon/5 border border-gold/30 flex items-center justify-center text-maroon font-serif font-black text-lg shadow-inner">
+                                                    <div className="w-14 h-14 shrink-0 rounded-full bg-gradient-to-br from-maroon to-maroon-dark border border-gold/30 flex items-center justify-center text-gold font-serif font-black text-xl shadow-md shadow-maroon/20">
                                                         {selectedCustomer?.name?.charAt(0).toUpperCase()}
                                                     </div>
-                                                    <div className="space-y-1">
-                                                        <div className="flex items-center gap-1.5 flex-wrap">
-                                                            <h2 className="text-sm font-bold text-gray-900 leading-none">{selectedCustomer?.name}</h2>
+                                                    <div className="space-y-1 min-w-0">
+                                                        <div className="flex items-center gap-2 flex-wrap">
+                                                            <h2 className="text-base font-bold text-gray-900 leading-none">{selectedCustomer?.name}</h2>
                                                             {selectedCustomer?.type === 'online' ? (
-                                                                <span className="px-1 py-0.2 rounded text-[7px] font-bold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-100">Online Profile</span>
+                                                                <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-sky-50 text-sky-700 border border-sky-200 inline-flex items-center gap-1">
+                                                                    <Globe className="h-2.5 w-2.5" /> Online Profile
+                                                                </span>
                                                             ) : (
-                                                                <span className="px-1 py-0.2 rounded text-[7px] font-bold uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-100">In-store Profile</span>
+                                                                <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200 inline-flex items-center gap-1">
+                                                                    <Store className="h-2.5 w-2.5" /> In-store Profile
+                                                                </span>
                                                             )}
                                                         </div>
-                                                        
-                                                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
-                                                            <div className="flex items-center text-[10px] text-gray-600 font-mono">
-                                                                <Phone className="h-3 w-3 text-gold mr-1" />
+
+                                                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1.5">
+                                                            <div className="flex items-center text-[11px] text-gray-600 font-mono">
+                                                                <Phone className="h-3 w-3 text-maroon mr-1" />
                                                                 {selectedCustomer?.mobile || 'No Phone'}
                                                             </div>
                                                             {selectedCustomer?.email && (
-                                                                <div className="flex items-center text-[10px] text-gray-600 font-mono">
-                                                                    <span className="text-gold mr-1">✉</span>
+                                                                <div className="flex items-center text-[11px] text-gray-600 font-mono">
+                                                                    <span className="text-maroon mr-1">✉</span>
                                                                     {selectedCustomer?.email}
                                                                 </div>
                                                             )}
                                                             {selectedCustomer?.city && (
-                                                                <div className="flex items-center text-[10px] text-gray-600">
-                                                                    <MapPin className="h-3 w-3 text-gold mr-1" />
+                                                                <div className="flex items-center text-[11px] text-gray-600">
+                                                                    <MapPin className="h-3 w-3 text-maroon mr-1" />
                                                                     {selectedCustomer?.city}
-                                                                    {selectedCustomer?.address && <span className="text-[9px] text-gray-400 ml-1">({selectedCustomer?.address})</span>}
+                                                                    {selectedCustomer?.address && <span className="text-[10px] text-gray-400 ml-1">({selectedCustomer?.address})</span>}
                                                                 </div>
                                                             )}
                                                         </div>
@@ -567,24 +687,24 @@ export default function CustomersPage() {
                                                 </div>
 
                                                 {/* CRM Stats Grid */}
-                                                <div className="grid grid-cols-3 gap-3 border-t border-b border-gold/10 py-3 bg-cream-light/3">
+                                                <div className="grid grid-cols-3 gap-3 border-t border-b border-gold/10 py-3 bg-cream-light/5 rounded-lg">
                                                     <div className="text-center">
-                                                        <span className="text-[7.5px] uppercase font-bold text-gray-450 block">Outlay (Total Spent)</span>
-                                                        <span className="text-xs font-black font-mono text-maroon block mt-0.5">
+                                                        <span className="text-[9px] uppercase font-bold text-gray-500 block">Outlay (Total Spent)</span>
+                                                        <span className="text-sm font-black font-mono text-maroon block mt-1">
                                                             {formatCurrency(selectedCustomer?.totalSpent || 0)}
                                                         </span>
                                                     </div>
                                                     <div className="text-center border-l border-r border-gold/10">
-                                                        <span className="text-[7.5px] uppercase font-bold text-gray-450 block">
+                                                        <span className="text-[9px] uppercase font-bold text-gray-500 block">
                                                             {selectedCustomer?.type === 'online' ? 'Order Count' : 'Visit Frequency'}
                                                         </span>
-                                                        <span className="text-xs font-black font-mono text-maroon block mt-0.5">
+                                                        <span className="text-sm font-black font-mono text-maroon block mt-1">
                                                             {selectedCustomer?.totalPurchases || 0} {selectedCustomer?.type === 'online' ? 'orders' : 'bills'}
                                                         </span>
                                                     </div>
                                                     <div className="text-center">
-                                                        <span className="text-[7.5px] uppercase font-bold text-gray-455 block">Average Ticket (ATV)</span>
-                                                        <span className="text-xs font-black font-mono text-emerald-700 block mt-0.5">
+                                                        <span className="text-[9px] uppercase font-bold text-gray-500 block">Average Ticket (ATV)</span>
+                                                        <span className="text-sm font-black font-mono text-emerald-700 block mt-1">
                                                             {formatCurrency(
                                                                 selectedCustomer && selectedCustomer.totalPurchases > 0 
                                                                     ? Math.round(selectedCustomer.totalSpent / selectedCustomer.totalPurchases)
@@ -599,21 +719,21 @@ export default function CustomersPage() {
                                             <form onSubmit={handleUpdateSubmit} className="space-y-3 pt-1">
                                                 <div className="grid grid-cols-2 gap-2">
                                                     <div className="space-y-1">
-                                                        <label className="text-[9px] font-bold text-gray-500 uppercase">Customer Name *</label>
+                                                        <label className="text-[10px] font-bold text-gray-500 uppercase">Customer Name *</label>
                                                         <Input
                                                             required
                                                             placeholder="Edit Name"
-                                                            className="h-8 text-xs border-gold/30 focus-visible:ring-maroon bg-white"
+                                                            className="h-9 text-xs border-gold/30 focus-visible:ring-maroon bg-white"
                                                             value={editName}
                                                             onChange={(e) => setEditName(e.target.value)}
                                                         />
                                                     </div>
                                                     <div className="space-y-1">
-                                                        <label className="text-[9px] font-bold text-gray-500 uppercase">Mobile Number *</label>
+                                                        <label className="text-[10px] font-bold text-gray-500 uppercase">Mobile Number *</label>
                                                         <Input
                                                             required
                                                             placeholder="Edit Mobile"
-                                                            className="h-8 text-xs border-gold/30 font-mono focus-visible:ring-maroon bg-white"
+                                                            className="h-9 text-xs border-gold/30 font-mono focus-visible:ring-maroon bg-white"
                                                             value={editMobile}
                                                             onChange={(e) => setEditMobile(e.target.value)}
                                                         />
@@ -621,19 +741,19 @@ export default function CustomersPage() {
                                                 </div>
                                                 <div className="grid grid-cols-2 gap-2">
                                                     <div className="space-y-1">
-                                                        <label className="text-[9px] font-bold text-gray-500 uppercase">City</label>
+                                                        <label className="text-[10px] font-bold text-gray-500 uppercase">City</label>
                                                         <Input
                                                             placeholder="Edit City"
-                                                            className="h-8 text-xs border-gold/30 focus-visible:ring-maroon bg-white"
+                                                            className="h-9 text-xs border-gold/30 focus-visible:ring-maroon bg-white"
                                                             value={editCity}
                                                             onChange={(e) => setEditCity(e.target.value)}
                                                         />
                                                     </div>
                                                     <div className="space-y-1">
-                                                        <label className="text-[9px] font-bold text-gray-500 uppercase">Address / Street</label>
+                                                        <label className="text-[10px] font-bold text-gray-500 uppercase">Address / Street</label>
                                                         <Input
                                                             placeholder="Edit Address"
-                                                            className="h-8 text-xs border-gold/30 focus-visible:ring-maroon bg-white"
+                                                            className="h-9 text-xs border-gold/30 focus-visible:ring-maroon bg-white"
                                                             value={editAddress}
                                                             onChange={(e) => setEditAddress(e.target.value)}
                                                         />
@@ -642,7 +762,7 @@ export default function CustomersPage() {
                                                 <div className="flex justify-end pt-1">
                                                     <Button
                                                         type="submit"
-                                                        className="bg-maroon hover:bg-maroon-dark text-gold font-bold h-7.5 text-[9px] gap-1 px-4 uppercase tracking-wider cursor-pointer"
+                                                        className="bg-gradient-to-r from-maroon to-maroon-dark hover:from-maroon-dark hover:to-maroon-dark text-gold font-bold h-9 text-[10px] gap-1 px-4 uppercase tracking-wider cursor-pointer"
                                                         disabled={updateMutation.isPending}
                                                     >
                                                         {updateMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
@@ -655,45 +775,53 @@ export default function CustomersPage() {
                                 </Card>
 
                                 {/* Invoice History timeline */}
-                                <Card className="border-gold/15 shadow-sm bg-white overflow-hidden">
-                                    <CardHeader className="bg-cream/10 border-b border-gold/10 p-3">
-                                        <CardTitle className="text-xs font-bold uppercase tracking-widest text-maroon font-serif flex items-center gap-1.5">
-                                            <Receipt className="h-3.5 w-3.5" />
-                                            {selectedCustomer?.type === 'online' ? 'Online Orders Ledger' : 'Purchase Timeline Ledger'}
+                                <Card className="border-gold/20 shadow-md bg-white overflow-hidden">
+                                    <CardHeader className="bg-gradient-to-r from-cream/40 to-transparent border-b border-gold/10 p-4">
+                                        <CardTitle className="text-sm font-bold uppercase tracking-widest text-maroon font-serif flex items-center justify-between">
+                                            <span className="flex items-center gap-1.5">
+                                                <Receipt className="h-4 w-4 text-maroon/70" />
+                                                {selectedCustomer?.type === 'online' ? 'Online Orders Ledger' : 'Purchase Timeline Ledger'}
+                                            </span>
+                                            <span className="text-[10px] font-normal text-gray-500 normal-case">
+                                                {invoices?.length || 0} {selectedCustomer?.type === 'online' ? 'orders' : 'records'}
+                                            </span>
                                         </CardTitle>
                                     </CardHeader>
                                     <CardContent className="p-0">
                                         {isLoadingInvoices ? (
-                                            <div className="py-8 text-center text-gray-400 text-xs italic">
+                                            <div className="py-10 text-center text-gray-400 text-xs italic">
                                                 <Loader2 className="h-4 w-4 animate-spin mx-auto mb-1 text-maroon" />
                                                 Loading records...
                                             </div>
                                         ) : !invoices || invoices.length === 0 ? (
-                                            <div className="py-8 text-center text-gray-400 text-xs italic">
+                                            <div className="py-10 text-center text-gray-400 text-xs italic">
+                                                <div className="p-3 bg-gray-100 rounded-full inline-flex mb-2">
+                                                    <Wallet className="h-5 w-5 text-gray-400" />
+                                                </div>
                                                 {selectedCustomer?.type === 'online' ? 'No online orders registered for this profile.' : 'No invoices registered for this profile.'}
                                             </div>
                                         ) : (
                                             <div className="overflow-x-auto">
                                                 <Table>
-                                                    <TableHeader className="bg-cream/5">
+                                                    <TableHeader className="bg-cream/10">
                                                         <TableRow className="border-b border-gold/10 hover:bg-transparent">
-                                                            <TableHead className="h-7 text-[8px] font-bold text-maroon py-0.5">Date</TableHead>
-                                                            <TableHead className="h-7 text-[8px] font-bold text-maroon py-0.5">
+                                                            <TableHead className="h-10 text-[10px] font-bold text-maroon py-1 px-3">Date</TableHead>
+                                                            <TableHead className="h-10 text-[10px] font-bold text-maroon py-1">
                                                                 {selectedCustomer?.type === 'online' ? 'Order #' : 'Invoice #'}
                                                             </TableHead>
-                                                            <TableHead className="h-7 text-[8px] font-bold text-maroon py-0.5">Details (Saree Models)</TableHead>
-                                                            <TableHead className="h-7 text-[8px] font-bold text-maroon text-right py-0.5">Amount</TableHead>
+                                                            <TableHead className="h-10 text-[10px] font-bold text-maroon py-1">Details (Saree Models)</TableHead>
+                                                            <TableHead className="h-10 text-[10px] font-bold text-maroon text-right py-1 px-3">Amount</TableHead>
                                                         </TableRow>
                                                     </TableHeader>
                                                     <TableBody>
                                                         {paginatedInvoices.map((inv) => (
-                                                            <TableRow key={inv.id} className="hover:bg-cream/5 border-b border-gold/5 h-8.5">
-                                                                <TableCell className="py-1 text-[9px] font-mono text-gray-500">
+                                                            <TableRow key={inv.id} className="hover:bg-cream/10 border-b border-gold/5">
+                                                                <TableCell className="py-2 text-[11px] font-mono text-gray-500 px-3 whitespace-nowrap">
                                                                     {new Date(inv.created_at).toLocaleDateString()}
                                                                 </TableCell>
-                                                                <TableCell className="py-1 text-[9px] font-mono text-gray-500">
+                                                                <TableCell className="py-2 text-[11px] font-mono text-gray-500">
                                                                     <div className="flex items-center gap-1">
-                                                                        <span className="truncate max-w-[85px]" title={inv.invoice_number}>
+                                                                        <span className="truncate max-w-[110px]" title={inv.invoice_number}>
                                                                             {inv.invoice_number || 'N/A'}
                                                                         </span>
                                                                         {inv.invoice_number && (
@@ -705,12 +833,12 @@ export default function CustomersPage() {
                                                                                 className="text-gray-400 hover:text-maroon p-0.5 rounded hover:bg-gray-100 transition-all cursor-pointer flex-shrink-0"
                                                                                 title={selectedCustomer?.type === 'online' ? 'Copy Order Number' : 'Copy Invoice Number'}
                                                                             >
-                                                                                <Copy className="h-2.5 w-2.5" />
+                                                                                <Copy className="h-3 w-3" />
                                                                             </button>
                                                                         )}
                                                                     </div>
                                                                 </TableCell>
-                                                                <TableCell className="py-1 text-[10px] text-gray-700 truncate max-w-[180px]" title={
+                                                                <TableCell className="py-2 text-xs text-gray-700 truncate max-w-[200px]" title={
                                                                     inv.sale_items?.map((item: any) => 
                                                                         `${item.inventory?.saree_name || 'Saree'} (x${item.quantity})`
                                                                     ).join(', ')
@@ -719,7 +847,7 @@ export default function CustomersPage() {
                                                                         `${item.inventory?.saree_name || 'Saree'} (x${item.quantity})`
                                                                     ).join(', ') || 'No items listed'}
                                                                 </TableCell>
-                                                                <TableCell className="py-1 text-xs font-bold text-right text-maroon font-mono">
+                                                                <TableCell className="py-2 text-sm font-bold text-right text-maroon font-mono px-3">
                                                                     {formatCurrency(inv.total_amount || 0)}
                                                                 </TableCell>
                                                             </TableRow>
@@ -729,29 +857,29 @@ export default function CustomersPage() {
                                                 
                                                 {/* Pagination Controls */}
                                                 {totalInvoicePages > 1 && invoices && (
-                                                    <div className="flex items-center justify-between px-3 py-1.5 border-t border-gold/10 bg-cream/5">
-                                                        <p className="text-[9px] text-gray-500">
+                                                    <div className="flex items-center justify-between px-4 py-2.5 border-t border-gold/10 bg-cream/5">
+                                                        <p className="text-[10px] text-gray-500">
                                                             Showing <span className="font-bold">{(invoicePage - 1) * invoicesPerPage + 1}</span> - <span className="font-bold">{Math.min(invoicePage * invoicesPerPage, invoices.length)}</span> of <span className="font-bold">{invoices.length}</span>
                                                         </p>
                                                         <div className="flex items-center gap-1">
                                                             <Button
                                                                 variant="outline"
                                                                 size="sm"
-                                                                className="border-gold/20 text-maroon h-6 w-6 p-0 hover:bg-cream/10 cursor-pointer"
+                                                                className="border-gold/20 text-maroon h-7 w-7 p-0 hover:bg-cream/10 cursor-pointer"
                                                                 onClick={() => setInvoicePage(prev => Math.max(1, prev - 1))}
                                                                 disabled={invoicePage === 1}
                                                             >
-                                                                <ChevronLeft className="h-3 w-3" />
+                                                                <ChevronLeft className="h-3.5 w-3.5" />
                                                             </Button>
-                                                            <span className="text-[9px] font-mono text-gray-650 px-2">Page {invoicePage} of {totalInvoicePages}</span>
+                                                            <span className="text-[10px] font-mono text-gray-500 px-2">Page {invoicePage} of {totalInvoicePages}</span>
                                                             <Button
                                                                 variant="outline"
                                                                 size="sm"
-                                                                className="border-gold/20 text-maroon h-6 w-6 p-0 hover:bg-cream/10 cursor-pointer"
+                                                                className="border-gold/20 text-maroon h-7 w-7 p-0 hover:bg-cream/10 cursor-pointer"
                                                                 onClick={() => setInvoicePage(prev => Math.min(totalInvoicePages, prev + 1))}
                                                                 disabled={invoicePage === totalInvoicePages}
                                                             >
-                                                                <ChevronRight className="h-3 w-3" />
+                                                                <ChevronRight className="h-3.5 w-3.5" />
                                                             </Button>
                                                         </div>
                                                     </div>

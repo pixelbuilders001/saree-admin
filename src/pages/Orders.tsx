@@ -15,7 +15,6 @@ import {
     User,
     Phone,
     Mail,
-    DollarSign,
     CheckCircle2,
     Truck,
     Clock,
@@ -23,14 +22,24 @@ import {
     AlertTriangle,
     TrendingUp,
     FileText,
-    ListFilter,
     PackageOpen,
     Trash2,
     Sparkles,
-    ShoppingCart,
     Printer,
-    Gift
+    Gift,
+    X,
+    ChevronRight,
+    Package,
+    CircleCheck,
+    IndianRupee,
+    Copy,
+    ClipboardList,
+    ArrowUpRight,
+    Send,
+    Home,
+    Ban
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -60,17 +69,50 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from 'sonner';
+import { motion } from 'framer-motion';
+
+// Fulfillment pipeline in order of progress
+const FULFILLMENT_STEPS = [
+    { key: 'placed', label: 'Placed', icon: FileText },
+    { key: 'confirmed', label: 'Confirmed', icon: CheckCircle2 },
+    { key: 'processing', label: 'Processing', icon: Loader2 },
+    { key: 'packed', label: 'Packed', icon: Package },
+    { key: 'shipped', label: 'Shipped', icon: Truck },
+    { key: 'out_for_delivery', label: 'Out For Delivery', icon: Send },
+    { key: 'delivered', label: 'Delivered', icon: Home },
+];
+
+const ORDER_STATUS_OPTIONS = [
+    { value: 'all', label: 'All' },
+    { value: 'placed', label: 'Placed' },
+    { value: 'confirmed', label: 'Confirmed' },
+    { value: 'processing', label: 'Processing' },
+    { value: 'packed', label: 'Packed' },
+    { value: 'shipped', label: 'Shipped' },
+    { value: 'out_for_delivery', label: 'Out For Delivery' },
+    { value: 'delivered', label: 'Delivered' },
+    { value: 'cancelled', label: 'Cancelled' },
+    { value: 'returned', label: 'Returned' },
+];
+
+const PAYMENT_STATUS_OPTIONS = [
+    { value: 'all', label: 'All Payments' },
+    { value: 'pending', label: 'Pending' },
+    { value: 'paid', label: 'Paid' },
+    { value: 'failed', label: 'Failed' },
+    { value: 'refunded', label: 'Refunded' },
+];
 
 export default function OrdersPage() {
     const queryClient = useQueryClient();
     const location = useLocation() as any;
-    
+
     // UI state
     const [selectedOrderId, setSelectedOrderId] = React.useState<string | null>(null);
     const [searchQuery, setSearchQuery] = React.useState('');
     const [statusFilter, setStatusFilter] = React.useState<string>('all');
     const [paymentFilter, setPaymentFilter] = React.useState<string>('all');
-    
+
     // Status update notes state
     const [statusNote, setStatusNote] = React.useState('');
     const [tempOrderStatus, setTempOrderStatus] = React.useState<string>('');
@@ -89,7 +131,7 @@ export default function OrdersPage() {
     const [formShippingFee, setFormShippingFee] = React.useState('0');
     const [formDiscount, setFormDiscount] = React.useState('0');
     const [formNotes, setFormNotes] = React.useState('');
-    
+
     // Items added to the manual order
     const [selectedSareeId, setSelectedSareeId] = React.useState<string>('');
     const [selectedSareeQty, setSelectedSareeQty] = React.useState<number>(1);
@@ -186,7 +228,7 @@ export default function OrdersPage() {
     });
 
     const updatePaymentMutation = useMutation({
-        mutationFn: ({ orderId, paymentStatus }: { orderId: string; paymentStatus: string }) => 
+        mutationFn: ({ orderId, paymentStatus }: { orderId: string; paymentStatus: string }) =>
             ordersService.updatePaymentStatus(orderId, paymentStatus),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['orders'] });
@@ -250,7 +292,7 @@ export default function OrdersPage() {
             }
             setIsCreateModalOpen(true);
             toast.success(`Loaded cart items for ${data.phone} into manual order draft.`);
-            
+
             // Clean up history state so reloading doesn't prompt again
             window.history.replaceState({}, document.title);
         }
@@ -359,7 +401,7 @@ export default function OrdersPage() {
         // Pick 1-3 random sarees
         const numItems = Math.floor(Math.random() * 3) + 1;
         const selectedItems: Array<{ saree: Saree; quantity: number }> = [];
-        
+
         for (let i = 0; i < numItems; i++) {
             const randomSaree = sarees[Math.floor(Math.random() * sarees.length)];
             const qty = Math.floor(Math.random() * 2) + 1;
@@ -371,11 +413,11 @@ export default function OrdersPage() {
         const lastNames = ['Sharma', 'Verma', 'Patel', 'Joshi', 'Singh', 'Gupta', 'Mehta', 'Reddy'];
         const cities = ['Mumbai', 'Delhi', 'Bangalore', 'Hyderabad', 'Chennai', 'Kolkata', 'Pune', 'Ahmedabad'];
         const states = ['Maharashtra', 'Delhi', 'Karnataka', 'Telangana', 'Tamil Nadu', 'West Bengal', 'Maharashtra', 'Gujarat'];
-        
+
         const customerName = `${firstNames[Math.floor(Math.random() * firstNames.length)]} ${lastNames[Math.floor(Math.random() * lastNames.length)]}`;
         const phone = `9${Math.floor(100000000 + Math.random() * 900000000)}`;
         const email = `${customerName.toLowerCase().replace(' ', '.')}@example.com`;
-        
+
         const cityIdx = Math.floor(Math.random() * cities.length);
         const street = `${Math.floor(Math.random() * 100) + 1}, VIP Lane, Sector-4`;
         const city = cities[cityIdx];
@@ -437,7 +479,7 @@ export default function OrdersPage() {
     // Calculate dynamic stats
     const stats = React.useMemo(() => {
         if (!orders) return { total: 0, pending: 0, shipped: 0, revenue: 0 };
-        
+
         let total = orders.length;
         let pending = 0;
         let shipped = 0;
@@ -464,21 +506,31 @@ export default function OrdersPage() {
         return orders.filter(order => {
             // Search match
             const term = searchQuery.toLowerCase();
-            const matchesSearch = 
+            const matchesSearch =
                 order.orderNumber.toLowerCase().includes(term) ||
                 order.customerName.toLowerCase().includes(term) ||
                 order.customerPhone.includes(term) ||
                 (order.customerEmail && order.customerEmail.toLowerCase().includes(term));
-            
+
             // Status match
             const matchesStatus = statusFilter === 'all' || order.orderStatus === statusFilter;
-            
+
             // Payment match
             const matchesPayment = paymentFilter === 'all' || order.paymentStatus === paymentFilter;
 
             return matchesSearch && matchesStatus && matchesPayment;
         });
-    }, [orders, searchQuery, statusFilter, paymentFilter]);
+    }, [orders, searchQuery, paymentFilter, statusFilter]);
+
+    // Per-status counts for quick-filter pills (pure UI)
+    const statusCounts = React.useMemo(() => {
+        if (!orders) return {};
+        const counts: Record<string, number> = {};
+        ORDER_STATUS_OPTIONS.slice(1).forEach(opt => {
+            counts[opt.value] = orders.filter(o => o.orderStatus === opt.value).length;
+        });
+        return counts;
+    }, [orders]);
 
     // Helper: Style for order status badge
     const getOrderStatusBadgeClass = (status: string) => {
@@ -522,6 +574,33 @@ export default function OrdersPage() {
         }
     };
 
+    // Helper: Status dot color for order status
+    const getStatusDotClass = (status: string) => {
+        switch (status) {
+            case 'placed': return 'bg-amber-500';
+            case 'confirmed': return 'bg-blue-500';
+            case 'processing': return 'bg-purple-500';
+            case 'packed': return 'bg-indigo-500';
+            case 'shipped': return 'bg-sky-500';
+            case 'out_for_delivery': return 'bg-orange-500';
+            case 'delivered': return 'bg-green-500';
+            case 'cancelled': return 'bg-red-500';
+            case 'returned': return 'bg-slate-500';
+            default: return 'bg-gray-400';
+        }
+    };
+
+    // Helper: Payment status dot color
+    const getPaymentDotClass = (status: string) => {
+        switch (status) {
+            case 'pending': return 'bg-yellow-500';
+            case 'paid': return 'bg-emerald-500';
+            case 'failed': return 'bg-rose-500';
+            case 'refunded': return 'bg-gray-400';
+            default: return 'bg-gray-400';
+        }
+    };
+
     // Helper: Formatted address string
     const formatAddress = (address: any) => {
         if (!address) return '';
@@ -536,37 +615,59 @@ export default function OrdersPage() {
         return parts.filter(Boolean).join(', ');
     };
 
+    // Helper: Customer avatar initials
+    const getInitials = (name: string) => {
+        if (!name) return '?';
+        return name.split(' ').map(n => n[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
+    };
+
+    // Helper: current step index within fulfillment pipeline
+    const currentFulfillmentIndex = React.useMemo(() => {
+        if (!selectedOrder) return -1;
+        return FULFILLMENT_STEPS.findIndex(s => s.key === selectedOrder.orderStatus);
+    }, [selectedOrder]);
+
+    // Copy order number to clipboard
+    const copyOrderNumber = async (orderNumber: string) => {
+        try {
+            await navigator.clipboard.writeText(orderNumber);
+            toast.success('Order number copied to clipboard');
+        } catch {
+            toast.error('Could not copy order number');
+        }
+    };
+
     return (
-        <div className="space-y-4 max-w-7xl mx-auto px-2">
-            {/* Minimal Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-gold/10 pb-3 gap-2">
-                <div className="flex items-center gap-2">
-                    <div className="p-1.5 bg-maroon/10 text-maroon rounded">
-                        <ShoppingBag className="h-5 w-5" />
+        <div className="space-y-5 max-w-7xl mx-auto px-2 pb-10">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div className="flex items-center gap-3">
+                    <div className="p-2.5 bg-gradient-to-br from-maroon to-maroon-dark text-gold rounded-xl shadow-md shadow-maroon/20">
+                        <ShoppingBag className="h-6 w-6" />
                     </div>
                     <div>
-                        <h1 className="text-xl font-bold font-serif text-maroon tracking-wider">SBS ONLINE ORDERS</h1>
-                        <p className="text-xs text-gray-500 font-sans">Manage e-commerce orders, delivery pipeline, and payment confirmation</p>
+                        <h1 className="text-xl md:text-2xl font-bold font-serif text-maroon tracking-wide">Online Orders</h1>
+                        <p className="text-xs text-gray-500 font-sans">Manage e-commerce orders, delivery pipeline & payments</p>
                     </div>
                 </div>
 
                 <div className="flex items-center gap-2 flex-wrap">
-                    <Button 
-                        variant="outline" 
-                        size="sm" 
+                    <Button
+                        variant="outline"
+                        size="sm"
                         onClick={handleGenerateMockOrder}
                         disabled={createOrderMutation.isPending}
-                        className="h-8 text-xs border-gold/30 text-maroon gap-1 hover:bg-cream/10 font-bold"
+                        className="h-9 text-xs border-gold/40 text-maroon gap-1.5 hover:bg-gold/10 font-semibold"
                     >
                         <Sparkles className="h-3.5 w-3.5" />
-                        TEST ORDER
+                        Test Order
                     </Button>
 
                     <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
                         <DialogTrigger asChild>
-                            <Button className="bg-maroon hover:bg-maroon-dark text-gold h-8 text-xs font-bold shadow-sm uppercase tracking-wider gap-1.5">
-                                <Plus className="h-3.5 w-3.5" />
-                                MANUAL ORDER
+                            <Button className="bg-gradient-to-r from-maroon to-maroon-dark text-gold h-9 text-xs font-bold shadow-md shadow-maroon/20 gap-1.5 hover:shadow-lg hover:shadow-maroon/30 transition-all">
+                                <Plus className="h-4 w-4" />
+                                Manual Order
                             </Button>
                         </DialogTrigger>
                         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto border-gold/20">
@@ -578,33 +679,33 @@ export default function OrdersPage() {
                                 <div className="grid grid-cols-2 gap-3">
                                     <div className="space-y-1">
                                         <label className="text-[10px] font-bold text-gray-500 uppercase">Customer Name *</label>
-                                        <Input 
-                                            required 
-                                            placeholder="John Doe" 
+                                        <Input
+                                            required
+                                            placeholder="John Doe"
                                             className="h-8 text-xs border-gold/30"
-                                            value={formCustomerName} 
-                                            onChange={e => setFormCustomerName(e.target.value)} 
+                                            value={formCustomerName}
+                                            onChange={e => setFormCustomerName(e.target.value)}
                                         />
                                     </div>
                                     <div className="space-y-1">
                                         <label className="text-[10px] font-bold text-gray-500 uppercase">Customer Phone *</label>
-                                        <Input 
-                                            required 
-                                            placeholder="9876543210" 
+                                        <Input
+                                            required
+                                            placeholder="9876543210"
                                             className="h-8 text-xs border-gold/30"
-                                            value={formCustomerPhone} 
-                                            onChange={e => setFormCustomerPhone(e.target.value)} 
+                                            value={formCustomerPhone}
+                                            onChange={e => setFormCustomerPhone(e.target.value)}
                                         />
                                     </div>
                                 </div>
                                 <div className="space-y-1">
                                     <label className="text-[10px] font-bold text-gray-500 uppercase">Customer Email</label>
-                                    <Input 
-                                        type="email" 
-                                        placeholder="customer@email.com" 
+                                    <Input
+                                        type="email"
+                                        placeholder="customer@email.com"
                                         className="h-8 text-xs border-gold/30"
-                                        value={formCustomerEmail} 
-                                        onChange={e => setFormCustomerEmail(e.target.value)} 
+                                        value={formCustomerEmail}
+                                        onChange={e => setFormCustomerEmail(e.target.value)}
                                     />
                                 </div>
 
@@ -613,52 +714,52 @@ export default function OrdersPage() {
                                     <div className="grid grid-cols-2 gap-3">
                                         <div className="space-y-1 col-span-2">
                                             <label className="text-[10px] font-bold text-gray-500 uppercase">Street Address *</label>
-                                            <Input 
-                                                required 
-                                                placeholder="123, Park Avenue" 
+                                            <Input
+                                                required
+                                                placeholder="123, Park Avenue"
                                                 className="h-8 text-xs border-gold/30"
-                                                value={formStreet} 
-                                                onChange={e => setFormStreet(e.target.value)} 
+                                                value={formStreet}
+                                                onChange={e => setFormStreet(e.target.value)}
                                             />
                                         </div>
                                         <div className="space-y-1">
                                             <label className="text-[10px] font-bold text-gray-500 uppercase">City *</label>
-                                            <Input 
-                                                required 
-                                                placeholder="Mumbai" 
+                                            <Input
+                                                required
+                                                placeholder="Mumbai"
                                                 className="h-8 text-xs border-gold/30"
-                                                value={formCity} 
-                                                onChange={e => setFormCity(e.target.value)} 
+                                                value={formCity}
+                                                onChange={e => setFormCity(e.target.value)}
                                             />
                                         </div>
                                         <div className="space-y-1">
                                             <label className="text-[10px] font-bold text-gray-500 uppercase">State *</label>
-                                            <Input 
-                                                required 
-                                                placeholder="Maharashtra" 
+                                            <Input
+                                                required
+                                                placeholder="Maharashtra"
                                                 className="h-8 text-xs border-gold/30"
-                                                value={formState} 
-                                                onChange={e => setFormState(e.target.value)} 
+                                                value={formState}
+                                                onChange={e => setFormState(e.target.value)}
                                             />
                                         </div>
                                         <div className="space-y-1">
                                             <label className="text-[10px] font-bold text-gray-500 uppercase">Zip/Pincode *</label>
-                                            <Input 
-                                                required 
-                                                placeholder="400001" 
+                                            <Input
+                                                required
+                                                placeholder="400001"
                                                 className="h-8 text-xs border-gold/30"
-                                                value={formZip} 
-                                                onChange={e => setFormZip(e.target.value)} 
+                                                value={formZip}
+                                                onChange={e => setFormZip(e.target.value)}
                                             />
                                         </div>
                                         <div className="space-y-1">
                                             <label className="text-[10px] font-bold text-gray-500 uppercase">Country</label>
-                                            <Input 
-                                                required 
-                                                placeholder="India" 
+                                            <Input
+                                                required
+                                                placeholder="India"
                                                 className="h-8 text-xs border-gold/30"
-                                                value={formCountry} 
-                                                onChange={e => setFormCountry(e.target.value)} 
+                                                value={formCountry}
+                                                onChange={e => setFormCountry(e.target.value)}
                                             />
                                         </div>
                                     </div>
@@ -684,18 +785,18 @@ export default function OrdersPage() {
                                         </div>
                                         <div className="w-20 space-y-1">
                                             <label className="text-[10px] font-bold text-gray-500 uppercase">Qty *</label>
-                                            <Input 
-                                                type="number" 
-                                                min="1" 
+                                            <Input
+                                                type="number"
+                                                min="1"
                                                 className="h-8 text-xs border-gold/30"
-                                                value={selectedSareeQty} 
-                                                onChange={e => setSelectedSareeQty(Math.max(1, parseInt(e.target.value) || 1))} 
+                                                value={selectedSareeQty}
+                                                onChange={e => setSelectedSareeQty(Math.max(1, parseInt(e.target.value) || 1))}
                                             />
                                         </div>
-                                        <Button 
-                                            type="button" 
-                                            size="sm" 
-                                            onClick={handleAddSaree} 
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            onClick={handleAddSaree}
                                             className="bg-maroon text-gold h-8 font-bold"
                                         >
                                             Add
@@ -738,26 +839,26 @@ export default function OrdersPage() {
                                 <div className="border-t border-gold/10 pt-2 grid grid-cols-2 gap-3">
                                     <div className="space-y-1">
                                         <label className="text-[10px] font-bold text-gray-500 uppercase">Shipping Fee (₹)</label>
-                                        <Input 
-                                            type="number" 
+                                        <Input
+                                            type="number"
                                             className="h-8 text-xs border-gold/30"
-                                            value={formShippingFee} 
-                                            onChange={e => setFormShippingFee(e.target.value)} 
+                                            value={formShippingFee}
+                                            onChange={e => setFormShippingFee(e.target.value)}
                                         />
                                     </div>
                                     <div className="space-y-1">
                                         <label className="text-[10px] font-bold text-gray-500 uppercase">Discount (₹)</label>
-                                        <Input 
-                                            type="number" 
+                                        <Input
+                                            type="number"
                                             className="h-8 text-xs border-gold/30"
-                                            value={formDiscount} 
-                                            onChange={e => setFormDiscount(e.target.value)} 
+                                            value={formDiscount}
+                                            onChange={e => setFormDiscount(e.target.value)}
                                         />
                                     </div>
                                     <div className="space-y-1 col-span-2">
                                         <label className="text-[10px] font-bold text-gray-500 uppercase">Internal Notes</label>
-                                        <Textarea 
-                                            placeholder="Write optional notes here..." 
+                                        <Textarea
+                                            placeholder="Write optional notes here..."
                                             className="text-xs border-gold/30 min-h-[50px] resize-none"
                                             value={formNotes}
                                             onChange={e => setFormNotes(e.target.value)}
@@ -779,16 +880,16 @@ export default function OrdersPage() {
                                 </div>
 
                                 <DialogFooter>
-                                    <Button 
-                                        type="button" 
-                                        variant="outline" 
+                                    <Button
+                                        type="button"
+                                        variant="outline"
                                         onClick={() => setIsCreateModalOpen(false)}
                                         className="h-8 text-xs"
                                     >
                                         Cancel
                                     </Button>
-                                    <Button 
-                                        type="submit" 
+                                    <Button
+                                        type="submit"
                                         className="bg-maroon hover:bg-maroon-dark text-gold h-8 text-xs font-bold"
                                         disabled={createOrderMutation.isPending}
                                     >
@@ -802,157 +903,229 @@ export default function OrdersPage() {
             </div>
 
             {/* KPI Stats Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <Card className="border-gold/20 shadow bg-white">
-                    <CardContent className="p-3.5 flex items-center justify-between">
-                        <div className="space-y-1">
-                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Total Online Orders</span>
-                            <span className="text-xl font-bold font-mono text-gray-800">{stats.total}</span>
-                        </div>
-                        <div className="p-2 bg-slate-100 rounded text-slate-600">
-                            <FileText className="h-4.5 w-4.5" />
-                        </div>
-                    </CardContent>
-                </Card>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <motion.div
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3 }}
+                >
+                    <Card className="border-gold/20 shadow-sm hover:shadow-md transition-shadow bg-white">
+                        <CardContent className="p-4 flex items-center justify-between">
+                            <div className="space-y-1">
+                                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Total Orders</span>
+                                <span className="text-2xl font-bold font-mono text-gray-800">{stats.total}</span>
+                                <span className="text-[10px] text-gray-400 block">All time</span>
+                            </div>
+                            <div className="p-2.5 bg-gradient-to-br from-slate-600 to-slate-800 rounded-xl text-white shadow">
+                                <FileText className="h-5 w-5" />
+                            </div>
+                        </CardContent>
+                    </Card>
+                </motion.div>
 
-                <Card className="border-gold/20 shadow bg-white">
-                    <CardContent className="p-3.5 flex items-center justify-between">
-                        <div className="space-y-1">
-                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Pending Fulfillment</span>
-                            <span className="text-xl font-bold font-mono text-amber-600">{stats.pending}</span>
-                        </div>
-                        <div className="p-2 bg-amber-50 rounded text-amber-600">
-                            <Clock className="h-4.5 w-4.5 animate-pulse" />
-                        </div>
-                    </CardContent>
-                </Card>
+                <motion.div
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: 0.05 }}
+                >
+                    <Card className="border-gold/20 shadow-sm hover:shadow-md transition-shadow bg-white">
+                        <CardContent className="p-4 flex items-center justify-between">
+                            <div className="space-y-1">
+                                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Pending Fulfillment</span>
+                                <span className="text-2xl font-bold font-mono text-amber-600">{stats.pending}</span>
+                                <span className="text-[10px] text-gray-400 block">Needs attention</span>
+                            </div>
+                            <div className="p-2.5 bg-gradient-to-br from-amber-400 to-amber-600 rounded-xl text-white shadow">
+                                <Clock className="h-5 w-5" />
+                            </div>
+                        </CardContent>
+                    </Card>
+                </motion.div>
 
-                <Card className="border-gold/20 shadow bg-white">
-                    <CardContent className="p-3.5 flex items-center justify-between">
-                        <div className="space-y-1">
-                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">In Transit (Courier)</span>
-                            <span className="text-xl font-bold font-mono text-sky-600">{stats.shipped}</span>
-                        </div>
-                        <div className="p-2 bg-sky-50 rounded text-sky-600">
-                            <Truck className="h-4.5 w-4.5" />
-                        </div>
-                    </CardContent>
-                </Card>
+                <motion.div
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: 0.1 }}
+                >
+                    <Card className="border-gold/20 shadow-sm hover:shadow-md transition-shadow bg-white">
+                        <CardContent className="p-4 flex items-center justify-between">
+                            <div className="space-y-1">
+                                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">In Transit</span>
+                                <span className="text-2xl font-bold font-mono text-sky-600">{stats.shipped}</span>
+                                <span className="text-[10px] text-gray-400 block">With courier</span>
+                            </div>
+                            <div className="p-2.5 bg-gradient-to-br from-sky-500 to-sky-700 rounded-xl text-white shadow">
+                                <Truck className="h-5 w-5" />
+                            </div>
+                        </CardContent>
+                    </Card>
+                </motion.div>
 
-                <Card className="border-gold/20 shadow bg-white">
-                    <CardContent className="p-3.5 flex items-center justify-between">
-                        <div className="space-y-1">
-                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Delivered Revenue</span>
-                            <span className="text-xl font-bold font-mono text-emerald-600">₹{stats.revenue.toLocaleString()}</span>
-                        </div>
-                        <div className="p-2 bg-emerald-50 rounded text-emerald-600">
-                            <TrendingUp className="h-4.5 w-4.5" />
-                        </div>
-                    </CardContent>
-                </Card>
+                <motion.div
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: 0.15 }}
+                >
+                    <Card className="border-gold/20 shadow-sm hover:shadow-md transition-shadow bg-white">
+                        <CardContent className="p-4 flex items-center justify-between">
+                            <div className="space-y-1">
+                                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Delivered Revenue</span>
+                                <span className="text-2xl font-bold font-mono text-emerald-600">₹{stats.revenue.toLocaleString()}</span>
+                                <span className="text-[10px] text-gray-400 block">Completed sales</span>
+                            </div>
+                            <div className="p-2.5 bg-gradient-to-br from-emerald-500 to-emerald-700 rounded-xl text-white shadow">
+                                <TrendingUp className="h-5 w-5" />
+                            </div>
+                        </CardContent>
+                    </Card>
+                </motion.div>
             </div>
 
             {/* Filters toolbar */}
-            <div className="bg-cream/10 border border-gold/15 p-2.5 rounded-md flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-                <div className="flex items-center gap-2 flex-1">
-                    <div className="relative flex-1 max-w-sm">
-                        <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-gray-400" />
-                        <Input 
-                            placeholder="Search Order #, Customer Name, Phone..." 
-                            className="pl-8 h-8 text-xs border-gold/30 bg-white"
-                            value={searchQuery}
-                            onChange={e => setSearchQuery(e.target.value)}
-                        />
-                    </div>
-                </div>
+            <Card className="border-gold/20 shadow-sm bg-white">
+                <CardContent className="p-3.5 space-y-3">
+                    <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+                        <div className="relative flex-1 max-w-md">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                            <Input
+                                placeholder="Search order #, customer name, phone or email..."
+                                className="pl-9 h-10 text-sm border-gold/30 bg-white"
+                                value={searchQuery}
+                                onChange={e => setSearchQuery(e.target.value)}
+                            />
+                        </div>
 
-                <div className="flex items-center gap-2 flex-wrap">
-                    <div className="flex items-center gap-1">
-                        <ListFilter className="h-3.5 w-3.5 text-maroon" />
-                        <span className="text-[10px] font-bold text-gray-500 uppercase">Fulfillment:</span>
-                    </div>
-                    <Select value={statusFilter} onValueChange={setStatusFilter}>
-                        <SelectTrigger className="h-8 w-32 text-xs border-gold/30 bg-white">
-                            <SelectValue placeholder="All Statuses" />
-                        </SelectTrigger>
-                        <SelectContent className="border-gold/20">
-                            <SelectItem value="all" className="text-xs">All Statuses</SelectItem>
-                            <SelectItem value="placed" className="text-xs">Placed</SelectItem>
-                            <SelectItem value="confirmed" className="text-xs">Confirmed</SelectItem>
-                            <SelectItem value="processing" className="text-xs">Processing</SelectItem>
-                            <SelectItem value="packed" className="text-xs">Packed</SelectItem>
-                            <SelectItem value="shipped" className="text-xs">Shipped</SelectItem>
-                            <SelectItem value="out_for_delivery" className="text-xs">Out For Delivery</SelectItem>
-                            <SelectItem value="delivered" className="text-xs">Delivered</SelectItem>
-                            <SelectItem value="cancelled" className="text-xs">Cancelled</SelectItem>
-                            <SelectItem value="returned" className="text-xs">Returned</SelectItem>
-                        </SelectContent>
-                    </Select>
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <div className="flex items-center gap-1.5">
+                                <CreditCard className="h-4 w-4 text-maroon" />
+                                <span className="text-[10px] font-bold text-gray-500 uppercase">Payment:</span>
+                            </div>
+                            <Select value={paymentFilter} onValueChange={setPaymentFilter}>
+                                <SelectTrigger className="h-10 w-40 text-sm border-gold/30 bg-white">
+                                    <SelectValue placeholder="All Payments" />
+                                </SelectTrigger>
+                                <SelectContent className="border-gold/20">
+                                    {PAYMENT_STATUS_OPTIONS.map(opt => (
+                                        <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                                            {opt.label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
 
-                    <div className="flex items-center gap-1 ml-2">
-                        <CreditCard className="h-3.5 w-3.5 text-maroon" />
-                        <span className="text-[10px] font-bold text-gray-500 uppercase">Payment:</span>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-10 text-xs text-gray-500 gap-1.5"
+                                onClick={() => {
+                                    setSearchQuery('');
+                                    setStatusFilter('all');
+                                    setPaymentFilter('all');
+                                }}
+                            >
+                                <X className="h-3.5 w-3.5" />
+                                Clear
+                            </Button>
+                        </div>
                     </div>
-                    <Select value={paymentFilter} onValueChange={setPaymentFilter}>
-                        <SelectTrigger className="h-8 w-32 text-xs border-gold/30 bg-white">
-                            <SelectValue placeholder="All Payments" />
-                        </SelectTrigger>
-                        <SelectContent className="border-gold/20">
-                            <SelectItem value="all" className="text-xs">All Payments</SelectItem>
-                            <SelectItem value="pending" className="text-xs">Pending</SelectItem>
-                            <SelectItem value="paid" className="text-xs">Paid</SelectItem>
-                            <SelectItem value="failed" className="text-xs">Failed</SelectItem>
-                            <SelectItem value="refunded" className="text-xs">Refunded</SelectItem>
-                        </SelectContent>
-                    </Select>
-                </div>
-            </div>
+
+                    {/* Status quick-filter pills */}
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
+                        <div className="flex items-center gap-1 mr-1 shrink-0">
+                            <Filter className="h-3.5 w-3.5 text-maroon" />
+                            <span className="text-[10px] font-bold text-gray-500 uppercase">Status:</span>
+                        </div>
+                        {ORDER_STATUS_OPTIONS.map(opt => {
+                            const active = statusFilter === opt.value;
+                            const count = opt.value === 'all' ? (orders?.length || 0) : (statusCounts[opt.value] || 0);
+                            return (
+                                <button
+                                    key={opt.value}
+                                    onClick={() => setStatusFilter(opt.value)}
+                                    className={cn(
+                                        "shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all border",
+                                        active
+                                            ? "bg-gradient-to-r from-maroon to-maroon-dark text-gold border-maroon shadow-sm shadow-maroon/20"
+                                            : "bg-white text-gray-600 border-gold/30 hover:border-maroon/50 hover:text-maroon"
+                                    )}
+                                >
+                                    {opt.label}
+                                    <span className={cn(
+                                        "px-1.5 py-0.5 rounded-full text-[10px] font-bold font-mono",
+                                        active ? "bg-gold/20 text-gold" : "bg-gray-100 text-gray-500"
+                                    )}>
+                                        {count}
+                                    </span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                </CardContent>
+            </Card>
 
             {/* Master-Detail Layout */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
                 {/* Master List (Left Column) */}
-                <div className={`${selectedOrderId ? 'lg:col-span-7' : 'lg:col-span-12'}`}>
-                    <Card className="border-gold/20 shadow-md">
-                        <CardHeader className="bg-cream/20 border-b border-gold/10 p-2.5">
-                            <CardTitle className="text-xs font-bold text-maroon uppercase tracking-wider flex items-center justify-between">
-                                <span>Online Orders Registry ({filteredOrders.length})</span>
-                                <span className="text-[10px] text-gray-500 normal-case font-normal">Click an order to view full details</span>
+                <div className={cn(selectedOrderId ? 'lg:col-span-7' : 'lg:col-span-12')}>
+                    <Card className="border-gold/20 shadow-md bg-white overflow-hidden">
+                        <CardHeader className="bg-gradient-to-r from-cream/40 to-transparent border-b border-gold/10 px-4 py-3">
+                            <CardTitle className="text-sm font-bold text-maroon uppercase tracking-wider flex items-center justify-between">
+                                <span className="flex items-center gap-2">
+                                    <ClipboardList className="h-4 w-4 text-maroon/70" />
+                                    Orders Registry
+                                    <span className="text-[10px] font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full font-mono">
+                                        {filteredOrders.length}
+                                    </span>
+                                </span>
+                                <span className="text-[10px] text-gray-500 normal-case font-normal hidden md:inline">Click an order to view full details</span>
                             </CardTitle>
                         </CardHeader>
                         <CardContent className="p-0 overflow-x-auto">
                             <Table>
                                 <TableHeader className="bg-cream/10">
                                     <TableRow className="border-b border-gold/10 hover:bg-transparent">
-                                        <TableHead className="h-8 text-[10px] font-bold text-maroon py-1">Order No</TableHead>
-                                        <TableHead className="h-8 text-[10px] font-bold text-maroon py-1">Customer</TableHead>
-                                        <TableHead className="h-8 text-[10px] font-bold text-maroon py-1">Total</TableHead>
-                                        <TableHead className="h-8 text-[10px] font-bold text-maroon py-1 text-center">Fulfillment</TableHead>
-                                        <TableHead className="h-8 text-[10px] font-bold text-maroon py-1 text-center">Payment</TableHead>
-                                        <TableHead className="h-8 text-[10px] font-bold text-maroon py-1 text-right">Date</TableHead>
+                                        <TableHead className="h-10 text-[10px] font-bold text-maroon py-1 px-3">Order No</TableHead>
+                                        <TableHead className="h-10 text-[10px] font-bold text-maroon py-1">Customer</TableHead>
+                                        <TableHead className="h-10 text-[10px] font-bold text-maroon py-1 text-center">Items</TableHead>
+                                        <TableHead className="h-10 text-[10px] font-bold text-maroon py-1 text-right">Total</TableHead>
+                                        <TableHead className="h-10 text-[10px] font-bold text-maroon py-1 text-center">Fulfillment</TableHead>
+                                        <TableHead className="h-10 text-[10px] font-bold text-maroon py-1 text-center">Payment</TableHead>
+                                        <TableHead className="h-10 text-[10px] font-bold text-maroon py-1 text-right">Date</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {isLoading ? (
                                         <TableRow>
-                                            <TableCell colSpan={6} className="h-48 text-center text-maroon/50 text-xs italic">
+                                            <TableCell colSpan={7} className="h-48 text-center text-maroon/50 text-xs italic">
                                                 <Loader2 className="h-6 w-6 animate-spin mx-auto mb-1" />
                                                 Loading order logs...
                                             </TableCell>
                                         </TableRow>
                                     ) : filteredOrders.length === 0 ? (
                                         <TableRow>
-                                            <TableCell colSpan={6} className="h-32 text-center text-xs text-gray-500 italic">No matching orders found</TableCell>
+                                            <TableCell colSpan={7} className="h-32 text-center">
+                                                <div className="flex flex-col items-center gap-2 py-4">
+                                                    <div className="p-3 bg-gray-100 rounded-full">
+                                                        <Search className="h-5 w-5 text-gray-400" />
+                                                    </div>
+                                                    <p className="text-sm text-gray-500">No matching orders found</p>
+                                                    <p className="text-xs text-gray-400">Try adjusting your search or filters</p>
+                                                </div>
+                                            </TableCell>
                                         </TableRow>
                                     ) : (
                                         filteredOrders.map((order) => (
-                                            <TableRow 
-                                                key={order.id} 
-                                                className={`hover:bg-cream/5 border-b border-gold/5 cursor-pointer h-10 ${selectedOrderId === order.id ? 'bg-gold/10 hover:bg-gold/15' : ''}`}
+                                            <TableRow
+                                                key={order.id}
+                                                className={cn(
+                                                    "hover:bg-cream/10 border-b border-gold/5 cursor-pointer h-14 transition-colors",
+                                                    selectedOrderId === order.id && "bg-gold/10 hover:bg-gold/15"
+                                                )}
                                                 onClick={() => setSelectedOrderId(order.id)}
                                             >
-                                                <TableCell className="py-1 text-xs font-mono font-bold text-maroon">
+                                                <TableCell className="py-1 px-3">
                                                     <div className="flex items-center gap-1.5">
-                                                        {order.orderNumber}
+                                                        <span className="text-xs font-mono font-bold text-maroon">{order.orderNumber}</span>
                                                         {order.isGift && (
                                                             <span className="inline-flex items-center gap-0.5 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full border bg-pink-50 text-pink-700 border-pink-200 whitespace-nowrap">
                                                                 <Gift className="h-2.5 w-2.5" /> Gift
@@ -960,25 +1133,47 @@ export default function OrdersPage() {
                                                         )}
                                                     </div>
                                                 </TableCell>
-                                                <TableCell className="py-1 text-xs">
-                                                    <div>
-                                                        <div className="font-semibold text-gray-800">{order.customerName}</div>
-                                                        <div className="text-[10px] text-gray-500">{order.customerPhone}</div>
+                                                <TableCell className="py-1">
+                                                    <div className="flex items-center gap-2.5">
+                                                        <div className="h-8 w-8 shrink-0 rounded-full bg-gradient-to-br from-maroon to-maroon-dark text-gold flex items-center justify-center text-[10px] font-bold font-sans shadow-sm">
+                                                            {getInitials(order.customerName)}
+                                                        </div>
+                                                        <div className="min-w-0">
+                                                            <div className="font-semibold text-gray-800 text-xs truncate">{order.customerName}</div>
+                                                            <div className="text-[10px] text-gray-500 truncate">{order.customerPhone}</div>
+                                                        </div>
                                                     </div>
                                                 </TableCell>
-                                                <TableCell className="py-1 text-xs font-bold font-mono text-gray-800">₹{order.totalAmount.toLocaleString()}</TableCell>
                                                 <TableCell className="py-1 text-center">
-                                                    <span className={`inline-block text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${getOrderStatusBadgeClass(order.orderStatus)}`}>
+                                                    <span className="inline-flex items-center justify-center h-6 min-w-6 px-1.5 rounded-md bg-gray-100 text-gray-700 text-[10px] font-bold font-mono">
+                                                        {order.items?.length || 0}
+                                                    </span>
+                                                </TableCell>
+                                                <TableCell className="py-1 text-xs font-bold font-mono text-gray-800 text-right">
+                                                    <span className="inline-flex items-center gap-0.5 text-maroon">
+                                                        <IndianRupee className="h-3 w-3" />
+                                                        {order.totalAmount.toLocaleString()}
+                                                    </span>
+                                                </TableCell>
+                                                <TableCell className="py-1 text-center">
+                                                    <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border ${getOrderStatusBadgeClass(order.orderStatus)}`}>
+                                                        <span className={`h-1.5 w-1.5 rounded-full ${getStatusDotClass(order.orderStatus)}`} />
                                                         {order.orderStatus.replace('_', ' ')}
                                                     </span>
                                                 </TableCell>
                                                 <TableCell className="py-1 text-center">
-                                                    <span className={`inline-block text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${getPaymentStatusBadgeClass(order.paymentStatus)}`}>
+                                                    <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border ${getPaymentStatusBadgeClass(order.paymentStatus)}`}>
+                                                        <span className={`h-1.5 w-1.5 rounded-full ${getPaymentDotClass(order.paymentStatus)}`} />
                                                         {order.paymentStatus}
                                                     </span>
                                                 </TableCell>
-                                                <TableCell className="py-1 text-xs font-mono text-right text-gray-500">
-                                                    {new Date(order.createdAt).toLocaleDateString()}
+                                                <TableCell className="py-1 text-right pr-3">
+                                                    <div className="text-xs font-mono text-gray-500">
+                                                        {new Date(order.createdAt).toLocaleDateString(undefined, { day: '2-digit', month: 'short' })}
+                                                    </div>
+                                                    <div className="text-[10px] font-mono text-gray-400">
+                                                        {new Date(order.createdAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                                                    </div>
                                                 </TableCell>
                                             </TableRow>
                                         ))
@@ -993,158 +1188,255 @@ export default function OrdersPage() {
                 {selectedOrderId && (
                     <div className="lg:col-span-5 space-y-4">
                         {selectedOrder ? (
-                            <Card className="border-gold/20 shadow-md relative overflow-hidden bg-white">
-                                <CardHeader className="bg-maroon text-gold p-3 border-b border-gold/15 flex flex-row items-center justify-between">
-                                    <div>
-                                        <div className="text-xs uppercase tracking-[0.2em] opacity-80">Order Details</div>
-                                        <div className="text-sm font-bold font-mono tracking-wider">{selectedOrder.orderNumber}</div>
-                                    </div>
-                                    <button 
-                                        className="text-gold/80 hover:text-gold text-xs font-bold uppercase tracking-wider"
-                                        onClick={() => setSelectedOrderId(null)}
-                                    >
-                                        Close
-                                    </button>
-                                </CardHeader>
-                                <CardContent className="p-4 space-y-4">
-                                    {/* Order Status Ribbon */}
-                                    <div className="flex justify-between items-center bg-cream/20 p-2.5 rounded border border-gold/15">
-                                        <div className="space-y-0.5">
-                                            <span className="text-[9px] font-bold text-gray-500 uppercase block">Status</span>
-                                            <span className={`inline-block text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${getOrderStatusBadgeClass(selectedOrder.orderStatus)}`}>
+                            <motion.div
+                                key={selectedOrder.id}
+                                initial={{ opacity: 0, x: 20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ duration: 0.25 }}
+                            >
+                                <Card className="border-gold/20 shadow-md relative overflow-hidden bg-white">
+                                    {/* Header */}
+                                    <div className="bg-gradient-to-r from-maroon via-maroon-dark to-maroon-dark text-gold p-4 border-b border-gold/15">
+                                        <div className="flex flex-row items-start justify-between gap-2">
+                                            <div className="min-w-0">
+                                                <div className="text-[9px] uppercase tracking-[0.25em] opacity-70 font-sans">Order Details</div>
+                                                <div className="flex items-center gap-1.5 mt-0.5">
+                                                    <span className="text-base font-bold font-mono tracking-wider truncate">{selectedOrder.orderNumber}</span>
+                                                    <button
+                                                        title="Copy order number"
+                                                        onClick={() => copyOrderNumber(selectedOrder.orderNumber)}
+                                                        className="opacity-70 hover:opacity-100 text-gold transition-opacity shrink-0"
+                                                    >
+                                                        <Copy className="h-3 w-3" />
+                                                    </button>
+                                                </div>
+                                                <div className="text-[10px] font-mono opacity-60 mt-0.5">
+                                                    {new Date(selectedOrder.createdAt).toLocaleString()}
+                                                </div>
+                                            </div>
+                                            <button
+                                                className="text-gold/70 hover:text-gold text-xs font-bold uppercase tracking-wider p-1 rounded hover:bg-gold/10 transition-colors shrink-0"
+                                                onClick={() => setSelectedOrderId(null)}
+                                            >
+                                                <X className="h-4 w-4" />
+                                            </button>
+                                        </div>
+
+                                        {/* Status ribbon */}
+                                        <div className="flex flex-wrap items-center gap-2 mt-3">
+                                            <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border bg-white/10 border-gold/30 text-gold`}>
+                                                <span className={`h-1.5 w-1.5 rounded-full ${getStatusDotClass(selectedOrder.orderStatus)}`} />
                                                 {selectedOrder.orderStatus.replace('_', ' ')}
                                             </span>
-                                        </div>
-                                        <div className="flex flex-col items-end gap-1">
-                                            <div className="space-y-0.5 text-right">
-                                                <span className="text-[9px] font-bold text-gray-500 uppercase block">Payment (COD)</span>
-                                                <span className={`inline-block text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${getPaymentStatusBadgeClass(selectedOrder.paymentStatus)}`}>
-                                                    {selectedOrder.paymentStatus}
-                                                </span>
-                                            </div>
+                                            <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border bg-white/10 border-gold/30 text-gold`}>
+                                                <CreditCard className="h-3 w-3" />
+                                                {selectedOrder.paymentStatus}
+                                            </span>
                                             {selectedOrder.isGift && (
-                                                <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border bg-pink-50 text-pink-700 border-pink-200">
-                                                    <Gift className="h-3 w-3" /> Gift Order
+                                                <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border bg-pink-600/30 border-pink-400/40 text-pink-100">
+                                                    <Gift className="h-3 w-3" /> Gift
                                                 </span>
                                             )}
                                         </div>
                                     </div>
 
-                                    {/* Gift Details — visible only for gift orders */}
-                                    {selectedOrder.isGift && (
-                                        <div className="border-2 border-pink-200 bg-pink-50/60 rounded-lg p-3 space-y-2.5">
-                                            <div className="flex items-center gap-2 border-b border-pink-200/60 pb-2">
-                                                <span className="text-lg">🎁</span>
-                                                <span className="text-[11px] font-bold text-pink-800 uppercase tracking-widest">Gift Order — Packing Instructions</span>
-                                            </div>
-                                            <div className="grid grid-cols-1 gap-2 text-xs">
-                                                <div className="flex flex-col gap-0.5">
-                                                    <span className="text-[9px] font-bold text-pink-600 uppercase tracking-wider">Gift Recipient</span>
-                                                    <span className="font-semibold text-gray-800">
-                                                        {selectedOrder.giftRecipientName || <em className="text-gray-400 font-normal">Not specified</em>}
+                                    <CardContent className="p-4 space-y-4">
+                                        {/* Fulfillment Progress Stepper */}
+                                        {currentFulfillmentIndex >= 0 ? (
+                                            <div className="border border-gold/15 rounded-xl p-3.5 bg-cream/20">
+                                                <div className="flex items-center justify-between mb-3">
+                                                    <span className="text-[10px] font-bold text-maroon uppercase tracking-wider flex items-center gap-1.5">
+                                                        <ArrowUpRight className="h-3.5 w-3.5" /> Fulfillment Pipeline
+                                                    </span>
+                                                    <span className="text-[9px] font-bold text-gray-400 uppercase font-mono">
+                                                        Step {currentFulfillmentIndex + 1} / {FULFILLMENT_STEPS.length}
                                                     </span>
                                                 </div>
-                                                <div className="flex flex-col gap-0.5">
-                                                    <span className="text-[9px] font-bold text-pink-600 uppercase tracking-wider">Gift Message</span>
-                                                    {selectedOrder.giftMessage ? (
-                                                        <p className="text-gray-700 italic leading-relaxed bg-white/70 border border-pink-100 rounded px-2 py-1.5">
-                                                            "{selectedOrder.giftMessage}"
-                                                        </p>
-                                                    ) : (
-                                                        <em className="text-gray-400">No message provided</em>
-                                                    )}
+                                                <div className="flex items-center">
+                                                    {FULFILLMENT_STEPS.map((step, idx) => {
+                                                        const isComplete = idx < currentFulfillmentIndex;
+                                                        const isCurrent = idx === currentFulfillmentIndex;
+                                                        return (
+                                                            <React.Fragment key={step.key}>
+                                                                <div className="flex flex-col items-center flex-1 min-w-0">
+                                                                    <div className={cn(
+                                                                        "h-8 w-8 rounded-full flex items-center justify-center border-2 transition-all",
+                                                                        isCurrent
+                                                                            ? "bg-maroon border-maroon text-gold shadow-md shadow-maroon/30 scale-110"
+                                                                            : isComplete
+                                                                                ? "bg-emerald-500 border-emerald-500 text-white"
+                                                                                : "bg-white border-gray-200 text-gray-300"
+                                                                    )}>
+                                                                        {isComplete ? (
+                                                                            <CircleCheck className="h-4 w-4" />
+                                                                        ) : (
+                                                                            <step.icon className={cn("h-3.5 w-3.5", isCurrent && "animate-pulse")} />
+                                                                        )}
+                                                                    </div>
+                                                                    <span className={cn(
+                                                                        "text-[8px] font-bold uppercase tracking-wider mt-1.5 text-center px-0.5",
+                                                                        isCurrent ? "text-maroon" : isComplete ? "text-emerald-600" : "text-gray-400"
+                                                                    )}>
+                                                                        {step.label}
+                                                                    </span>
+                                                                </div>
+                                                                {idx < FULFILLMENT_STEPS.length - 1 && (
+                                                                    <div className={cn(
+                                                                        "h-0.5 flex-1 mb-5 rounded",
+                                                                        idx < currentFulfillmentIndex ? "bg-emerald-400" : "bg-gray-200"
+                                                                    )} />
+                                                                )}
+                                                            </React.Fragment>
+                                                        );
+                                                    })}
                                                 </div>
-                                                <div className="flex items-center justify-between bg-white/70 border border-pink-100 rounded px-2.5 py-1.5">
-                                                    <span className="text-[9px] font-bold text-pink-600 uppercase tracking-wider">Gift Wrapping</span>
-                                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-                                                        <CheckCircle2 className="h-3 w-3" /> Yes — Include Gift Wrap
+                                            </div>
+                                        ) : (
+                                            <div className={cn(
+                                                "rounded-xl p-3.5 flex items-center gap-3 border",
+                                                selectedOrder.orderStatus === 'cancelled'
+                                                    ? "bg-red-50 border-red-200"
+                                                    : "bg-slate-50 border-slate-200"
+                                            )}>
+                                                <div className={cn(
+                                                    "p-2 rounded-full",
+                                                    selectedOrder.orderStatus === 'cancelled' ? "bg-red-100 text-red-600" : "bg-slate-200 text-slate-600"
+                                                )}>
+                                                    <Ban className="h-4 w-4" />
+                                                </div>
+                                                <div>
+                                                    <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">
+                                                        {selectedOrder.orderStatus === 'cancelled' ? 'Order Cancelled' : 'Order Returned'}
                                                     </span>
+                                                    <p className="text-[11px] text-gray-500">
+                                                        This order is outside the active fulfillment pipeline.
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Gift Details — visible only for gift orders */}
+                                        {selectedOrder.isGift && (
+                                            <div className="border-2 border-pink-200 bg-pink-50/60 rounded-lg p-3 space-y-2.5">
+                                                <div className="flex items-center gap-2 border-b border-pink-200/60 pb-2">
+                                                    <span className="text-lg">🎁</span>
+                                                    <span className="text-[11px] font-bold text-pink-800 uppercase tracking-widest">Gift Order — Packing Instructions</span>
+                                                </div>
+                                                <div className="grid grid-cols-1 gap-2 text-xs">
+                                                    <div className="flex flex-col gap-0.5">
+                                                        <span className="text-[9px] font-bold text-pink-600 uppercase tracking-wider">Gift Recipient</span>
+                                                        <span className="font-semibold text-gray-800">
+                                                            {selectedOrder.giftRecipientName || <em className="text-gray-400 font-normal">Not specified</em>}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex flex-col gap-0.5">
+                                                        <span className="text-[9px] font-bold text-pink-600 uppercase tracking-wider">Gift Message</span>
+                                                        {selectedOrder.giftMessage ? (
+                                                            <p className="text-gray-700 italic leading-relaxed bg-white/70 border border-pink-100 rounded px-2 py-1.5">
+                                                                "{selectedOrder.giftMessage}"
+                                                            </p>
+                                                        ) : (
+                                                            <em className="text-gray-400">No message provided</em>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex items-center justify-between bg-white/70 border border-pink-100 rounded px-2.5 py-1.5">
+                                                        <span className="text-[9px] font-bold text-pink-600 uppercase tracking-wider">Gift Wrapping</span>
+                                                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                                                            <CheckCircle2 className="h-3 w-3" /> Yes — Include Gift Wrap
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Customer & Shipping Information */}
+                                        <div className="grid grid-cols-1 gap-3">
+                                            <div className="border border-gold/10 p-3 rounded-lg bg-slate-50 space-y-2">
+                                                <div className="flex items-center gap-1.5 border-b border-gold/5 pb-1.5">
+                                                    <User className="h-4 w-4 text-maroon" />
+                                                    <span className="text-[10px] font-bold text-maroon uppercase tracking-wider">Customer</span>
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                    <div className="h-10 w-10 shrink-0 rounded-full bg-gradient-to-br from-maroon to-maroon-dark text-gold flex items-center justify-center font-bold text-sm shadow-sm">
+                                                        {getInitials(selectedOrder.customerName)}
+                                                    </div>
+                                                    <div className="text-xs space-y-0.5 min-w-0">
+                                                        <div className="font-bold text-gray-800 truncate">{selectedOrder.customerName}</div>
+                                                        <div className="text-gray-600 flex items-center gap-1"><Phone className="h-3 w-3 inline text-gray-400" /> {selectedOrder.customerPhone}</div>
+                                                        {selectedOrder.customerEmail && (
+                                                            <div className="text-gray-600 flex items-center gap-1 truncate"><Mail className="h-3 w-3 inline text-gray-400" /> {selectedOrder.customerEmail}</div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="border border-gold/10 p-3 rounded-lg bg-slate-50 space-y-1.5">
+                                                <div className="flex items-center gap-1.5 border-b border-gold/5 pb-1.5">
+                                                    <MapPin className="h-4 w-4 text-maroon" />
+                                                    <span className="text-[10px] font-bold text-maroon uppercase tracking-wider">Shipping Address</span>
+                                                </div>
+                                                <div className="text-xs text-gray-600 leading-relaxed">
+                                                    {formatAddress(selectedOrder.shippingAddress) || <em className="text-gray-400">No address provided</em>}
                                                 </div>
                                             </div>
                                         </div>
-                                    )}
 
-                                    {/* Customer & Shipping Information */}
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                        <div className="border border-gold/10 p-2.5 rounded bg-slate-50 space-y-1.5">
-                                            <div className="flex items-center gap-1.5 border-b border-gold/5 pb-1">
-                                                <User className="h-3.5 w-3.5 text-maroon" />
-                                                <span className="text-[10px] font-bold text-maroon uppercase tracking-wider">Customer</span>
+                                        {/* Order Items */}
+                                        <div className="border border-gold/10 rounded-lg overflow-hidden">
+                                            <div className="bg-cream/15 p-2 border-b border-gold/10 text-[10px] font-bold text-maroon uppercase tracking-wider flex items-center gap-1.5">
+                                                <PackageOpen className="h-3.5 w-3.5" /> Items Registry
+                                                <span className="ml-auto text-[9px] font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded-full font-mono">
+                                                    {selectedOrder.items?.length || 0}
+                                                </span>
                                             </div>
-                                            <div className="text-xs space-y-1">
-                                                <div className="font-bold text-gray-800">{selectedOrder.customerName}</div>
-                                                <div className="text-gray-600 flex items-center gap-1"><Phone className="h-3 w-3 inline text-gray-400" /> {selectedOrder.customerPhone}</div>
-                                                {selectedOrder.customerEmail && (
-                                                    <div className="text-gray-600 flex items-center gap-1 truncate"><Mail className="h-3 w-3 inline text-gray-400" /> {selectedOrder.customerEmail}</div>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        <div className="border border-gold/10 p-2.5 rounded bg-slate-50 space-y-1.5">
-                                            <div className="flex items-center gap-1.5 border-b border-gold/5 pb-1">
-                                                <MapPin className="h-3.5 w-3.5 text-maroon" />
-                                                <span className="text-[10px] font-bold text-maroon uppercase tracking-wider">Shipping Address</span>
-                                            </div>
-                                            <div className="text-xs text-gray-600 line-clamp-3 leading-relaxed">
-                                                {formatAddress(selectedOrder.shippingAddress)}
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Order Items */}
-                                    <div className="border border-gold/10 rounded overflow-hidden">
-                                        <div className="bg-cream/15 p-1.5 border-b border-gold/10 text-[10px] font-bold text-maroon uppercase tracking-wider flex items-center gap-1">
-                                            <PackageOpen className="h-3.5 w-3.5" /> Items Registry
-                                        </div>
-                                        <Table>
-                                            <TableHeader className="bg-slate-50">
-                                                <TableRow className="border-b border-gold/5 hover:bg-transparent">
-                                                    <TableHead className="h-6 py-0.5 text-[9px] font-bold text-gray-500">Item</TableHead>
-                                                    <TableHead className="h-6 py-0.5 text-[9px] font-bold text-gray-500 text-center">Qty</TableHead>
-                                                    <TableHead className="h-6 py-0.5 text-[9px] font-bold text-gray-500 text-right">Price</TableHead>
-                                                    <TableHead className="h-6 py-0.5 text-[9px] font-bold text-gray-500 text-right">Total</TableHead>
-                                                </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                                {selectedOrder.items?.map((item) => (
-                                                    <TableRow key={item.id} className="border-b border-gold/5 h-8">
-                                                        <TableCell className="py-1 text-xs">
-                                                            <div className="font-semibold text-gray-800">{item.productName}</div>
-                                                            {item.sku && <div className="text-[9px] text-gray-400 font-mono">SKU: {item.sku}</div>}
-                                                        </TableCell>
-                                                        <TableCell className="py-1 text-xs text-center">{item.quantity}</TableCell>
-                                                        <TableCell className="py-1 text-xs text-right font-mono">₹{item.unitPrice.toLocaleString()}</TableCell>
-                                                        <TableCell className="py-1 text-xs text-right font-mono">₹{item.totalPrice.toLocaleString()}</TableCell>
+                                            <Table>
+                                                <TableHeader className="bg-slate-50">
+                                                    <TableRow className="border-b border-gold/5 hover:bg-transparent">
+                                                        <TableHead className="h-7 py-0.5 text-[9px] font-bold text-gray-500">Item</TableHead>
+                                                        <TableHead className="h-7 py-0.5 text-[9px] font-bold text-gray-500 text-center">Qty</TableHead>
+                                                        <TableHead className="h-7 py-0.5 text-[9px] font-bold text-gray-500 text-right">Price</TableHead>
+                                                        <TableHead className="h-7 py-0.5 text-[9px] font-bold text-gray-500 text-right">Total</TableHead>
                                                     </TableRow>
-                                                ))}
-                                            </TableBody>
-                                        </Table>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {selectedOrder.items?.map((item) => (
+                                                        <TableRow key={item.id} className="border-b border-gold/5 h-9">
+                                                            <TableCell className="py-1 text-xs">
+                                                                <div className="font-semibold text-gray-800 truncate max-w-[140px]">{item.productName}</div>
+                                                                {item.sku && <div className="text-[9px] text-gray-400 font-mono">SKU: {item.sku}</div>}
+                                                            </TableCell>
+                                                            <TableCell className="py-1 text-xs text-center font-mono">{item.quantity}</TableCell>
+                                                            <TableCell className="py-1 text-xs text-right font-mono">₹{item.unitPrice.toLocaleString()}</TableCell>
+                                                            <TableCell className="py-1 text-xs text-right font-mono">₹{item.totalPrice.toLocaleString()}</TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
 
-                                        {/* Financial Summary */}
-                                        <div className="p-3 bg-slate-50 border-t border-gold/10 space-y-1.5 text-xs text-gray-600 font-sans">
-                                            <div className="flex justify-between">
-                                                <span>Subtotal:</span>
-                                                <span className="font-mono">₹{selectedOrder.subtotal.toLocaleString()}</span>
-                                            </div>
-                                            <div className="flex justify-between">
-                                                <span>Shipping Fee:</span>
-                                                <span className="font-mono">₹{selectedOrder.shippingFee.toLocaleString()}</span>
-                                            </div>
-                                            {selectedOrder.discount > 0 && (
-                                                <div className="flex justify-between text-red-600">
-                                                    <span>Discount:</span>
-                                                    <span className="font-mono">-₹{selectedOrder.discount.toLocaleString()}</span>
+                                            {/* Financial Summary */}
+                                            <div className="p-3.5 bg-slate-50 border-t border-gold/10 space-y-2 text-xs text-gray-600 font-sans">
+                                                <div className="flex justify-between">
+                                                    <span className="text-gray-500">Subtotal</span>
+                                                    <span className="font-mono">₹{selectedOrder.subtotal.toLocaleString()}</span>
                                                 </div>
-                                            )}
-                                            <div className="flex justify-between font-bold text-maroon text-sm border-t border-gold/5 pt-1">
-                                                <span>Total Amount:</span>
-                                                <span className="font-mono">₹{selectedOrder.totalAmount.toLocaleString()}</span>
-                                            </div>
-                                            <div className="border-t border-gold/10 pt-2 flex gap-2">
+                                                <div className="flex justify-between">
+                                                    <span className="text-gray-500">Shipping Fee</span>
+                                                    <span className="font-mono">₹{selectedOrder.shippingFee.toLocaleString()}</span>
+                                                </div>
+                                                {selectedOrder.discount > 0 && (
+                                                    <div className="flex justify-between text-red-600">
+                                                        <span>Discount</span>
+                                                        <span className="font-mono">-₹{selectedOrder.discount.toLocaleString()}</span>
+                                                    </div>
+                                                )}
+                                                <div className="flex justify-between items-center font-bold text-maroon border-t border-gold/10 pt-2">
+                                                    <span className="text-sm">Total Amount</span>
+                                                    <span className="font-mono text-base">₹{selectedOrder.totalAmount.toLocaleString()}</span>
+                                                </div>
                                                 <Button
                                                     size="sm"
                                                     variant="outline"
-                                                    className="w-full border-gold/30 hover:bg-gold/10 text-maroon text-xs font-semibold flex items-center justify-center gap-1.5 h-8"
+                                                    className="w-full border-gold/30 hover:bg-gold/10 text-maroon text-xs font-semibold flex items-center justify-center gap-1.5 h-9"
                                                     onClick={() => window.open(`/receipt/${selectedOrder.orderNumber}?print=true`, '_blank')}
                                                 >
                                                     <Printer className="h-3.5 w-3.5" />
@@ -1152,130 +1444,131 @@ export default function OrdersPage() {
                                                 </Button>
                                             </div>
                                         </div>
-                                    </div>
 
-                                    {/* Notes */}
-                                    {selectedOrder.notes && (
-                                        <div className="bg-yellow-50/50 border border-yellow-200/60 p-2.5 rounded text-xs">
-                                            <span className="font-bold text-yellow-800 block text-[10px] uppercase mb-0.5">Notes/Instructions</span>
-                                            <p className="text-gray-700 italic">"{selectedOrder.notes}"</p>
-                                        </div>
-                                    )}
-
-                                    {/* Action controls (Forms) */}
-                                    <div className="border border-gold/10 p-3 rounded space-y-3.5 bg-cream/5">
-                                        <h4 className="text-[10px] font-bold text-maroon uppercase tracking-wider border-b border-gold/10 pb-1.5"> FULFILLMENT CONTROL CENTRE</h4>
-                                        
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                            {/* Order status form */}
-                                            <div className="space-y-2">
-                                                <label className="text-[9px] font-bold text-gray-500 uppercase">Change Fulfillment Status</label>
-                                                <Select value={tempOrderStatus} onValueChange={setTempOrderStatus}>
-                                                    <SelectTrigger className="h-8 text-xs border-gold/30 bg-white">
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent className="border-gold/20">
-                                                        <SelectItem value="placed" className="text-xs">Placed</SelectItem>
-                                                        <SelectItem value="confirmed" className="text-xs">Confirmed</SelectItem>
-                                                        <SelectItem value="processing" className="text-xs">Processing</SelectItem>
-                                                        <SelectItem value="packed" className="text-xs">Packed</SelectItem>
-                                                        <SelectItem value="shipped" className="text-xs">Shipped</SelectItem>
-                                                        <SelectItem value="out_for_delivery" className="text-xs">Out For Delivery</SelectItem>
-                                                        <SelectItem value="delivered" className="text-xs">Delivered</SelectItem>
-                                                        <SelectItem value="cancelled" className="text-xs">Cancelled</SelectItem>
-                                                        <SelectItem value="returned" className="text-xs">Returned</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-
-                                                <Input 
-                                                    placeholder="Optional status note..." 
-                                                    className="h-8 text-xs border-gold/30 bg-white"
-                                                    value={statusNote}
-                                                    onChange={e => setStatusNote(e.target.value)}
-                                                />
-                                                
-                                                <Button 
-                                                    size="sm" 
-                                                    className="w-full bg-maroon text-gold h-7 text-[10px] font-bold"
-                                                    disabled={updateStatusMutation.isPending || tempOrderStatus === selectedOrder.orderStatus}
-                                                    onClick={() => updateStatusMutation.mutate({ 
-                                                        orderId: selectedOrder.id, 
-                                                        status: tempOrderStatus, 
-                                                        note: statusNote 
-                                                    })}
-                                                >
-                                                    {updateStatusMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-                                                    UPDATE STATUS
-                                                </Button>
+                                        {/* Notes */}
+                                        {selectedOrder.notes && (
+                                            <div className="bg-yellow-50/50 border border-yellow-200/60 p-3 rounded-lg text-xs">
+                                                <span className="font-bold text-yellow-800 block text-[10px] uppercase mb-1 flex items-center gap-1">
+                                                    <AlertTriangle className="h-3 w-3" /> Notes / Instructions
+                                                </span>
+                                                <p className="text-gray-700 italic">"{selectedOrder.notes}"</p>
                                             </div>
+                                        )}
 
-                                            {/* Payment status form */}
-                                            <div className="space-y-2 flex flex-col justify-between">
+                                        {/* Action controls (Forms) */}
+                                        <div className="border border-gold/10 p-3.5 rounded-lg space-y-3.5 bg-cream/5">
+                                            <h4 className="text-[10px] font-bold text-maroon uppercase tracking-wider border-b border-gold/10 pb-2 flex items-center gap-1.5">
+                                                <Truck className="h-3.5 w-3.5" /> Fulfillment Control Centre
+                                            </h4>
+
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                {/* Order status form */}
                                                 <div className="space-y-2">
-                                                    <label className="text-[9px] font-bold text-gray-500 uppercase">Change Payment Status</label>
-                                                    <Select value={tempPaymentStatus} onValueChange={setTempPaymentStatus}>
-                                                        <SelectTrigger className="h-8 text-xs border-gold/30 bg-white">
+                                                    <label className="text-[9px] font-bold text-gray-500 uppercase">Change Fulfillment Status</label>
+                                                    <Select value={tempOrderStatus} onValueChange={setTempOrderStatus}>
+                                                        <SelectTrigger className="h-9 text-xs border-gold/30 bg-white">
                                                             <SelectValue />
                                                         </SelectTrigger>
                                                         <SelectContent className="border-gold/20">
-                                                            <SelectItem value="pending" className="text-xs">Pending</SelectItem>
-                                                            <SelectItem value="paid" className="text-xs">Paid</SelectItem>
-                                                            <SelectItem value="failed" className="text-xs">Failed</SelectItem>
-                                                            <SelectItem value="refunded" className="text-xs">Refunded</SelectItem>
+                                                            {ORDER_STATUS_OPTIONS.slice(1).map(opt => (
+                                                                <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                                                                    {opt.label}
+                                                                </SelectItem>
+                                                            ))}
                                                         </SelectContent>
                                                     </Select>
+
+                                                    <Input
+                                                        placeholder="Optional status note..."
+                                                        className="h-9 text-xs border-gold/30 bg-white"
+                                                        value={statusNote}
+                                                        onChange={e => setStatusNote(e.target.value)}
+                                                    />
+
+                                                    <Button
+                                                        size="sm"
+                                                        className="w-full bg-maroon text-gold h-8 text-[10px] font-bold"
+                                                        disabled={updateStatusMutation.isPending || tempOrderStatus === selectedOrder.orderStatus}
+                                                        onClick={() => updateStatusMutation.mutate({
+                                                            orderId: selectedOrder.id,
+                                                            status: tempOrderStatus,
+                                                            note: statusNote
+                                                        })}
+                                                    >
+                                                        {updateStatusMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                                                        UPDATE STATUS
+                                                    </Button>
                                                 </div>
 
-                                                <Button 
-                                                    size="sm" 
-                                                    className="w-full bg-slate-800 hover:bg-slate-700 text-gold h-7 text-[10px] font-bold mt-auto"
-                                                    disabled={updatePaymentMutation.isPending || tempPaymentStatus === selectedOrder.paymentStatus}
-                                                    onClick={() => updatePaymentMutation.mutate({ 
-                                                        orderId: selectedOrder.id, 
-                                                        paymentStatus: tempPaymentStatus 
-                                                    })}
-                                                >
-                                                    {updatePaymentMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-                                                    UPDATE PAYMENT
-                                                </Button>
+                                                {/* Payment status form */}
+                                                <div className="space-y-2 flex flex-col justify-between">
+                                                    <div className="space-y-2">
+                                                        <label className="text-[9px] font-bold text-gray-500 uppercase">Change Payment Status</label>
+                                                        <Select value={tempPaymentStatus} onValueChange={setTempPaymentStatus}>
+                                                            <SelectTrigger className="h-9 text-xs border-gold/30 bg-white">
+                                                                <SelectValue />
+                                                            </SelectTrigger>
+                                                            <SelectContent className="border-gold/20">
+                                                                {PAYMENT_STATUS_OPTIONS.slice(1).map(opt => (
+                                                                    <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                                                                        {opt.label}
+                                                                    </SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+
+                                                    <Button
+                                                        size="sm"
+                                                        className="w-full bg-slate-800 hover:bg-slate-700 text-gold h-8 text-[10px] font-bold mt-auto"
+                                                        disabled={updatePaymentMutation.isPending || tempPaymentStatus === selectedOrder.paymentStatus}
+                                                        onClick={() => updatePaymentMutation.mutate({
+                                                            orderId: selectedOrder.id,
+                                                            paymentStatus: tempPaymentStatus
+                                                        })}
+                                                    >
+                                                        {updatePaymentMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                                                        UPDATE PAYMENT
+                                                    </Button>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
 
-                                    {/* Status History Timeline */}
-                                    <div className="border border-gold/10 p-3 rounded space-y-3 bg-slate-50">
-                                        <h4 className="text-[10px] font-bold text-maroon uppercase tracking-wider flex items-center gap-1 border-b border-gold/10 pb-1.5">
-                                            <Clock className="h-3.5 w-3.5" /> Order Progress Log
-                                        </h4>
-                                        <div className="relative pl-4 border-l border-gold/25 space-y-4 py-1 text-xs">
-                                            {selectedOrder.statusHistory && selectedOrder.statusHistory.length > 0 ? (
-                                                selectedOrder.statusHistory.map((history) => (
-                                                    <div key={history.id} className="relative space-y-0.5">
-                                                        {/* Dot marker */}
-                                                        <span className="absolute -left-[20.5px] top-1.5 h-2 w-2 rounded-full bg-maroon border border-gold" />
-                                                        
-                                                        <div className="flex justify-between items-center">
-                                                            <span className="font-bold text-[10px] uppercase text-maroon tracking-wider bg-gold/10 px-1.5 py-0.5 rounded border border-gold/15">
-                                                                {history.status.replace('_', ' ')}
-                                                            </span>
-                                                            <span className="text-[9px] text-gray-400 font-mono">
-                                                                {new Date(history.createdAt).toLocaleString()}
-                                                            </span>
+                                        {/* Status History Timeline */}
+                                        <div className="border border-gold/10 p-3.5 rounded-lg space-y-3 bg-slate-50">
+                                            <h4 className="text-[10px] font-bold text-maroon uppercase tracking-wider flex items-center gap-1.5 border-b border-gold/10 pb-2">
+                                                <Clock className="h-3.5 w-3.5" /> Order Progress Log
+                                            </h4>
+                                            <div className="relative pl-4 border-l border-gold/25 space-y-4 py-1 text-xs">
+                                                {selectedOrder.statusHistory && selectedOrder.statusHistory.length > 0 ? (
+                                                    selectedOrder.statusHistory.map((history) => (
+                                                        <div key={history.id} className="relative space-y-0.5">
+                                                            {/* Dot marker */}
+                                                            <span className={cn("absolute -left-[20.5px] top-1.5 h-2.5 w-2.5 rounded-full border-2 border-white shadow", getStatusDotClass(history.status))} />
+
+                                                            <div className="flex justify-between items-center">
+                                                                <span className="font-bold text-[10px] uppercase text-maroon tracking-wider bg-gold/10 px-1.5 py-0.5 rounded border border-gold/15">
+                                                                    {history.status.replace('_', ' ')}
+                                                                </span>
+                                                                <span className="text-[9px] text-gray-400 font-mono">
+                                                                    {new Date(history.createdAt).toLocaleString()}
+                                                                </span>
+                                                            </div>
+                                                            {history.note && (
+                                                                <p className="text-gray-600 text-[11px] leading-relaxed italic pl-1">
+                                                                    {history.note}
+                                                                </p>
+                                                            )}
                                                         </div>
-                                                        {history.note && (
-                                                            <p className="text-gray-600 text-[11px] leading-relaxed italic pl-1">
-                                                                {history.note}
-                                                            </p>
-                                                        )}
-                                                    </div>
-                                                ))
-                                            ) : (
-                                                <div className="text-gray-500 italic text-[11px]">No history logs recorded yet</div>
-                                            )}
+                                                    ))
+                                                ) : (
+                                                    <div className="text-gray-500 italic text-[11px]">No history logs recorded yet</div>
+                                                )}
+                                            </div>
                                         </div>
-                                    </div>
-                                </CardContent>
-                            </Card>
+                                    </CardContent>
+                                </Card>
+                            </motion.div>
                         ) : (
                             <div className="h-48 border border-dashed border-gold/30 rounded flex items-center justify-center text-xs text-gray-500 italic bg-white">
                                 Error retrieving selected order details

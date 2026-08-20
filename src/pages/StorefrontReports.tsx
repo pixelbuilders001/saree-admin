@@ -12,15 +12,15 @@ import {
     ShoppingBag,
     Users,
     TrendingUp,
-    DollarSign,
     Loader2,
     RefreshCw,
     Activity,
-    ArrowUpRight,
-    ArrowDownRight,
-    Layers3
+    Layers3,
+    IndianRupee
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
     BarChart,
@@ -62,8 +62,6 @@ export default function StorefrontReportsPage() {
     });
 
     const isLoading = isStatsLoading || isWishlistLoading || isCartsLoading || isOrdersLoading;
-
-    const isFetching = false; // Simplified
 
     const handleSync = async () => {
         await Promise.all([refetchStats(), refetchWishlists(), refetchCarts(), refetchOrders()]);
@@ -299,90 +297,71 @@ Shree Banarasi Sarees Team`;
 
     return (
         <motion.div 
-            className="space-y-4 max-w-7xl mx-auto px-4 py-2"
+            className="space-y-5 max-w-7xl mx-auto px-2 pb-10"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
         >
             {/* Header */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-gold/15 pb-3 gap-2">
-                <div>
-                    <div className="flex items-center gap-2">
-                        <div className="p-1 bg-maroon/5 rounded border border-gold/20">
-                            <BarChart3 className="h-4.5 w-4.5 text-maroon" />
-                        </div>
-                        <h1 className="text-lg font-black font-serif text-maroon tracking-wider uppercase">Online Business Activity & Reports</h1>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div className="flex items-center gap-3">
+                    <div className="p-2.5 bg-gradient-to-br from-maroon to-maroon-dark text-gold rounded-xl shadow-md shadow-maroon/20">
+                        <BarChart3 className="h-6 w-6" />
                     </div>
-                    <p className="text-[10px] text-gray-500 font-sans mt-0.5">
-                        Analytical insights into storefront wishlists, checkout cart pipelines, and digital order conversions
-                    </p>
+                    <div>
+                        <h1 className="text-xl md:text-2xl font-bold font-serif text-maroon tracking-wide">Online Business Reports</h1>
+                        <p className="text-xs text-gray-500 font-sans">Analytical insights into wishlists, cart pipelines & digital order conversions</p>
+                    </div>
                 </div>
 
-                <button
+                <Button
                     onClick={handleSync}
-                    className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-maroon border border-gold/20 px-2.5 py-1 rounded bg-white hover:bg-cream/10 transition-all shadow-sm active:scale-95 cursor-pointer"
+                    className="bg-gradient-to-r from-maroon to-maroon-dark hover:from-maroon-dark hover:to-maroon-dark text-gold h-9 text-xs font-bold shadow-md shadow-maroon/20 gap-1.5 hover:shadow-lg hover:shadow-maroon/30 transition-all"
                 >
-                    <RefreshCw className="h-3 w-3" />
+                    <RefreshCw className="h-4 w-4" />
                     Sync Reports
-                </button>
+                </Button>
             </div>
 
             {/* KPI Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                <Card className="border-gold/15 bg-white shadow-sm h-[78px] flex flex-col justify-between p-3.5">
-                    <div className="flex justify-between items-center">
-                        <span className="text-[9px] font-bold tracking-wider uppercase text-gray-500">Wishlist Interest</span>
-                        <Heart className="h-3.5 w-3.5 text-rose-600 fill-rose-100" />
-                    </div>
-                    <div className="flex justify-between items-end">
-                        <span className="text-base font-black text-gray-800">{reportData.wishlistCount} saved</span>
-                        <span className="text-[9px] font-mono text-gray-500">{formatCurrency(reportData.wishlistValue)} value</span>
-                    </div>
-                </Card>
-
-                <Card className="border-gold/15 bg-white shadow-sm h-[78px] flex flex-col justify-between p-3.5">
-                    <div className="flex justify-between items-center">
-                        <span className="text-[9px] font-bold tracking-wider uppercase text-gray-500">Active Shopping Carts</span>
-                        <ShoppingCart className="h-3.5 w-3.5 text-amber-600" />
-                    </div>
-                    <div className="flex justify-between items-end">
-                        <span className="text-base font-black text-gray-800">{reportData.cartCount} active</span>
-                        <span className="text-[9px] font-mono text-gray-500">{formatCurrency(reportData.cartTotalValue)} value</span>
-                    </div>
-                </Card>
-
-                <Card className="border-gold/15 bg-white shadow-sm h-[78px] flex flex-col justify-between p-3.5">
-                    <div className="flex justify-between items-center">
-                        <span className="text-[9px] font-bold tracking-wider uppercase text-gray-500">Completed Online Sales</span>
-                        <ShoppingBag className="h-3.5 w-3.5 text-green-700" />
-                    </div>
-                    <div className="flex justify-between items-end">
-                        <span className="text-base font-black text-gray-800">{reportData.completedOnlineCount} sales</span>
-                        <span className="text-[9px] font-mono text-gray-500">{formatCurrency(reportData.totalOnlineRevenue)} revenue</span>
-                    </div>
-                </Card>
-
-                <Card className="border-gold/15 bg-white shadow-sm h-[78px] flex flex-col justify-between p-3.5">
-                    <div className="flex justify-between items-center">
-                        <span className="text-[9px] font-bold tracking-wider uppercase text-gray-500">Total Storefront Pipeline</span>
-                        <Activity className="h-3.5 w-3.5 text-indigo-700" />
-                    </div>
-                    <div className="flex justify-between items-end">
-                        <span className="text-base font-black text-gray-800">{formatCurrency(reportData.totalPipeline)}</span>
-                        <span className="text-[9px] font-bold text-emerald-700">{reportData.recoveryRate}% conversion</span>
-                    </div>
-                </Card>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                {[
+                    { label: 'Wishlist Interest', value: `${reportData.wishlistCount} saved`, sub: formatCurrency(reportData.wishlistValue), icon: Heart, from: 'from-rose-400', to: 'to-rose-600', text: 'text-gray-800' },
+                    { label: 'Active Shopping Carts', value: `${reportData.cartCount} active`, sub: formatCurrency(reportData.cartTotalValue), icon: ShoppingCart, from: 'from-amber-400', to: 'to-amber-600', text: 'text-gray-800' },
+                    { label: 'Completed Online Sales', value: `${reportData.completedOnlineCount} sales`, sub: formatCurrency(reportData.totalOnlineRevenue), icon: ShoppingBag, from: 'from-emerald-500', to: 'to-emerald-700', text: 'text-gray-800' },
+                    { label: 'Total Storefront Pipeline', value: formatCurrency(reportData.totalPipeline), sub: `${reportData.recoveryRate}% conversion`, icon: Activity, from: 'from-indigo-500', to: 'to-indigo-700', text: 'text-maroon' },
+                ].map((s, i) => (
+                    <motion.div key={s.label}
+                        initial={{ opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.3, delay: i * 0.05 }}>
+                        <Card className="border-gold/20 shadow-sm hover:shadow-md transition-shadow bg-white">
+                            <CardContent className="p-4 flex items-center justify-between">
+                                <div className="space-y-1">
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">{s.label}</span>
+                                    <span className={cn("text-lg font-bold font-mono leading-tight block", s.text)}>{s.value}</span>
+                                    <span className="text-[10px] text-gray-400 block">{s.sub}</span>
+                                </div>
+                                <div className={cn("p-2.5 bg-gradient-to-br text-white rounded-xl shadow", s.from, s.to)}>
+                                    <s.icon className="h-5 w-5" />
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </motion.div>
+                ))}
             </div>
 
             {/* Funnel Graph & Popular Items split */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
                 {/* Funnel Visualization */}
-                <Card className="border-gold/15 bg-white shadow-sm lg:col-span-1 h-[240px] flex flex-col">
-                    <CardHeader className="bg-cream/15 border-b border-gold/10 p-2.5 flex justify-between items-center flex-row">
+                <Card className="border-gold/20 shadow-md bg-white lg:col-span-1 h-[260px] flex flex-col overflow-hidden">
+                    <CardHeader className="bg-gradient-to-r from-cream/40 to-transparent border-b border-gold/10 p-3 flex justify-between items-center flex-row">
                         <div>
-                            <CardTitle className="text-xs font-bold text-maroon tracking-wider uppercase">Conversion Funnel</CardTitle>
-                            <p className="text-[8px] text-gray-400">Total active counts by lifecycle stage</p>
+                            <CardTitle className="text-sm font-bold text-maroon tracking-wider uppercase">Conversion Funnel</CardTitle>
+                            <p className="text-[10px] text-gray-400">Active counts by lifecycle stage</p>
                         </div>
-                        <TrendingUp className="h-4 w-4 text-maroon" />
+                        <div className="p-2 bg-gradient-to-br from-maroon to-maroon-dark rounded-lg text-gold shadow">
+                            <TrendingUp className="h-4 w-4" />
+                        </div>
                     </CardHeader>
                     <CardContent className="p-2 flex-1 relative overflow-hidden">
                         <ResponsiveContainer width="100%" height="100%">
@@ -402,37 +381,47 @@ Shree Banarasi Sarees Team`;
                 </Card>
 
                 {/* Popular Wishlisted/Cart Items */}
-                <Card className="border-gold/15 bg-white shadow-sm lg:col-span-2 h-[240px] flex flex-col">
-                    <CardHeader className="bg-cream/15 border-b border-gold/10 p-2.5 flex justify-between items-center flex-row">
+                <Card className="border-gold/20 shadow-md bg-white lg:col-span-2 h-[260px] flex flex-col overflow-hidden">
+                    <CardHeader className="bg-gradient-to-r from-cream/40 to-transparent border-b border-gold/10 p-3 flex justify-between items-center flex-row">
                         <div>
-                            <CardTitle className="text-xs font-bold text-maroon tracking-wider uppercase">High-Intent Popular Products</CardTitle>
-                            <p className="text-[8px] text-gray-400">Products currently most wishlisted or left in shopping carts</p>
+                            <CardTitle className="text-sm font-bold text-maroon tracking-wider uppercase">High-Intent Popular Products</CardTitle>
+                            <p className="text-[10px] text-gray-400">Most wishlisted or left in carts</p>
                         </div>
-                        <Layers3 className="h-4 w-4 text-maroon" />
+                        <div className="p-2 bg-gradient-to-br from-maroon to-maroon-dark rounded-lg text-gold shadow">
+                            <Layers3 className="h-4 w-4" />
+                        </div>
                     </CardHeader>
                     <CardContent className="p-0 flex-1 overflow-y-auto">
                         <Table>
-                            <TableHeader className="bg-slate-50">
-                                <TableRow className="border-b border-gold/10 h-7">
-                                    <TableHead className="py-0.5 text-[9px] font-bold text-gray-500 uppercase h-6">Product name</TableHead>
-                                    <TableHead className="py-0.5 text-[9px] font-bold text-gray-500 uppercase h-6 text-center">Wishlists</TableHead>
-                                    <TableHead className="py-0.5 text-[9px] font-bold text-gray-500 uppercase h-6 text-center">Cart Qty</TableHead>
-                                    <TableHead className="py-0.5 text-[9px] font-bold text-gray-500 uppercase h-6 text-right">Selling Price</TableHead>
-                                    <TableHead className="py-0.5 text-[9px] font-bold text-gray-500 uppercase h-6 text-right">Potential Value</TableHead>
+                            <TableHeader className="bg-cream/10">
+                                <TableRow className="border-b border-gold/10 hover:bg-transparent">
+                                    <TableHead className="py-1 h-8 text-[10px] font-bold text-maroon uppercase px-3">Product name</TableHead>
+                                    <TableHead className="py-1 h-8 text-[10px] font-bold text-maroon uppercase text-center">Wishlists</TableHead>
+                                    <TableHead className="py-1 h-8 text-[10px] font-bold text-maroon uppercase text-center">Cart Qty</TableHead>
+                                    <TableHead className="py-1 h-8 text-[10px] font-bold text-maroon uppercase text-right">Selling Price</TableHead>
+                                    <TableHead className="py-1 h-8 text-[10px] font-bold text-maroon uppercase text-right px-3">Potential Value</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {popularProducts.length > 0 ? (
                                     popularProducts.map((prod) => (
-                                        <TableRow key={prod.id} className="border-b border-gold/5 hover:bg-cream/5 h-8">
-                                            <TableCell className="py-1 text-xs font-bold text-gray-800">
-                                                <div>{prod.name}</div>
-                                                <div className="text-[8px] text-gray-400 font-mono">SKU: {prod.sku} | {prod.fabric}</div>
+                                        <TableRow key={prod.id} className="border-b border-gold/5 hover:bg-cream/10 h-8 transition-colors">
+                                            <TableCell className="py-2 text-xs font-bold text-gray-800 px-3">
+                                                <div className="truncate max-w-[180px]">{prod.name}</div>
+                                                <div className="text-[9px] text-gray-400 font-mono">SKU: {prod.sku} | {prod.fabric}</div>
                                             </TableCell>
-                                            <TableCell className="py-1 text-xs text-center font-mono font-bold text-rose-600">{prod.wishlistCount}</TableCell>
-                                            <TableCell className="py-1 text-xs text-center font-mono font-bold text-amber-600">{prod.cartQty}</TableCell>
-                                            <TableCell className="py-1 text-xs text-right font-mono">{formatCurrency(prod.price)}</TableCell>
-                                            <TableCell className="py-1 text-xs text-right font-mono font-bold text-maroon">{formatCurrency(prod.totalPotentialValue)}</TableCell>
+                                            <TableCell className="py-2 text-xs text-center">
+                                                <span className="inline-flex items-center justify-center h-6 min-w-6 px-1.5 rounded-md bg-rose-50 text-rose-600 text-[10px] font-bold font-mono border border-rose-100">
+                                                    {prod.wishlistCount}
+                                                </span>
+                                            </TableCell>
+                                            <TableCell className="py-2 text-xs text-center">
+                                                <span className="inline-flex items-center justify-center h-6 min-w-6 px-1.5 rounded-md bg-amber-50 text-amber-600 text-[10px] font-bold font-mono border border-amber-100">
+                                                    {prod.cartQty}
+                                                </span>
+                                            </TableCell>
+                                            <TableCell className="py-2 text-xs text-right font-mono">{formatCurrency(prod.price)}</TableCell>
+                                            <TableCell className="py-2 text-xs text-right font-mono font-bold text-maroon px-3">{formatCurrency(prod.totalPotentialValue)}</TableCell>
                                         </TableRow>
                                     ))
                                 ) : (
@@ -447,42 +436,64 @@ Shree Banarasi Sarees Team`;
             </div>
 
             {/* Engagement Leaderboard & Real-time activity log split */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                 {/* Engagement Leaderboard */}
-                <Card className="border-gold/15 bg-white shadow-sm min-h-[260px] flex flex-col">
-                    <CardHeader className="bg-cream/15 border-b border-gold/10 p-2.5 flex justify-between items-center flex-row">
+                <Card className="border-gold/20 shadow-md bg-white min-h-[280px] flex flex-col overflow-hidden">
+                    <CardHeader className="bg-gradient-to-r from-cream/40 to-transparent border-b border-gold/10 p-3 flex justify-between items-center flex-row">
                         <div>
-                            <CardTitle className="text-xs font-bold text-maroon tracking-wider uppercase">Shopper Engagement Leaderboard</CardTitle>
-                            <p className="text-[8px] text-gray-400">High-intent shoppers sorted by wishlist additions and cart values</p>
+                            <CardTitle className="text-sm font-bold text-maroon tracking-wider uppercase">Shopper Engagement Leaderboard</CardTitle>
+                            <p className="text-[10px] text-gray-400">High-intent shoppers by wishlist & cart activity</p>
                         </div>
-                        <Users className="h-4 w-4 text-maroon" />
+                        <div className="p-2 bg-gradient-to-br from-maroon to-maroon-dark rounded-lg text-gold shadow">
+                            <Users className="h-4 w-4" />
+                        </div>
                     </CardHeader>
                     <CardContent className="p-0 flex-1 overflow-y-auto">
                         <Table>
-                            <TableHeader className="bg-slate-50">
-                                <TableRow className="border-b border-gold/10 h-7">
-                                    <TableHead className="py-0.5 text-[9px] font-bold text-gray-500 uppercase h-6">Customer Details</TableHead>
-                                    <TableHead className="py-0.5 text-[9px] font-bold text-gray-500 uppercase h-6 text-center">Wishlisted</TableHead>
-                                    <TableHead className="py-0.5 text-[9px] font-bold text-gray-500 uppercase h-6 text-center">Cart Items</TableHead>
-                                    <TableHead className="py-0.5 text-[9px] font-bold text-gray-500 uppercase h-6 text-right">Cart Total</TableHead>
-                                    <TableHead className="py-0.5 text-[9px] font-bold text-gray-500 uppercase h-6 text-center w-12"></TableHead>
+                            <TableHeader className="bg-cream/10">
+                                <TableRow className="border-b border-gold/10 hover:bg-transparent">
+                                    <TableHead className="py-1 h-8 text-[10px] font-bold text-maroon uppercase px-3">Customer</TableHead>
+                                    <TableHead className="py-1 h-8 text-[10px] font-bold text-maroon uppercase text-center">Wishlisted</TableHead>
+                                    <TableHead className="py-1 h-8 text-[10px] font-bold text-maroon uppercase text-center">Cart Items</TableHead>
+                                    <TableHead className="py-1 h-8 text-[10px] font-bold text-maroon uppercase text-right">Cart Total</TableHead>
+                                    <TableHead className="py-1 h-8 text-[10px] font-bold text-maroon uppercase text-center w-12"></TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {leaderboard.length > 0 ? (
                                     leaderboard.map((lead, index) => (
-                                        <TableRow key={index} className="border-b border-gold/5 hover:bg-cream/5 h-9">
-                                            <TableCell className="py-1 text-xs">
-                                                <div className="font-bold text-gray-800">{lead.name}</div>
-                                                <div className="text-[8.5px] text-gray-400 font-mono">{lead.phone}</div>
+                                        <TableRow key={index} className="border-b border-gold/5 hover:bg-cream/10 h-10 transition-colors">
+                                            <TableCell className="py-2 text-xs px-3">
+                                                <div className="flex items-center gap-2.5">
+                                                    <div className="h-8 w-8 shrink-0 rounded-full bg-gradient-to-br from-maroon to-maroon-dark text-gold flex items-center justify-center text-[10px] font-bold font-sans shadow-sm">
+                                                        {lead.name?.charAt(0).toUpperCase() || '?'}
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <div className="font-bold text-gray-800 truncate">{lead.name}</div>
+                                                        <div className="text-[9px] text-gray-400 font-mono">{lead.phone}</div>
+                                                    </div>
+                                                </div>
                                             </TableCell>
-                                            <TableCell className="py-1 text-xs text-center font-mono text-rose-600">{lead.wishlistCount}</TableCell>
-                                            <TableCell className="py-1 text-xs text-center font-mono text-amber-600">{lead.cartCount}</TableCell>
-                                            <TableCell className="py-1 text-xs text-right font-mono">{formatCurrency(lead.cartValue)}</TableCell>
-                                            <TableCell className="py-1 text-center">
+                                            <TableCell className="py-2 text-xs text-center">
+                                                <span className="inline-flex items-center justify-center h-6 min-w-6 px-1.5 rounded-md bg-rose-50 text-rose-600 text-[10px] font-bold font-mono border border-rose-100">
+                                                    {lead.wishlistCount}
+                                                </span>
+                                            </TableCell>
+                                            <TableCell className="py-2 text-xs text-center">
+                                                <span className="inline-flex items-center justify-center h-6 min-w-6 px-1.5 rounded-md bg-amber-50 text-amber-600 text-[10px] font-bold font-mono border border-amber-100">
+                                                    {lead.cartCount}
+                                                </span>
+                                            </TableCell>
+                                            <TableCell className="py-2 text-xs text-right font-mono font-bold text-gray-800">
+                                                <span className="inline-flex items-center gap-0.5 text-maroon">
+                                                    <IndianRupee className="h-3 w-3" />
+                                                    {lead.cartValue.toLocaleString('en-IN')}
+                                                </span>
+                                            </TableCell>
+                                            <TableCell className="py-2 text-center">
                                                 <button
                                                     onClick={() => handleWhatsAppLead(lead)}
-                                                    className="p-1 text-green-600 hover:text-green-700 hover:bg-green-50 rounded transition-colors"
+                                                    className="p-1.5 text-green-600 hover:text-green-700 hover:bg-green-50 rounded-lg transition-colors"
                                                     title="Reach out on WhatsApp"
                                                 >
                                                     <WhatsAppIcon className="h-3.5 w-3.5" />
@@ -501,28 +512,31 @@ Shree Banarasi Sarees Team`;
                 </Card>
 
                 {/* Timeline Log */}
-                <Card className="border-gold/15 bg-white shadow-sm min-h-[260px] flex flex-col">
-                    <CardHeader className="bg-cream/15 border-b border-gold/10 p-2.5 flex justify-between items-center flex-row">
+                <Card className="border-gold/20 shadow-md bg-white min-h-[280px] flex flex-col overflow-hidden">
+                    <CardHeader className="bg-gradient-to-r from-cream/40 to-transparent border-b border-gold/10 p-3 flex justify-between items-center flex-row">
                         <div>
-                            <CardTitle className="text-xs font-bold text-maroon tracking-wider uppercase">Live Activity Feed</CardTitle>
-                            <p className="text-[8px] text-gray-400">Real-time addition logs to wishlist & carts</p>
+                            <CardTitle className="text-sm font-bold text-maroon tracking-wider uppercase">Live Activity Feed</CardTitle>
+                            <p className="text-[10px] text-gray-400">Wishlist & cart additions in real time</p>
                         </div>
-                        <Clock className="h-4 w-4 text-maroon" />
+                        <div className="p-2 bg-gradient-to-br from-maroon to-maroon-dark rounded-lg text-gold shadow">
+                            <Clock className="h-4 w-4" />
+                        </div>
                     </CardHeader>
                     <CardContent className="p-3.5 flex-1 overflow-y-auto space-y-3">
                         {recentActivity.length > 0 ? (
                             recentActivity.map((log) => {
                                 const isWish = log.type === 'wishlist';
                                 return (
-                                    <div key={log.id} className="flex gap-2 text-xs border-b border-gold/5 pb-2 last:border-0 last:pb-0">
-                                        <span className={`h-2 w-2 rounded-full mt-1.5 flex-shrink-0 ${isWish ? 'bg-rose-500 animate-pulse' : 'bg-amber-500'}`} />
-                                        <div className="flex-1">
+                                    <div key={log.id} className="flex gap-2.5 text-xs border-b border-gold/10 pb-2.5 last:border-0 last:pb-0">
+                                        <span className={cn("h-2 w-2 rounded-full mt-1.5 flex-shrink-0", isWish ? "bg-rose-500 animate-pulse" : "bg-amber-500")} />
+                                        <div className="flex-1 min-w-0">
                                             <p className="text-gray-700">
-                                                <span className="font-bold text-gray-800">{log.customerName}</span> ({log.customerPhone || 'Guest'}){' '}
+                                                <span className="font-bold text-gray-800">{log.customerName}</span>
+                                                <span className="text-gray-400 font-mono text-[10px] ml-1">({log.customerPhone || 'Guest'})</span>{' '}
                                                 <span className="text-gray-500">{log.actionText}</span>:{' '}
                                                 <span className="font-semibold text-maroon">"{log.productName}"</span>
                                             </p>
-                                            <span className="text-[9px] text-gray-400 font-mono block mt-0.5">
+                                            <span className="text-[10px] text-gray-400 font-mono block mt-0.5">
                                                 {new Date(log.timestamp).toLocaleDateString()} {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                             </span>
                                         </div>
@@ -530,7 +544,7 @@ Shree Banarasi Sarees Team`;
                                 );
                             })
                         ) : (
-                            <div className="h-full flex items-center justify-center text-xs text-gray-450 italic">No storefront log timeline available</div>
+                            <div className="h-full flex items-center justify-center text-xs text-gray-400 italic">No storefront log timeline available</div>
                         )}
                     </CardContent>
                 </Card>

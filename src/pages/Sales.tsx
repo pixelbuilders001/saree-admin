@@ -20,11 +20,19 @@ import {
     CreditCard,
     QrCode,
     UserCheck,
+    IndianRupee,
+    Package,
+    Tag,
+    BadgeCheck,
+    ScanLine,
+    Zap,
+    UserRound,
+    ReceiptText,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { ReceiptModal } from '@/components/ReceiptModal';
 import { BarcodeScanner } from '@/components/sales/BarcodeScanner';
@@ -36,6 +44,7 @@ import QRCode from 'react-qr-code';
 import { settingsService, type UpiSetting } from '@/services/settingsService';
 import { staffService, type Staff } from '@/services/staffService';
 import { supabase } from '@/lib/supabase';
+import { motion } from 'framer-motion';
 
 export default function SalesPage() {
     const customerNameInputRef = React.useRef<HTMLInputElement>(null);
@@ -138,6 +147,17 @@ export default function SalesPage() {
         if (!Array.isArray(sarees)) return ['All'];
         const cats = Array.from(new Set(sarees.map(s => s.category).filter(Boolean)));
         return ['All', ...cats];
+    }, [sarees]);
+
+    // Per-category counts (pure UI)
+    const categoryCounts = React.useMemo(() => {
+        const counts: Record<string, number> = {};
+        if (Array.isArray(sarees)) {
+            sarees.filter(s => s.status === 'active').forEach(s => {
+                counts[s.category] = (counts[s.category] || 0) + 1;
+            });
+        }
+        return counts;
     }, [sarees]);
 
     const filteredGridSarees = React.useMemo(() => {
@@ -509,7 +529,7 @@ export default function SalesPage() {
         return (
             <div className="flex flex-col items-center justify-center min-h-[80vh] p-4 space-y-6">
                 <Card className="w-full max-w-sm border-gold/20 shadow-xl overflow-hidden">
-                    <CardHeader className="bg-maroon text-gold text-center py-8">
+                    <CardHeader className="bg-gradient-to-br from-maroon to-maroon-dark text-gold text-center py-8">
                         <div className="flex justify-center mb-4">
                             <div className="p-4 bg-gold/10 rounded-full border-2 border-gold/20 animate-pulse">
                                 <Smartphone className="h-12 w-12" />
@@ -573,37 +593,70 @@ export default function SalesPage() {
     }
 
     return (
-        <div className="h-[calc(100vh-100px)] flex flex-col lg:flex-row gap-4 overflow-hidden -m-4 lg:m-0 p-4 text-sm bg-cream/10">
+        <div className="h-[calc(100vh-56px)] lg:h-screen flex flex-col gap-2 overflow-hidden -m-4 lg:-m-8 p-3 lg:p-3.5 text-sm bg-cream/10">
+            {/* Main Work Area: Catalogue + Cart */}
+            <div className="flex-1 flex flex-col lg:flex-row gap-3 min-h-0">
             {/* Left Panel: Inventory Catalog & Filters */}
-            <div className="flex-1 flex flex-col min-w-0 bg-white rounded-xl border border-gold/15 overflow-hidden shadow-sm">
+            <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+                className="flex-1 flex flex-col min-w-0 bg-white rounded-xl border border-gold/20 overflow-hidden shadow-md"
+            >
+                {/* Catalog Header */}
+                <div className="px-4 py-3 border-b border-gold/10 bg-gradient-to-r from-cream/50 to-transparent flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <div className="p-1.5 bg-gradient-to-br from-maroon to-maroon-dark text-gold rounded-lg shadow-sm">
+                            <Package className="h-4 w-4" />
+                        </div>
+                        <div>
+                            <h2 className="text-sm font-bold font-serif text-maroon tracking-wide leading-none">Catalogue</h2>
+                            <p className="text-[10px] text-gray-400 mt-0.5">{filteredGridSarees.length} items shown</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                        <span className="hidden sm:flex items-center gap-1.5 text-[10px] font-medium text-maroon/70 bg-maroon/5 border border-maroon/10 rounded-full px-2.5 py-1">
+                            <Zap className="h-3 w-3" /> Keyboard: ↑↓ Enter
+                        </span>
+                    </div>
+                </div>
 
                 {/* Search & Actions Bar */}
-                <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex flex-col sm:flex-row gap-2.5 items-center justify-between">
+                <div className="p-3 border-b border-gray-100 flex flex-col sm:flex-row gap-2 items-center justify-between bg-white">
                     <div className="relative flex-1 w-full">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                         <Input
-                            placeholder="Search sarees by name, ID, or scan barcode..."
-                            className="pl-9 pr-4 border-gold/20 h-9 text-xs focus-visible:ring-maroon bg-white w-full"
+                            placeholder="Search by name, ID or scan barcode..."
+                            className="pl-9 pr-4 border-gold/25 h-10 text-sm focus-visible:ring-maroon bg-white shadow-sm"
                             value={sareeSearchTerm}
                             onChange={(e) => setSareeSearchTerm(e.target.value)}
                             onKeyDown={handleKeyDown}
                             autoFocus
                         />
+                        {sareeSearchTerm && (
+                            <button
+                                type="button"
+                                onClick={() => setSareeSearchTerm('')}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500"
+                            >
+                                <Minus className="h-3.5 w-3.5 rotate-45" />
+                            </button>
+                        )}
                     </div>
                     <div className="flex items-center gap-2 w-full sm:w-auto">
                         <Button
                             type="button"
                             variant="outline"
-                            className="h-9 px-3 border-gold/20 text-maroon hover:bg-cream/20 gap-1.5 text-xs w-full sm:w-auto"
+                            className="h-10 px-3 border-gold/30 text-maroon hover:bg-gold/10 gap-1.5 text-xs font-semibold w-full sm:w-auto shadow-sm"
                             onClick={() => setIsScannerOpen(true)}
                         >
-                            <Camera className="h-4 w-4" />
+                            <ScanLine className="h-4 w-4" />
                             Scan Barcode
                         </Button>
                         <Button
-                            variant="ghost"
+                            variant="outline"
                             size="sm"
-                            className="h-9 px-3 text-maroon hover:bg-maroon/5 gap-1.5 border border-maroon/10 text-xs w-full sm:w-auto"
+                            className="h-10 px-3 text-maroon hover:bg-maroon/5 gap-1.5 border-gold/30 text-xs font-semibold w-full sm:w-auto shadow-sm"
                             onClick={() => setIsRemoteLinkOpen(true)}
                         >
                             <Smartphone className="h-4 w-4" />
@@ -613,74 +666,95 @@ export default function SalesPage() {
                 </div>
 
                 {/* Category Selector Chips */}
-                <div className="px-4 py-2 border-b border-gray-100 flex items-center gap-1.5 overflow-x-auto no-scrollbar scroll-smooth bg-white">
-                    {categories.map((cat) => (
-                        <button
-                            key={cat}
-                            onClick={() => setSelectedCategory(cat)}
-                            className={cn(
-                                "whitespace-nowrap px-3 py-1 font-medium text-xs rounded-full transition-all border",
-                                selectedCategory === cat
-                                    ? "bg-maroon text-gold border-maroon shadow-sm"
-                                    : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100 hover:text-gray-900"
-                            )}
-                        >
-                            {cat}
-                        </button>
-                    ))}
+                <div className="px-3 py-2.5 border-b border-gray-100 flex items-center gap-1.5 overflow-x-auto no-scrollbar scroll-smooth bg-white">
+                    {categories.map((cat) => {
+                        const isActive = selectedCategory === cat;
+                        const count = cat === 'All'
+                            ? (Array.isArray(sarees) ? sarees.filter(s => s.status === 'active').length : 0)
+                            : (categoryCounts[cat] || 0);
+                        return (
+                            <button
+                                key={cat}
+                                onClick={() => setSelectedCategory(cat)}
+                                className={cn(
+                                    "whitespace-nowrap inline-flex items-center gap-1.5 px-3 py-1.5 font-semibold text-xs rounded-full transition-all border",
+                                    isActive
+                                        ? "bg-gradient-to-r from-maroon to-maroon-dark text-gold border-maroon shadow-sm shadow-maroon/20"
+                                        : "bg-white text-gray-600 border-gray-200 hover:border-maroon/40 hover:text-maroon hover:bg-cream/20"
+                                )}
+                            >
+                                {cat}
+                                <span className={cn(
+                                    "px-1.5 py-0.5 rounded-full text-[9px] font-bold font-mono leading-none",
+                                    isActive ? "bg-gold/25 text-gold" : "bg-gray-100 text-gray-400"
+                                )}>
+                                    {count}
+                                </span>
+                            </button>
+                        );
+                    })}
                 </div>
 
                 {/* Scrollable Catalog Grid */}
-                <div className="flex-1 overflow-y-auto p-4 bg-cream/[0.04]">
+                <div className="flex-1 overflow-y-auto p-3 bg-cream/[0.04]">
                     {isLoadingSarees ? (
-                        <div className="h-full flex flex-col items-center justify-center p-12 text-gray-400 space-y-2">
-                            <Loader2 className="h-8 w-8 animate-spin text-maroon/50" />
-                            <span className="text-xs">Loading items catalogue...</span>
+                        <div className="h-full flex flex-col items-center justify-center p-12 text-gray-400 space-y-3">
+                            <Loader2 className="h-10 w-10 animate-spin text-maroon/40" />
+                            <span className="text-sm font-medium text-gray-500">Loading catalogue...</span>
                         </div>
                     ) : filteredGridSarees.length > 0 ? (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-2.5">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
                             {filteredGridSarees.map((saree, idx) => {
                                 const isHighlighted = idx === highlightedIndex && sareeSearchTerm !== '';
                                 return (
-                                    <button
+                                    <motion.button
                                         key={saree.id}
                                         type="button"
                                         disabled={saree.stock <= 0}
                                         onClick={() => handleAddToCart(saree)}
+                                        initial={{ opacity: 0, scale: 0.97 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                        transition={{ duration: 0.15 }}
                                         className={cn(
-                                            "text-left bg-white border rounded-lg p-2.5 flex flex-col justify-between shadow-sm hover:shadow-md transition-all active:scale-95 duration-100 relative overflow-hidden group cursor-pointer w-full text-xs h-[105px]",
+                                            "text-left bg-white border rounded-xl p-3 flex flex-col justify-between shadow-sm hover:shadow-lg transition-all active:scale-[0.97] duration-100 relative overflow-hidden group cursor-pointer w-full text-xs h-[120px]",
                                             isHighlighted
-                                                ? "border-maroon ring-2 ring-maroon/15 shadow-md"
-                                                : "border-gray-100 hover:border-gold/30",
+                                                ? "border-maroon ring-2 ring-maroon/20 shadow-md"
+                                                : "border-gray-100 hover:border-gold/40",
                                             saree.stock <= 0 && "opacity-50 cursor-not-allowed bg-gray-50 border-gray-100"
                                         )}
                                     >
+                                        {/* Top accent line */}
+                                        <div className={cn(
+                                            "absolute top-0 left-0 right-0 h-0.5",
+                                            saree.stock <= 0 ? "bg-gray-200" : saree.stock < 5 ? "bg-gradient-to-r from-red-400 to-amber-400" : "bg-gradient-to-r from-gold to-maroon/60"
+                                        )} />
+
                                         {saree.stock <= 0 ? (
-                                            <span className="absolute top-1 right-1 text-[8px] bg-gray-200 text-gray-600 px-1 py-0.5 rounded font-semibold z-10">
+                                            <span className="absolute top-2 right-2 text-[8px] bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded-full font-bold z-10 uppercase tracking-wider">
                                                 Sold Out
                                             </span>
                                         ) : saree.stock < 5 ? (
-                                            <span className="absolute top-1 right-1 text-[8px] bg-red-50 text-red-600 px-1 py-0.5 rounded font-semibold animate-pulse z-10">
+                                            <span className="absolute top-2 right-2 text-[8px] bg-red-50 text-red-600 px-1.5 py-0.5 rounded-full font-bold animate-pulse z-10">
                                                 {saree.stock} Left
                                             </span>
                                         ) : null}
 
-                                        <div className="flex gap-2 items-start w-full flex-1">
+                                        <div className="flex gap-2.5 items-start w-full flex-1">
                                             {saree.images && saree.images.length > 0 ? (
-                                                <img 
-                                                    src={saree.images.find(img => img.isPrimary)?.imageUrl || saree.images[0].imageUrl} 
-                                                    alt={saree.sareeName} 
-                                                    className="w-10 h-10 object-cover rounded border border-gold/15 flex-shrink-0"
+                                                <img
+                                                    src={saree.images.find(img => img.isPrimary)?.imageUrl || saree.images[0].imageUrl}
+                                                    alt={saree.sareeName}
+                                                    className="w-11 h-11 object-cover rounded-lg border border-gold/15 flex-shrink-0 shadow-sm"
                                                 />
                                             ) : (
-                                                <div className="w-10 h-10 bg-cream/35 border border-gold/10 rounded flex items-center justify-center text-[7px] text-gray-400 font-bold flex-shrink-0 uppercase">
+                                                <div className="w-11 h-11 bg-cream/35 border border-gold/10 rounded-lg flex items-center justify-center text-[7px] text-gray-400 font-bold flex-shrink-0 uppercase">
                                                     No Img
                                                 </div>
                                             )}
                                             <div className="flex-1 min-w-0 w-full">
                                                 <div className="flex justify-between items-center w-full gap-1 mb-0.5">
                                                     <span className="text-[8px] text-gray-400 font-mono truncate">{saree.id}</span>
-                                                    <span className="text-[8px] text-gray-505 bg-cream/30 px-1 py-0.2 rounded truncate max-w-[50px]" title={saree.category}>
+                                                    <span className="text-[8px] text-maroon/70 bg-cream/40 px-1.5 py-0.5 rounded-full truncate max-w-[55px] font-semibold" title={saree.category}>
                                                         {saree.category}
                                                     </span>
                                                 </div>
@@ -690,56 +764,76 @@ export default function SalesPage() {
                                             </div>
                                         </div>
 
-                                        <div className="mt-1.5 pt-1.5 border-t border-gray-50 flex justify-between items-center w-full flex-shrink-0">
-                                            <div className="font-bold text-maroon text-xs">₹{saree.sellingPrice.toLocaleString()}</div>
-                                            <div className="text-[9px] text-gray-400">Qty: {saree.stock}</div>
+                                        <div className="mt-2 pt-2 border-t border-gray-50 flex justify-between items-center w-full flex-shrink-0">
+                                            <div className="flex items-center gap-1 font-bold text-maroon text-xs">
+                                                <IndianRupee className="h-3 w-3" />
+                                                {saree.sellingPrice.toLocaleString()}
+                                            </div>
+                                            <div className="flex items-center gap-0.5 text-[9px] text-gray-400 font-medium">
+                                                <Package className="h-2.5 w-2.5" /> Qty: {saree.stock}
+                                            </div>
                                         </div>
-                                    </button>
+                                    </motion.button>
                                 );
                             })}
                         </div>
                     ) : (
-                        <div className="h-full flex flex-col items-center justify-center p-12 text-gray-400 space-y-2">
-                            <span className="text-xl">🔍</span>
-                            <span className="text-xs">No active sarees match your criteria</span>
+                        <div className="h-full flex flex-col items-center justify-center p-12 text-gray-400 space-y-3">
+                            <div className="p-4 bg-white border border-gray-100 rounded-full shadow-sm">
+                                <Search className="h-6 w-6 text-gray-300" />
+                            </div>
+                            <span className="text-sm font-medium text-gray-500">No active sarees match your criteria</span>
+                            <span className="text-xs text-gray-400">Try a different search or category</span>
                         </div>
                     )}
 
                 </div>
-            </div>
+            </motion.div>
 
             {/* Right Panel: POS Sidebar (Billing & Customer details) */}
-            <div className="w-full lg:w-[360px] xl:w-[410px] shrink-0 flex flex-col bg-white rounded-xl border border-gold/15 shadow-md overflow-hidden h-full">
-
+            <motion.div
+                initial={{ opacity: 0, x: 16 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.3, delay: 0.05 }}
+                className="w-full lg:w-[360px] xl:w-[410px] shrink-0 flex flex-col bg-white rounded-xl border border-gold/20 shadow-lg overflow-hidden h-full"
+            >
                 {/* Header */}
-                <div className="bg-maroon px-4 py-3 flex items-center justify-between text-gold border-b border-gold/15">
-                    <div className="flex items-center gap-2">
-                        <ShoppingCart className="h-4.5 w-4.5" />
-                        <span className="font-bold text-xs uppercase tracking-wider">Checkout Terminal</span>
+                <div className="bg-gradient-to-r from-maroon via-maroon-dark to-maroon-dark px-4 py-3.5 flex items-center justify-between text-gold border-b border-gold/20">
+                    <div className="flex items-center gap-2.5">
+                        <div className="p-1.5 bg-gold/15 rounded-lg border border-gold/25">
+                            <ShoppingCart className="h-4.5 w-4.5" />
+                        </div>
+                        <div>
+                            <div className="font-bold text-xs uppercase tracking-wider leading-none">Checkout Terminal</div>
+                            <div className="text-[9px] text-gold/60 font-mono mt-0.5">POS Billing & Payments</div>
+                        </div>
                         {remoteConnected && (
-                            <span className="flex items-center gap-1 bg-green-500/10 text-green-400 border border-green-500/25 px-1.5 py-0.5 rounded-full text-[9px] font-medium leading-none animate-pulse">
+                            <span className="flex items-center gap-1 bg-green-500/15 text-green-300 border border-green-500/30 px-2 py-0.5 rounded-full text-[9px] font-semibold leading-none animate-pulse ml-1">
                                 <span className="h-1.5 w-1.5 rounded-full bg-green-400"></span>
-                                Live Scanner
+                                Live
                             </span>
                         )}
                     </div>
-                    <span className="text-[10px] font-mono bg-gold/15 text-gold-light px-2 py-0.5 rounded">
+                    <span className="text-[10px] font-mono bg-gold/15 text-gold-light px-2 py-1 rounded-md border border-gold/20">
                         ID: {sessionId}
                     </span>
                 </div>
 
                 {/* Customer Details Form */}
-                <div className="px-3 pt-2.5 pb-2 border-b border-gray-100 bg-cream/15 shrink-0">
+                <div className="px-3.5 pt-3 pb-2.5 border-b border-gray-100 bg-gradient-to-b from-cream/20 to-transparent shrink-0">
                     {/* Row 1: Mobile + Name */}
-                    <div className="flex items-center gap-1.5 mb-1.5">
-                        <User className="h-3 w-3 text-maroon/70" />
+                    <div className="flex items-center gap-1.5 mb-2">
+                        <div className="p-1 rounded-md bg-maroon/5 text-maroon">
+                            <UserRound className="h-3.5 w-3.5" />
+                        </div>
                         <span className="text-[10px] font-bold text-maroon uppercase tracking-wider">Customer</span>
+                        <span className="text-[9px] text-gray-400 ml-auto">Auto-search on 10 digits</span>
                     </div>
-                    <div className="grid grid-cols-2 gap-1.5 mb-1.5">
+                    <div className="grid grid-cols-2 gap-2 mb-2">
                         <div className="relative">
                             <Input
                                 placeholder="Mobile Number"
-                                className="h-7 text-xs border-gold/20 focus-visible:ring-maroon pr-7 placeholder:text-gray-400 bg-white"
+                                className="h-9 text-xs border-gold/25 focus-visible:ring-maroon pr-8 placeholder:text-gray-400 bg-white shadow-sm"
                                 value={customerMobile}
                                 onChange={(e) => {
                                     const val = e.target.value.replace(/\D/g, '').slice(0, 10);
@@ -751,7 +845,7 @@ export default function SalesPage() {
                                 <button
                                     type="button"
                                     onClick={() => handleCustomerSearch()}
-                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-maroon hover:text-maroon-dark font-bold"
+                                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-maroon hover:text-maroon-dark font-bold"
                                 >
                                     Find
                                 </button>
@@ -760,21 +854,23 @@ export default function SalesPage() {
                         <Input
                             ref={customerNameInputRef}
                             placeholder="Customer Name"
-                            className="h-7 text-xs border-gold/20 focus-visible:ring-maroon placeholder:text-gray-400 bg-white"
+                            className="h-9 text-xs border-gold/25 focus-visible:ring-maroon placeholder:text-gray-400 bg-white shadow-sm"
                             value={customerName}
                             onChange={(e) => setCustomerName(e.target.value)}
                         />
                     </div>
 
                     {/* Row 2: Salesperson */}
-                    <div className="flex items-center gap-1.5">
-                        <UserCheck className="h-3 w-3 text-maroon/70 shrink-0" />
+                    <div className="flex items-center gap-2">
+                        <div className="p-1 rounded-md bg-maroon/5 text-maroon shrink-0">
+                            <UserCheck className="h-3.5 w-3.5" />
+                        </div>
                         <select
                             value={selectedStaffId}
                             onChange={(e) => setSelectedStaffId(e.target.value)}
                             className={cn(
-                                "flex-1 h-7 text-xs border rounded-md px-2 bg-white focus:outline-none focus:ring-1 focus:ring-maroon/30",
-                                selectedStaffId ? "border-gold/20 text-gray-700" : "border-amber-300 text-amber-700"
+                                "flex-1 h-9 text-xs border rounded-lg px-2.5 bg-white focus:outline-none focus:ring-1 focus:ring-maroon/30 shadow-sm",
+                                selectedStaffId ? "border-gold/25 text-gray-700" : "border-amber-300 text-amber-700"
                             )}
                         >
                             <option value="">— Assign Salesperson * —</option>
@@ -788,40 +884,54 @@ export default function SalesPage() {
                 </div>
 
                 {/* Cart Items List */}
-                <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-1.5 bg-gray-50/20">
-                    <div className="flex items-center justify-between text-[10px] text-gray-500 font-medium pb-1.5 border-b border-gray-100">
-                        <span>Items ({cart.length})</span>
-                        <span>Amount</span>
+                <div className="flex-1 min-h-0 overflow-y-auto px-3.5 py-2.5 space-y-2 bg-gray-50/30">
+                    <div className="flex items-center justify-between text-[10px] text-gray-500 font-semibold pb-2 border-b border-gray-200">
+                        <span className="inline-flex items-center gap-1.5">
+                            <ReceiptText className="h-3.5 w-3.5 text-maroon/60" />
+                            Bill Items
+                        </span>
+                        <span className="inline-flex items-center gap-1">
+                            <span className="bg-maroon/10 text-maroon px-2 py-0.5 rounded-full font-bold font-mono">{cart.length}</span>
+                            Amount
+                        </span>
                     </div>
 
                     {cart.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center text-gray-400 py-10 space-y-1.5">
-                            <ShoppingCart className="h-9 w-9 text-gray-300 stroke-1" />
-                            <span className="text-xs">Cart is empty</span>
-                            <span className="text-[10px] text-center max-w-[180px]">
-                                Scan a barcode or select from the catalogue.
+                        <div className="flex flex-col items-center justify-center text-gray-400 py-10 space-y-2">
+                            <div className="p-4 bg-white border border-dashed border-gray-200 rounded-full">
+                                <ShoppingCart className="h-8 w-8 text-gray-300 stroke-1" />
+                            </div>
+                            <span className="text-sm font-medium text-gray-500">Cart is empty</span>
+                            <span className="text-[10px] text-center max-w-[200px] text-gray-400">
+                                Scan a barcode or tap a product from the catalogue.
                             </span>
                         </div>
                     ) : (
                         cart.map((item, index) => (
-                            <div key={item.sareeId} className="flex gap-2 items-center justify-between border-b border-gray-100 pb-1.5 last:border-0 last:pb-0">
+                            <motion.div
+                                key={item.sareeId}
+                                initial={{ opacity: 0, x: -8 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ duration: 0.15 }}
+                                className="flex gap-2.5 items-center justify-between border border-gray-100 rounded-lg bg-white p-2 shadow-sm"
+                            >
                                 <div className="flex-1 min-w-0">
                                     <div className="font-semibold text-xs text-gray-800 truncate">{item.sareeName}</div>
-                                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[9px] text-gray-400">
-                                        <span className="font-mono">{item.sareeId}</span>
+                                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[9px] text-gray-400 mt-0.5">
+                                        <span className="font-mono bg-gray-50 px-1 py-0.5 rounded">{item.sareeId}</span>
                                         {item.mrp > item.sellingPrice && (
-                                            <span className="text-gray-400 font-medium">
-                                                MRP: <span className="line-through">₹{item.mrp}</span> (-₹{item.discountAmount} / {item.discountPercentage}%)
+                                            <span className="text-red-400 font-semibold">
+                                                MRP <span className="line-through">₹{item.mrp}</span> (-₹{item.discountAmount} / {item.discountPercentage}%)
                                             </span>
                                         )}
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-1.5 shrink-0">
                                     {/* Quantity Controls */}
-                                    <div className="flex items-center gap-0.5 bg-white border border-gray-200 rounded p-0.5">
+                                    <div className="flex items-center gap-0.5 bg-gray-50 border border-gray-200 rounded-lg p-0.5">
                                         <button
                                             type="button"
-                                            className="w-4 h-4 rounded hover:bg-gray-100 flex items-center justify-center text-gray-600 active:scale-90 transition-all"
+                                            className="w-5 h-5 rounded-md hover:bg-white flex items-center justify-center text-gray-600 active:scale-90 transition-all"
                                             onClick={() => {
                                                 const newCart = [...cart];
                                                 if (newCart[index].quantity > 1) {
@@ -832,12 +942,12 @@ export default function SalesPage() {
                                                 }
                                             }}
                                         >
-                                            <Minus className="h-2 w-2" />
+                                            <Minus className="h-2.5 w-2.5" />
                                         </button>
-                                        <span className="w-4 text-center text-[11px] font-bold text-gray-800">{item.quantity}</span>
+                                        <span className="w-5 text-center text-xs font-bold text-gray-800">{item.quantity}</span>
                                         <button
                                             type="button"
-                                            className="w-4 h-4 rounded hover:bg-gray-100 flex items-center justify-center text-gray-600 active:scale-90 transition-all"
+                                            className="w-5 h-5 rounded-md hover:bg-white flex items-center justify-center text-gray-600 active:scale-90 transition-all"
                                             onClick={() => {
                                                 const limit = sarees?.find(s => s.id === item.sareeId)?.stock || 999;
                                                 const newCart = [...cart];
@@ -849,143 +959,21 @@ export default function SalesPage() {
                                                 setCart(newCart);
                                             }}
                                         >
-                                            <Plus className="h-2 w-2" />
+                                            <Plus className="h-2.5 w-2.5" />
                                         </button>
                                     </div>
-                                    <span className="font-bold text-xs text-maroon w-16 text-right">₹{(item.sellingPrice * item.quantity).toLocaleString()}</span>
+                                    <span className="font-bold text-xs text-maroon w-16 text-right font-mono">₹{(item.sellingPrice * item.quantity).toLocaleString()}</span>
                                     <button
                                         type="button"
-                                        className="text-gray-300 hover:text-red-500 transition-colors"
+                                        className="text-gray-300 hover:text-red-500 transition-colors p-1 hover:bg-red-50 rounded-md"
                                         onClick={() => handleRemoveFromCart(index)}
                                     >
-                                        <Trash2 className="h-3 w-3" />
+                                        <Trash2 className="h-3.5 w-3.5" />
                                     </button>
                                 </div>
-                            </div>
+                            </motion.div>
                         ))
                     )}
-                </div>
-
-                {/* Bottom Billing Summary & Actions Panel */}
-                <div className="border-t border-gray-100 px-3 pt-2 pb-3 bg-white space-y-2 shrink-0">
-                    {/* Payment Mode Selection — compact horizontal pills */}
-                    <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider shrink-0">Pay via</span>
-                        <div className="flex gap-1 flex-1">
-                            {(['cash', 'card', 'upi'] as const).map((mode) => (
-                                <button
-                                    key={mode}
-                                    type="button"
-                                    onClick={() => setPaymentMode(mode)}
-                                    className={cn(
-                                        "flex items-center justify-center gap-1 flex-1 py-1 rounded-md border text-[11px] font-medium transition-all capitalize select-none",
-                                        paymentMode === mode
-                                            ? "border-maroon bg-maroon text-gold shadow-sm"
-                                            : "border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100"
-                                    )}
-                                >
-                                    {mode === 'cash' && <Coins className="h-3 w-3" />}
-                                    {mode === 'card' && <CreditCard className="h-3 w-3" />}
-                                    {mode === 'upi' && <QrCode className="h-3 w-3" />}
-                                    {mode}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Summary lines */}
-                    <div className="text-xs border-t border-gray-100 pt-1.5 space-y-0.5">
-                        <div className="flex justify-between text-gray-400">
-                            <span>Subtotal (MRP)</span>
-                            <span>₹{subtotal.toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between text-gray-400">
-                            <span>GST (Included)</span>
-                            <span>₹0</span>
-                        </div>
-                        {/* Discount Row */}
-                        <div className="flex justify-between text-green-700 font-medium">
-                            <span>Discount (Table)</span>
-                            <span className="font-semibold text-right">-₹{discountAmount.toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between text-gray-600 font-semibold border-t border-dashed border-gray-100 pt-1 mt-1">
-                            <span>Net Total</span>
-                            <span>₹{cartTotal.toLocaleString()}</span>
-                        </div>
-
-                        {/* Store Credit Voucher Row */}
-                        <div className="flex flex-col gap-1 pt-1.5 border-t border-gray-100 mt-1">
-                            <div className="flex items-center justify-between">
-                                <span className="text-gray-400 text-[10px] font-semibold uppercase tracking-wider">Store Credit Voucher</span>
-                                {appliedVoucher && (
-                                    <button
-                                        type="button"
-                                        onClick={handleClearVoucher}
-                                        className="text-[9px] text-red-500 hover:text-red-700 font-bold"
-                                    >
-                                        Remove
-                                    </button>
-                                )}
-                            </div>
-                            {appliedVoucher ? (
-                                <div className="flex items-center justify-between text-xs bg-amber-50 rounded border border-amber-200/60 p-1.5">
-                                    <div className="flex-1 min-w-0">
-                                        <span className="font-bold text-amber-800 font-mono block text-[11px]">{appliedVoucher.code}</span>
-                                        <span className="text-[9px] text-amber-600 block truncate">
-                                            {appliedVoucher.customerName ? `For: ${appliedVoucher.customerName}` : 'Available Store Credit'}
-                                        </span>
-                                    </div>
-                                    <span className="font-bold text-amber-700 font-mono text-[11px]">-₹{appliedVoucherAmount.toLocaleString()}</span>
-                                </div>
-                            ) : (
-                                <div className="flex gap-1">
-                                    <input
-                                        type="text"
-                                        placeholder="Enter voucher code (e.g. SBS-X4P9R2)"
-                                        value={voucherCodeInput}
-                                        onChange={(e) => setVoucherCodeInput(e.target.value.toUpperCase())}
-                                        className="flex-1 text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-maroon/20 uppercase font-mono h-7"
-                                        onKeyDown={(e) => e.key === 'Enter' && handleApplyVoucher()}
-                                    />
-                                    <button
-                                        type="button"
-                                        disabled={isCheckingVoucher || !voucherCodeInput.trim()}
-                                        onClick={handleApplyVoucher}
-                                        className="bg-maroon hover:bg-maroon-dark text-gold disabled:opacity-50 text-[10px] font-bold px-3 py-1 rounded transition-colors h-7"
-                                    >
-                                        {isCheckingVoucher ? '...' : 'APPLY'}
-                                    </button>
-                                </div>
-                            )}
-                        </div>
-                        <div className="flex justify-between font-bold text-maroon text-sm pt-1 border-t border-gray-100">
-                            <span>Net Payable</span>
-                            <span>₹{netPayable.toLocaleString()}</span>
-                        </div>
-                    </div>
-
-                    {/* Checkout Button */}
-                    <Button
-                        type="button"
-                        disabled={cart.length === 0 || !selectedStaffId || createSaleMutation.isPending}
-                        onClick={handleCheckoutClick}
-                        className={cn(
-                            "w-full h-10 bg-maroon hover:bg-maroon-dark text-gold font-bold text-xs uppercase tracking-wider gap-2 shadow-md rounded-xl transition-all active:scale-95 duration-100",
-                            (cart.length === 0 || !selectedStaffId || createSaleMutation.isPending) && "opacity-60"
-                        )}
-                    >
-                        {createSaleMutation.isPending ? (
-                            <>
-                                <Loader2 className="h-4 w-4 animate-spin text-gold" />
-                                Processing Transaction...
-                            </>
-                        ) : (
-                            <>
-                                <CheckCircle2 className="h-4 w-4 text-gold" />
-                                Finalize Bill & Print
-                            </>
-                        )}
-                    </Button>
                 </div>
 
                 {/* Modals & Dialog Components */}
@@ -1064,25 +1052,18 @@ export default function SalesPage() {
                                 )}
                                 <p className="text-xs font-mono text-gray-500">Ref: {currentTxnNote}</p>
                             </div>
-
-                            {/* <div className="bg-cream/10 border border-gold/15 p-2.5 rounded-lg w-full text-center space-y-1">
-                            <p className="text-xs font-bold text-maroon uppercase tracking-wider">Instructions</p>
-                            <p className="text-[11px] text-gray-500 max-w-[280px] mx-auto leading-normal">
-                                Customer can scan the QR code via Google Pay, PhonePe, Paytm, or BHIM. Cashier must confirm success on soundbox/app.
-                            </p>
-                        </div> */}
                         </div>
                         <div className="flex justify-end gap-2 pt-4 border-t border-gray-100 flex-col sm:flex-row">
                             <Button
                                 variant="ghost"
-                                className="h-9 text-xs border border-gray-250 hover:bg-gray-50"
+                                className="h-9 text-xs border border-gray-200 hover:bg-gray-50"
                                 onClick={() => setIsUPIModalOpen(false)}
                                 disabled={createSaleMutation.isPending}
                             >
                                 Cancel Payment
                             </Button>
                             <Button
-                                className="bg-maroon hover:bg-maroon-dark text-gold h-9 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5"
+                                className="bg-gradient-to-r from-maroon to-maroon-dark hover:from-maroon-dark hover:to-maroon-dark text-gold h-9 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5"
                                 onClick={async () => {
                                     await handleCreateSale();
                                     setIsUPIModalOpen(false);
@@ -1102,7 +1083,140 @@ export default function SalesPage() {
                         </div>
                     </DialogContent>
                 </Dialog>
+            </motion.div>
             </div>
+
+            {/* Floating Bottom Billing Bar — like real POS software */}
+            <motion.div
+                initial={{ opacity: 0, y: 24 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.35, ease: 'easeOut' }}
+                className="shrink-0"
+            >
+                <div className="rounded-xl border border-gold/25 bg-white shadow-[0_-6px_24px_-8px_rgba(128,0,32,0.35)] px-3 py-2 flex flex-col gap-2 lg:flex-row lg:items-center">
+                    {/* Left: Payment mode + summary */}
+                    <div className="flex flex-col md:flex-row md:items-center gap-2 flex-1 min-w-0">
+                        {/* Payment Mode */}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Pay via</span>
+                            <div className="flex gap-1">
+                                {(['cash', 'card', 'upi'] as const).map((mode) => (
+                                    <button
+                                        key={mode}
+                                        type="button"
+                                        onClick={() => setPaymentMode(mode)}
+                                        className={cn(
+                                            "flex items-center justify-center gap-1 px-2.5 py-1 rounded-lg border text-[11px] font-semibold transition-all capitalize select-none",
+                                            paymentMode === mode
+                                                ? "border-maroon bg-gradient-to-r from-maroon to-maroon-dark text-gold shadow-sm shadow-maroon/20"
+                                                : "border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100"
+                                        )}
+                                    >
+                                        {mode === 'cash' && <Coins className="h-3 w-3" />}
+                                        {mode === 'card' && <CreditCard className="h-3 w-3" />}
+                                        {mode === 'upi' && <QrCode className="h-3 w-3" />}
+                                        {mode}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Compact Summary */}
+                        <div className="flex items-center gap-x-4 gap-y-1 flex-wrap text-xs">
+                            <div className="flex items-center gap-1">
+                                <span className="text-gray-400 text-[10px] uppercase font-bold tracking-wider">Subtotal</span>
+                                <span className="font-mono font-semibold text-gray-700">₹{subtotal.toLocaleString()}</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                                <span className="text-gray-400 text-[10px] uppercase font-bold tracking-wider">GST</span>
+                                <span className="font-mono font-semibold text-gray-700">₹0</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                                <span className="inline-flex items-center gap-1 text-green-700 text-[10px] uppercase font-bold tracking-wider"><Tag className="h-3 w-3" /> Discount</span>
+                                <span className="font-mono font-semibold text-green-700">-₹{discountAmount.toLocaleString()}</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                                <span className="text-gray-500 text-[10px] uppercase font-bold tracking-wider">Net Total</span>
+                                <span className="font-mono font-bold text-gray-800">₹{cartTotal.toLocaleString()}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Middle: Voucher */}
+                    <div className="flex flex-col gap-1 md:min-w-[230px] shrink-0">
+                        {appliedVoucher ? (
+                            <div className="flex items-center justify-between gap-2 text-xs bg-gradient-to-r from-amber-50 to-yellow-50 rounded-lg border border-amber-200/70 px-2.5 py-1">
+                                <div className="flex-1 min-w-0">
+                                    <span className="inline-flex items-center gap-1.5 font-bold text-amber-800 font-mono text-[11px]">
+                                        <BadgeCheck className="h-3 w-3 shrink-0" /> {appliedVoucher.code}
+                                    </span>
+                                    <span className="text-[9px] text-amber-600 block truncate">
+                                        {appliedVoucher.customerName ? `For: ${appliedVoucher.customerName}` : 'Available Store Credit'}
+                                    </span>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                    <span className="font-bold text-amber-700 font-mono text-xs">-₹{appliedVoucherAmount.toLocaleString()}</span>
+                                    <button
+                                        type="button"
+                                        onClick={handleClearVoucher}
+                                        className="text-[9px] text-red-500 hover:text-red-700 font-bold"
+                                    >
+                                        Remove
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="flex gap-1">
+                                <input
+                                    type="text"
+                                    placeholder="Enter voucher code (e.g. SBS-X4P9R2)"
+                                    value={voucherCodeInput}
+                                    onChange={(e) => setVoucherCodeInput(e.target.value.toUpperCase())}
+                                    className="flex-1 text-xs border border-gray-200 rounded-lg px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-maroon/20 uppercase font-mono h-7 bg-white"
+                                    onKeyDown={(e) => e.key === 'Enter' && handleApplyVoucher()}
+                                />
+                                <button
+                                    type="button"
+                                    disabled={isCheckingVoucher || !voucherCodeInput.trim()}
+                                    onClick={handleApplyVoucher}
+                                    className="bg-maroon hover:bg-maroon-dark text-gold disabled:opacity-50 text-[10px] font-bold px-3 py-1 rounded-lg transition-colors h-7"
+                                >
+                                    {isCheckingVoucher ? '...' : 'APPLY'}
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Right: Net Payable + Finalize */}
+                    <div className="flex items-center justify-between lg:justify-end gap-3 shrink-0">
+                        <div className="text-right">
+                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Net Payable</span>
+                            <span className="font-mono font-black text-lg text-maroon leading-tight block">₹{netPayable.toLocaleString()}</span>
+                        </div>
+                        <Button
+                            type="button"
+                            disabled={cart.length === 0 || !selectedStaffId || createSaleMutation.isPending}
+                            onClick={handleCheckoutClick}
+                            className={cn(
+                                "h-9 min-w-[170px] bg-gradient-to-r from-maroon to-maroon-dark hover:from-maroon-dark hover:to-maroon-dark text-gold font-bold text-xs uppercase tracking-wider gap-2 shadow-lg shadow-maroon/25 rounded-xl transition-all active:scale-[0.98] duration-100",
+                                (cart.length === 0 || !selectedStaffId || createSaleMutation.isPending) && "opacity-60 shadow-none"
+                            )}
+                        >
+                            {createSaleMutation.isPending ? (
+                                <>
+                                    <Loader2 className="h-4 w-4 animate-spin text-gold" />
+                                    Processing Transaction...
+                                </>
+                            ) : (
+                                <>
+                                    <CheckCircle2 className="h-4 w-4 text-gold" />
+                                    Finalize Bill & Print
+                                </>
+                            )}
+                        </Button>
+                    </div>
+                </div>
+            </motion.div>
         </div>
     );
 }

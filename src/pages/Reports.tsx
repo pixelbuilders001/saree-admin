@@ -4,26 +4,24 @@ import { salesService, type SaleReportItem } from '@/services/salesService';
 import {
     Download,
     FileText,
-    ArrowUpDown,
     ShoppingCart,
-    Calendar,
     TrendingUp,
     IndianRupee,
     Filter,
     ChevronLeft,
     ChevronRight,
     Loader2,
-    Users,
     Search,
     Award,
     RefreshCw,
     Activity,
-    Copy
+    Copy,
+    Wallet
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
     Table,
     TableBody,
@@ -223,145 +221,148 @@ export default function ReportsPage() {
 
     return (
         <motion.div 
-            className="space-y-4 max-w-7xl mx-auto px-4 py-2"
+            className="space-y-5 max-w-7xl mx-auto px-2 pb-10"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
         >
             {/* Header Section */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-gold/15 pb-3 gap-2">
-                <div className="flex items-center gap-2">
-                    <div className="p-1 bg-maroon/5 rounded-md border border-gold/20">
-                        <FileText className="h-4 w-4 text-maroon" />
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div className="flex items-center gap-3">
+                    <div className="p-2.5 bg-gradient-to-br from-maroon to-maroon-dark text-gold rounded-xl shadow-md shadow-maroon/20">
+                        <FileText className="h-6 w-6" />
                     </div>
                     <div>
-                        <h1 className="text-lg font-black font-serif text-maroon tracking-wider uppercase">Business Reports & Audits</h1>
-                        <p className="text-[10px] text-gray-500 font-sans mt-0.5">Commercial ledger statements, commission payable audits, and product velocity charts</p>
+                        <h1 className="text-xl md:text-2xl font-bold font-serif text-maroon tracking-wide">Business Reports & Audits</h1>
+                        <p className="text-xs text-gray-500 font-sans">Ledger statements, commission payable audits & product velocity charts</p>
                     </div>
                 </div>
-                <div className="flex items-center gap-1.5 self-end sm:self-auto">
+                <div className="flex items-center gap-2 flex-wrap">
                     <Button
                         variant="outline"
-                        className="h-7.5 text-[9px] border-gold/30 text-maroon hover:bg-gold/5 font-bold uppercase tracking-wider px-3 cursor-pointer"
+                        className="h-9 text-xs border-gold/30 text-maroon hover:bg-gold/5 font-bold uppercase tracking-wider px-3 gap-1.5 cursor-pointer"
                         onClick={() => {
                             refetch();
                             toast.success('Sales ledger synchronizing with cloud...');
                         }}
                     >
-                        <RefreshCw className="h-3 w-3 mr-1" />
+                        <RefreshCw className="h-3.5 w-3.5" />
                         Sync Data
                     </Button>
                     <Button
-                        className="bg-maroon hover:bg-maroon-dark text-gold font-bold h-7.5 text-[9px] gap-1 px-3 uppercase tracking-wider cursor-pointer"
+                        className="bg-gradient-to-r from-maroon to-maroon-dark hover:from-maroon-dark hover:to-maroon-dark text-gold font-bold h-9 text-xs gap-1.5 px-3 uppercase tracking-wider shadow-md shadow-maroon/20 cursor-pointer"
                         onClick={exportToCSV}
                     >
-                        <Download className="h-3 w-3" />
+                        <Download className="h-3.5 w-3.5" />
                         Export Ledger
                     </Button>
                 </div>
             </div>
 
-            {/* Range Presets and Inputs (Horizontal Row) */}
-            <Card className="border-gold/15 shadow-sm bg-white p-2.5">
-                <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="text-[9px] font-bold text-maroon uppercase mr-1 flex items-center gap-1">
-                            <Filter className="h-3 w-3" />
-                            Date Presets:
-                        </span>
-                        {(['today', 'week', 'month', '30days', 'year'] as const).map(preset => (
-                            <Button
-                                key={preset}
-                                variant="ghost"
-                                className="h-6.5 text-[9px] uppercase px-2 hover:bg-cream/10 hover:text-maroon font-bold text-gray-500 cursor-pointer"
-                                onClick={() => setPreset(preset)}
-                            >
-                                {preset === '30days' ? '30 Days' : preset}
-                            </Button>
-                        ))}
-                    </div>
+            {/* Range Presets and Inputs */}
+            <Card className="border-gold/20 shadow-sm bg-white">
+                <CardContent className="p-3.5">
+                    <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-[10px] font-bold text-maroon uppercase mr-1 flex items-center gap-1">
+                                <Filter className="h-3.5 w-3.5" />
+                                Date Presets:
+                            </span>
+                            {(['today', 'week', 'month', '30days', 'year'] as const).map(preset => (
+                                <Button
+                                    key={preset}
+                                    variant="ghost"
+                                    className="h-8 text-[10px] uppercase px-2.5 hover:bg-cream/10 hover:text-maroon font-bold text-gray-500 cursor-pointer"
+                                    onClick={() => setPreset(preset)}
+                                >
+                                    {preset === '30days' ? '30 Days' : preset}
+                                </Button>
+                            ))}
+                        </div>
 
-                    <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-[9px] font-bold text-gray-400 uppercase font-mono">Date Range:</span>
-                        <Input
-                            type="date"
-                            value={startDate}
-                            onChange={(e) => setStartDate(e.target.value)}
-                            className="h-7 text-[10px] w-[120px] border-gold/20 font-mono py-0.5 focus-visible:ring-maroon bg-white"
-                        />
-                        <span className="text-[10px] text-gray-400 font-mono">to</span>
-                        <Input
-                            type="date"
-                            value={endDate}
-                            onChange={(e) => setEndDate(e.target.value)}
-                            className="h-7 text-[10px] w-[120px] border-gold/20 font-mono py-0.5 focus-visible:ring-maroon bg-white"
-                        />
+                        <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-[10px] font-bold text-gray-400 uppercase font-mono">Date Range:</span>
+                            <Input
+                                type="date"
+                                value={startDate}
+                                onChange={(e) => setStartDate(e.target.value)}
+                                className="h-8 text-xs w-[130px] border-gold/25 font-mono focus-visible:ring-maroon bg-white"
+                            />
+                            <span className="text-xs text-gray-400 font-mono">to</span>
+                            <Input
+                                type="date"
+                                value={endDate}
+                                onChange={(e) => setEndDate(e.target.value)}
+                                className="h-8 text-xs w-[130px] border-gold/25 font-mono focus-visible:ring-maroon bg-white"
+                            />
+                        </div>
                     </div>
-                </div>
+                </CardContent>
             </Card>
 
-            {/* Dense 4-Metric Grid (62px height cards) */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <Card className="border-gold/15 shadow-sm bg-cream/5 overflow-hidden h-[62px] flex flex-col justify-center p-3">
-                    <div className="text-[8px] uppercase font-bold text-gray-500 tracking-wider">Gross Billing</div>
-                    <div className="text-sm font-black font-mono text-maroon mt-0.5 leading-none">
-                        {formatCurrency(stats.revenue)}
-                    </div>
-                    <div className="text-[7px] text-gray-400 mt-1 uppercase font-semibold">Total Revenue</div>
-                </Card>
-
-                <Card className="border-gold/15 shadow-sm bg-cream/5 overflow-hidden h-[62px] flex flex-col justify-center p-3">
-                    <div className="text-[8px] uppercase font-bold text-gray-500 tracking-wider font-sans">Net Profits</div>
-                    <div className="text-sm font-black font-mono text-emerald-700 mt-0.5 leading-none">
-                        {formatCurrency(stats.profit)}
-                    </div>
-                    <div className="text-[7px] text-gray-400 mt-1 uppercase font-semibold">Margin Realized</div>
-                </Card>
-
-                <Card className="border-gold/15 shadow-sm bg-cream/5 overflow-hidden h-[62px] flex flex-col justify-center p-3">
-                    <div className="text-[8px] uppercase font-bold text-gray-500 tracking-wider">Quantity Sold</div>
-                    <div className="text-sm font-black font-mono text-maroon mt-0.5 leading-none">
-                        {stats.count} units
-                    </div>
-                    <div className="text-[7px] text-gray-400 mt-1 uppercase font-semibold">Volume Count</div>
-                </Card>
-
-                <Card className="border-gold/15 shadow-sm bg-cream/5 overflow-hidden h-[62px] flex flex-col justify-center p-3">
-                    <div className="text-[8px] uppercase font-bold text-gray-500 tracking-wider">Avg Order Value</div>
-                    <div className="text-sm font-black font-mono text-maroon mt-0.5 leading-none">
-                        {formatCurrency(stats.aov)}
-                    </div>
-                    <div className="text-[7px] text-gray-400 mt-1 uppercase font-semibold">Dynamic AOV</div>
-                </Card>
+            {/* 4-Metric Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {[
+                    { label: 'Gross Billing', value: formatCurrency(stats.revenue), sub: 'Total Revenue', icon: Wallet, from: 'from-maroon', to: 'to-maroon-dark', text: 'text-maroon' },
+                    { label: 'Net Profits', value: formatCurrency(stats.profit), sub: 'Margin Realized', icon: TrendingUp, from: 'from-emerald-500', to: 'to-emerald-700', text: 'text-emerald-700' },
+                    { label: 'Quantity Sold', value: `${stats.count} units`, sub: 'Volume Count', icon: ShoppingCart, from: 'from-slate-600', to: 'to-slate-800', text: 'text-gray-800' },
+                    { label: 'Avg Order Value', value: formatCurrency(stats.aov), sub: 'Dynamic AOV', icon: IndianRupee, from: 'from-amber-400', to: 'to-amber-600', text: 'text-gray-800' },
+                ].map((s, i) => (
+                    <motion.div key={s.label}
+                        initial={{ opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.3, delay: i * 0.05 }}>
+                        <Card className="border-gold/20 shadow-sm hover:shadow-md transition-shadow bg-white">
+                            <CardContent className="p-4 flex items-center justify-between">
+                                <div className="space-y-1">
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">{s.label}</span>
+                                    <span className={cn("text-xl font-bold font-mono block", s.text)}>{s.value}</span>
+                                    <span className="text-[10px] text-gray-400 block">{s.sub}</span>
+                                </div>
+                                <div className={cn("p-2.5 bg-gradient-to-br text-white rounded-xl shadow", s.from, s.to)}>
+                                    <s.icon className="h-5 w-5" />
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </motion.div>
+                ))}
             </div>
 
             {/* Tabbed Report Workspace */}
-            <Card className="border-gold/15 shadow-sm overflow-hidden bg-white">
-                <CardContent className="p-3">
+            <Card className="border-gold/20 shadow-md overflow-hidden bg-white">
+                <CardHeader className="bg-gradient-to-r from-cream/40 to-transparent border-b border-gold/10 px-4 py-3">
+                    <CardTitle className="text-sm font-bold text-maroon uppercase tracking-wider flex items-center justify-between">
+                        <span className="flex items-center gap-2">
+                            <Activity className="h-4 w-4 text-maroon/70" />
+                            Report Workspace
+                        </span>
+                        <span className="text-[10px] text-gray-500 normal-case font-normal hidden md:inline">
+                            Period Total: {searchedSales.length} items logged
+                        </span>
+                    </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4">
                     <Tabs defaultValue="transactions" className="w-full">
-                        <div className="border-b border-gold/10 pb-2 mb-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                            <TabsList className="bg-cream/15 border border-gold/25 h-7 p-0.5">
-                                <TabsTrigger value="transactions" className="text-[10px] h-6 px-2.5 data-[state=active]:bg-maroon data-[state=active]:text-gold font-bold cursor-pointer">
+                        <div className="border-b border-gold/10 pb-2.5 mb-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <TabsList className="bg-white border border-gold/25 p-1 rounded-lg h-9">
+                                <TabsTrigger value="transactions" className="text-[10px] h-7 px-3 data-[state=active]:bg-gradient-to-r data-[state=active]:from-maroon data-[state=active]:to-maroon-dark data-[state=active]:text-gold font-bold cursor-pointer rounded-md">
                                     Sales Audit Log
                                 </TabsTrigger>
-                                <TabsTrigger value="agents" className="text-[10px] h-6 px-2.5 data-[state=active]:bg-maroon data-[state=active]:text-gold font-bold cursor-pointer">
+                                <TabsTrigger value="agents" className="text-[10px] h-7 px-3 data-[state=active]:bg-gradient-to-r data-[state=active]:from-maroon data-[state=active]:to-maroon-dark data-[state=active]:text-gold font-bold cursor-pointer rounded-md">
                                     Agent Commissions
                                 </TabsTrigger>
-                                <TabsTrigger value="leaderboard" className="text-[10px] h-6 px-2.5 data-[state=active]:bg-maroon data-[state=active]:text-gold font-bold cursor-pointer">
+                                <TabsTrigger value="leaderboard" className="text-[10px] h-7 px-3 data-[state=active]:bg-gradient-to-r data-[state=active]:from-maroon data-[state=active]:to-maroon-dark data-[state=active]:text-gold font-bold cursor-pointer rounded-md">
                                     Sales Leaderboard
                                 </TabsTrigger>
                             </TabsList>
-                            <span className="text-[9px] font-bold text-gray-450 font-mono uppercase">
-                                Period Total: {searchedSales.length} items logged
-                            </span>
                         </div>
 
                         {/* TAB 1: DETAILED SALES AUDIT LOG */}
                         <TabsContent value="transactions" className="m-0 space-y-3">
                             <div className="relative max-w-sm">
-                                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-450" />
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                                 <Input
                                     placeholder="Search by ID, product, cashier, or client..."
-                                    className="pl-8 h-8 text-[11px] border-gold/20 focus-visible:ring-maroon bg-white/70"
+                                    className="pl-9 h-9 text-xs border-gold/25 focus-visible:ring-maroon bg-white"
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                 />
@@ -370,16 +371,16 @@ export default function ReportsPage() {
                             <div className="overflow-x-auto">
                                 <Table>
                                     <TableHeader className="bg-cream/10">
-                                        <TableRow className="border-b border-gold/15 hover:bg-transparent">
-                                            <TableHead className="h-7 text-[9px] font-bold text-maroon py-0.5">Date</TableHead>
-                                            <TableHead className="h-7 text-[9px] font-bold text-maroon py-0.5">Sale ID</TableHead>
-                                            <TableHead className="h-7 text-[9px] font-bold text-maroon py-0.5">Invoice #</TableHead>
-                                            <TableHead className="h-7 text-[9px] font-bold text-maroon py-0.5">Saree Description</TableHead>
-                                            <TableHead className="h-7 text-[9px] font-bold text-maroon text-right py-0.5">Qty</TableHead>
-                                            <TableHead className="h-7 text-[9px] font-bold text-maroon text-right py-0.5">Billing (₹)</TableHead>
-                                            <TableHead className="h-7 text-[9px] font-bold text-maroon text-right py-0.5">Margin (₹)</TableHead>
-                                            <TableHead className="h-7 text-[9px] font-bold text-maroon py-0.5">Cashier</TableHead>
-                                            <TableHead className="h-7 text-[9px] font-bold text-maroon py-0.5">Customer / Agent</TableHead>
+                                        <TableRow className="border-b border-gold/10 hover:bg-transparent">
+                                            <TableHead className="h-9 text-[10px] font-bold text-maroon py-1 px-3">Date</TableHead>
+                                            <TableHead className="h-9 text-[10px] font-bold text-maroon py-1">Sale ID</TableHead>
+                                            <TableHead className="h-9 text-[10px] font-bold text-maroon py-1">Invoice #</TableHead>
+                                            <TableHead className="h-9 text-[10px] font-bold text-maroon py-1">Saree Description</TableHead>
+                                            <TableHead className="h-9 text-[10px] font-bold text-maroon text-right py-1">Qty</TableHead>
+                                            <TableHead className="h-9 text-[10px] font-bold text-maroon text-right py-1">Billing (₹)</TableHead>
+                                            <TableHead className="h-9 text-[10px] font-bold text-maroon text-right py-1">Margin (₹)</TableHead>
+                                            <TableHead className="h-9 text-[10px] font-bold text-maroon py-1">Cashier</TableHead>
+                                            <TableHead className="h-9 text-[10px] font-bold text-maroon py-1 px-3">Customer / Agent</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -395,14 +396,14 @@ export default function ReportsPage() {
                                             </TableRow>
                                         ) : (
                                             paginatedSales.map((sale) => (
-                                                <TableRow key={`${sale.saleId}-${sale.sareeId}`} className="hover:bg-cream/5 border-b border-gold/5 h-8">
-                                                    <TableCell className="py-1 text-[9px] font-mono text-gray-500">
+                                                <TableRow key={`${sale.saleId}-${sale.sareeId}`} className="hover:bg-cream/10 border-b border-gold/5 transition-colors">
+                                                    <TableCell className="py-2 text-[11px] font-mono text-gray-500 px-3">
                                                         {new Date(sale.date).toLocaleDateString()}
                                                     </TableCell>
-                                                    <TableCell className="py-1 text-[9px] font-mono text-gray-500 truncate max-w-[80px]" title={sale.saleId}>
+                                                    <TableCell className="py-2 text-[11px] font-mono text-gray-500 truncate max-w-[90px]" title={sale.saleId}>
                                                         {sale.saleId}
                                                     </TableCell>
-                                                    <TableCell className="py-1 text-[9px] font-mono text-gray-500">
+                                                    <TableCell className="py-2 text-[11px] font-mono text-gray-500">
                                                         <div className="flex items-center gap-1">
                                                             <span className="truncate max-w-[110px]" title={sale.invoiceNumber || 'N/A'}>
                                                                 {sale.invoiceNumber || 'N/A'}
@@ -413,32 +414,36 @@ export default function ReportsPage() {
                                                                         navigator.clipboard.writeText(sale.invoiceNumber || '');
                                                                         toast.success('Invoice # copied!');
                                                                     }}
-                                                                    className="text-gray-400 hover:text-maroon p-0.5 rounded hover:bg-gray-150 transition-all cursor-pointer flex-shrink-0"
+                                                                    className="text-gray-400 hover:text-maroon p-0.5 rounded hover:bg-gray-100 transition-all cursor-pointer flex-shrink-0"
                                                                     title="Copy Invoice Number"
                                                                 >
-                                                                    <Copy className="h-2.5 w-2.5" />
+                                                                    <Copy className="h-3 w-3" />
                                                                 </button>
                                                             )}
                                                         </div>
                                                     </TableCell>
-                                                    <TableCell className="py-1 text-xs font-semibold text-gray-800 truncate max-w-[150px]" title={sale.sareeName}>
+                                                    <TableCell className="py-2 text-xs font-semibold text-gray-800 truncate max-w-[160px]" title={sale.sareeName}>
                                                         {sale.sareeName}
                                                     </TableCell>
-                                                    <TableCell className="py-1 text-xs text-right font-mono text-gray-650">{sale.quantity}</TableCell>
-                                                    <TableCell className="py-1 text-xs text-right font-bold font-mono text-maroon">
+                                                    <TableCell className="py-2 text-xs text-right">
+                                                        <span className="inline-flex items-center justify-center h-6 min-w-6 px-1.5 rounded-md bg-gray-100 text-gray-700 text-[10px] font-bold font-mono">
+                                                            {sale.quantity}
+                                                        </span>
+                                                    </TableCell>
+                                                    <TableCell className="py-2 text-xs text-right font-bold font-mono text-maroon">
                                                         {formatCurrency(sale.totalAmount)}
                                                     </TableCell>
-                                                    <TableCell className="py-1 text-xs text-right text-emerald-700 font-bold font-mono">
+                                                    <TableCell className="py-2 text-xs text-right text-emerald-700 font-bold font-mono">
                                                         {formatCurrency(sale.profit)}
                                                     </TableCell>
-                                                    <TableCell className="py-1 text-[9px] font-mono text-gray-500 truncate max-w-[100px]" title={sale.createdBy || 'system'}>
+                                                    <TableCell className="py-2 text-[11px] font-mono text-gray-500 truncate max-w-[100px]" title={sale.createdBy || 'system'}>
                                                         {sale.createdBy || 'system'}
                                                     </TableCell>
-                                                    <TableCell className="py-1 text-[9px]">
+                                                    <TableCell className="py-2 text-[11px] px-3">
                                                         <div className="flex flex-col">
                                                             <span className="font-semibold text-gray-700">{sale.customerName || 'Walk-in'}</span>
                                                             {sale.salespersonName && (
-                                                                <span className="text-[8px] text-maroon font-bold uppercase mt-0.5">
+                                                                <span className="text-[9px] text-maroon font-bold uppercase mt-0.5">
                                                                     Agent: {sale.salespersonName}
                                                                 </span>
                                                             )}
@@ -453,25 +458,25 @@ export default function ReportsPage() {
 
                             {/* Pagination */}
                             {totalPages > 1 && (
-                                <div className="flex items-center justify-between px-2 py-1.5 border-t border-gold/10 bg-cream/5 mt-2 rounded">
-                                    <p className="text-[9px] text-gray-500">
+                                <div className="flex items-center justify-between px-2 py-2 border-t border-gold/10 bg-cream/5 mt-2 rounded-lg">
+                                    <p className="text-[10px] text-gray-500">
                                         Showing <span className="font-bold">{(currentPage - 1) * itemsPerPage + 1}</span> - <span className="font-bold">{Math.min(currentPage * itemsPerPage, searchedSales.length)}</span> of <span className="font-bold">{searchedSales.length}</span>
                                     </p>
                                     <div className="flex items-center gap-1">
                                         <Button
                                             variant="outline"
                                             size="sm"
-                                            className="border-gold/20 text-maroon h-6 w-6 p-0 hover:bg-cream/10 cursor-pointer"
+                                            className="border-gold/20 text-maroon h-7 w-7 p-0 hover:bg-cream/10 cursor-pointer"
                                             onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                                             disabled={currentPage === 1}
                                         >
                                             <ChevronLeft className="h-3.5 w-3.5" />
                                         </Button>
-                                        <span className="text-[9px] font-mono text-gray-650 px-2">Page {currentPage} of {totalPages}</span>
+                                        <span className="text-[10px] font-mono text-gray-500 px-2">Page {currentPage} of {totalPages}</span>
                                         <Button
                                             variant="outline"
                                             size="sm"
-                                            className="border-gold/20 text-maroon h-6 w-6 p-0 hover:bg-cream/10 cursor-pointer"
+                                            className="border-gold/20 text-maroon h-7 w-7 p-0 hover:bg-cream/10 cursor-pointer"
                                             onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                                             disabled={currentPage === totalPages}
                                         >
@@ -487,14 +492,14 @@ export default function ReportsPage() {
                             <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
                                 {/* Commission Table (7 cols) */}
                                 <div className="lg:col-span-7 space-y-2">
-                                    <div className="overflow-x-auto border border-gold/10 rounded-lg bg-white">
+                                    <div className="overflow-x-auto border border-gold/15 rounded-lg bg-white shadow-sm">
                                         <Table>
                                             <TableHeader className="bg-cream/10">
-                                                <TableRow className="border-b border-gold/15 hover:bg-transparent">
-                                                    <TableHead className="h-7 text-[9px] font-bold text-maroon py-0.5">Agent Partner</TableHead>
-                                                    <TableHead className="h-7 text-[9px] font-bold text-maroon text-right py-0.5">Invoices</TableHead>
-                                                    <TableHead className="h-7 text-[9px] font-bold text-maroon text-right py-0.5">Revenue (₹)</TableHead>
-                                                    <TableHead className="h-7 text-[9px] font-bold text-maroon text-right py-0.5">Commission Payable (₹)</TableHead>
+                                                <TableRow className="border-b border-gold/10 hover:bg-transparent">
+                                                    <TableHead className="h-9 text-[10px] font-bold text-maroon py-1 px-3">Agent Partner</TableHead>
+                                                    <TableHead className="h-9 text-[10px] font-bold text-maroon text-right py-1">Invoices</TableHead>
+                                                    <TableHead className="h-9 text-[10px] font-bold text-maroon text-right py-1">Revenue (₹)</TableHead>
+                                                    <TableHead className="h-9 text-[10px] font-bold text-maroon text-right py-1 px-3">Commission Payable (₹)</TableHead>
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
@@ -504,33 +509,37 @@ export default function ReportsPage() {
                                                     </TableRow>
                                                 ) : (
                                                     commissionLedger.map((row) => (
-                                                        <TableRow key={row.name} className="hover:bg-cream/5 border-b border-gold/5 h-8">
-                                                            <TableCell className="py-1 text-xs font-semibold text-gray-800">
-                                                                <div className="flex items-center gap-2">
-                                                                    <div className="h-5.5 w-5.5 rounded-full bg-maroon/10 flex items-center justify-center text-maroon font-bold text-[9px]">
+                                                        <TableRow key={row.name} className="hover:bg-cream/10 border-b border-gold/5 transition-colors">
+                                                            <TableCell className="py-2 text-xs font-semibold text-gray-800 px-3">
+                                                                <div className="flex items-center gap-2.5">
+                                                                    <div className="h-8 w-8 rounded-full bg-gradient-to-br from-maroon to-maroon-dark text-gold flex items-center justify-center font-bold text-[10px] shadow-sm">
                                                                         {row.name.charAt(0).toUpperCase()}
                                                                     </div>
                                                                     {row.name}
                                                                 </div>
                                                             </TableCell>
-                                                            <TableCell className="py-1 text-xs text-right font-mono font-semibold text-gray-650">{row.bills}</TableCell>
-                                                            <TableCell className="py-1 text-xs text-right font-bold font-mono text-maroon">{formatCurrency(row.revenue)}</TableCell>
-                                                            <TableCell className="py-1 text-xs text-right font-black font-mono text-emerald-700">{formatCurrency(row.commission)}</TableCell>
+                                                            <TableCell className="py-2 text-xs text-right font-mono font-semibold text-gray-600">
+                                                                <span className="inline-flex items-center justify-center h-6 min-w-6 px-1.5 rounded-md bg-gray-100 text-gray-700 text-[10px] font-bold font-mono">
+                                                                    {row.bills}
+                                                                </span>
+                                                            </TableCell>
+                                                            <TableCell className="py-2 text-xs text-right font-bold font-mono text-maroon">{formatCurrency(row.revenue)}</TableCell>
+                                                            <TableCell className="py-2 text-xs text-right font-black font-mono text-emerald-700 px-3">{formatCurrency(row.commission)}</TableCell>
                                                         </TableRow>
                                                     ))
                                                 )}
                                             </TableBody>
                                             {commissionLedger.length > 0 && (
                                                 <tfoot>
-                                                    <tr className="bg-cream/10 border-t border-gold/25 font-bold">
-                                                        <td className="py-1.5 px-3 text-[9px] font-bold text-maroon uppercase">Aggregate Dues</td>
-                                                        <td className="py-1.5 px-3 text-xs text-right font-mono text-gray-800">
+                                                    <tr className="bg-cream/10 border-t border-gold/20 font-bold">
+                                                        <td className="py-2 px-3 text-[10px] font-bold text-maroon uppercase">Aggregate Dues</td>
+                                                        <td className="py-2 px-3 text-xs text-right font-mono text-gray-800">
                                                             {commissionLedger.reduce((sum, r) => sum + r.bills, 0)}
                                                         </td>
-                                                        <td className="py-1.5 px-3 text-xs text-right font-mono text-maroon">
+                                                        <td className="py-2 px-3 text-xs text-right font-mono text-maroon">
                                                             {formatCurrency(commissionLedger.reduce((sum, r) => sum + r.revenue, 0))}
                                                         </td>
-                                                        <td className="py-1.5 px-3 text-xs text-right font-mono text-emerald-700">
+                                                        <td className="py-2 px-3 text-xs text-right font-mono text-emerald-700">
                                                             {formatCurrency(commissionLedger.reduce((sum, r) => sum + r.commission, 0))}
                                                         </td>
                                                     </tr>
@@ -541,24 +550,24 @@ export default function ReportsPage() {
                                 </div>
 
                                 {/* Agent Chart (5 cols) */}
-                                <div className="lg:col-span-5 border border-gold/10 p-2.5 rounded-lg bg-cream-light/5 flex flex-col justify-between">
+                                <div className="lg:col-span-5 border border-gold/15 p-3 rounded-xl bg-cream-light/5 flex flex-col justify-between shadow-sm">
                                     <div className="mb-2">
-                                        <h4 className="text-[9px] font-bold text-maroon uppercase tracking-widest flex items-center gap-1">
-                                            <Activity className="h-3 w-3" />
+                                        <h4 className="text-[10px] font-bold text-maroon uppercase tracking-widest flex items-center gap-1.5">
+                                            <Activity className="h-3.5 w-3.5" />
                                             Revenue Contributions
                                         </h4>
-                                        <p className="text-[8px] text-gray-400">Attributed gross sales comparison by staff agent</p>
+                                        <p className="text-[9px] text-gray-400">Attributed gross sales by staff agent</p>
                                     </div>
-                                    <div className="h-[140px] w-full text-[9px]">
+                                    <div className="h-[160px] w-full">
                                         {commissionLedger.length === 0 ? (
                                             <div className="h-full flex items-center justify-center text-gray-400 italic">No chart data available</div>
                                         ) : (
                                             <ResponsiveContainer width="100%" height="100%">
-                                                <BarChart data={commissionLedger} margin={{ top: 5, right: 5, left: -25, bottom: 5 }}>
+                                                <BarChart data={commissionLedger} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
                                                     <XAxis dataKey="name" stroke="#888888" fontSize={8} tickLine={false} axisLine={false} />
                                                     <YAxis stroke="#888888" fontSize={8} tickLine={false} axisLine={false} />
                                                     <Tooltip 
-                                                        contentStyle={{ background: '#ffffff', border: '1px solid #c5a880', fontSize: '9px' }}
+                                                        contentStyle={{ background: '#ffffff', border: '1px solid #c5a880', fontSize: '10px' }}
                                                         formatter={(value: any) => [`₹${Number(value).toLocaleString()}`, 'Revenue']}
                                                     />
                                                     <Bar dataKey="revenue" fill="#800000" radius={[2, 2, 0, 0]}>
@@ -579,15 +588,15 @@ export default function ReportsPage() {
                             <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
                                 {/* Leaderboard list (7 cols) */}
                                 <div className="lg:col-span-7 space-y-2">
-                                    <div className="overflow-x-auto border border-gold/10 rounded-lg bg-white">
+                                    <div className="overflow-x-auto border border-gold/15 rounded-lg bg-white shadow-sm">
                                         <Table>
                                             <TableHeader className="bg-cream/10">
-                                                <TableRow className="border-b border-gold/15 hover:bg-transparent">
-                                                    <TableHead className="h-7 text-[9px] font-bold text-maroon py-0.5 w-[50px] text-center">Rank</TableHead>
-                                                    <TableHead className="h-7 text-[9px] font-bold text-maroon py-0.5">Saree Model</TableHead>
-                                                    <TableHead className="h-7 text-[9px] font-bold text-maroon text-center py-0.5">Qty Sold</TableHead>
-                                                    <TableHead className="h-7 text-[9px] font-bold text-maroon text-right py-0.5">Total Revenue (₹)</TableHead>
-                                                    <TableHead className="h-7 text-[9px] font-bold text-maroon text-right py-0.5">Total Margin (₹)</TableHead>
+                                                <TableRow className="border-b border-gold/10 hover:bg-transparent">
+                                                    <TableHead className="h-9 text-[10px] font-bold text-maroon py-1 w-[60px] text-center px-3">Rank</TableHead>
+                                                    <TableHead className="h-9 text-[10px] font-bold text-maroon py-1">Saree Model</TableHead>
+                                                    <TableHead className="h-9 text-[10px] font-bold text-maroon text-center py-1">Qty Sold</TableHead>
+                                                    <TableHead className="h-9 text-[10px] font-bold text-maroon text-right py-1">Total Revenue (₹)</TableHead>
+                                                    <TableHead className="h-9 text-[10px] font-bold text-maroon text-right py-1 px-3">Total Margin (₹)</TableHead>
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
@@ -597,16 +606,28 @@ export default function ReportsPage() {
                                                     </TableRow>
                                                 ) : (
                                                     productLeaderboard.map((item, index) => (
-                                                        <TableRow key={item.name} className="hover:bg-cream/5 border-b border-gold/5 h-8">
-                                                            <TableCell className="py-1 text-xs text-center font-bold text-gray-500 font-mono">
-                                                                #{index + 1}
+                                                        <TableRow key={item.name} className="hover:bg-cream/10 border-b border-gold/5 transition-colors">
+                                                            <TableCell className="py-2 text-xs text-center font-bold text-gray-500 font-mono px-3">
+                                                                <span className={cn(
+                                                                    "inline-flex items-center justify-center h-6 w-6 rounded-full text-[10px] font-bold",
+                                                                    index === 0 ? "bg-amber-100 text-amber-700 border border-amber-300" :
+                                                                    index === 1 ? "bg-gray-100 text-gray-600 border border-gray-300" :
+                                                                    index === 2 ? "bg-orange-100 text-orange-700 border border-orange-300" :
+                                                                    "bg-gray-50 text-gray-400 border border-gray-200"
+                                                                )}>
+                                                                    {index + 1}
+                                                                </span>
                                                             </TableCell>
-                                                            <TableCell className="py-1 text-xs font-bold text-gray-800 truncate max-w-[180px]">
+                                                            <TableCell className="py-2 text-xs font-bold text-gray-800 truncate max-w-[180px]">
                                                                 {item.name}
                                                             </TableCell>
-                                                            <TableCell className="py-1 text-xs text-center font-mono font-semibold text-gray-650">{item.qty}</TableCell>
-                                                            <TableCell className="py-1 text-xs text-right font-mono font-semibold text-maroon">{formatCurrency(item.revenue)}</TableCell>
-                                                            <TableCell className="py-1 text-xs text-right font-bold font-mono text-emerald-700">{formatCurrency(item.profit)}</TableCell>
+                                                            <TableCell className="py-2 text-xs text-center">
+                                                                <span className="inline-flex items-center justify-center h-6 min-w-6 px-1.5 rounded-md bg-gray-100 text-gray-700 text-[10px] font-bold font-mono">
+                                                                    {item.qty}
+                                                                </span>
+                                                            </TableCell>
+                                                            <TableCell className="py-2 text-xs text-right font-mono font-semibold text-maroon">{formatCurrency(item.revenue)}</TableCell>
+                                                            <TableCell className="py-2 text-xs text-right font-bold font-mono text-emerald-700 px-3">{formatCurrency(item.profit)}</TableCell>
                                                         </TableRow>
                                                     ))
                                                 )}
@@ -616,15 +637,15 @@ export default function ReportsPage() {
                                 </div>
 
                                 {/* Leaderboard Chart visualization (5 cols) */}
-                                <div className="lg:col-span-5 border border-gold/10 p-2.5 rounded-lg bg-cream-light/5 flex flex-col justify-between">
+                                <div className="lg:col-span-5 border border-gold/15 p-3 rounded-xl bg-cream-light/5 flex flex-col justify-between shadow-sm">
                                     <div className="mb-2">
-                                        <h4 className="text-[9px] font-bold text-maroon uppercase tracking-widest flex items-center gap-1">
+                                        <h4 className="text-[10px] font-bold text-maroon uppercase tracking-widest flex items-center gap-1.5">
                                             <Award className="h-3.5 w-3.5 text-gold" />
                                             Product Volume Leaderboard
                                         </h4>
-                                        <p className="text-[8px] text-gray-400">Top selling design models by unit quantity</p>
+                                        <p className="text-[9px] text-gray-400">Top selling design models by unit quantity</p>
                                     </div>
-                                    <div className="h-[140px] w-full text-[9px]">
+                                    <div className="h-[160px] w-full">
                                         {productLeaderboard.length === 0 ? (
                                             <div className="h-full flex items-center justify-center text-gray-400 italic">No chart data available</div>
                                         ) : (
@@ -633,7 +654,7 @@ export default function ReportsPage() {
                                                     <XAxis type="number" stroke="#888888" fontSize={8} tickLine={false} axisLine={false} />
                                                     <YAxis dataKey="name" type="category" stroke="#888888" fontSize={7} tickLine={false} axisLine={false} width={70} />
                                                     <Tooltip
-                                                        contentStyle={{ background: '#ffffff', border: '1px solid #c5a880', fontSize: '9px' }}
+                                                        contentStyle={{ background: '#ffffff', border: '1px solid #c5a880', fontSize: '10px' }}
                                                         formatter={(value: any) => [`${value} units`, 'Quantity']}
                                                     />
                                                     <Bar dataKey="qty" fill="#b28d46" radius={[0, 2, 2, 0]}>

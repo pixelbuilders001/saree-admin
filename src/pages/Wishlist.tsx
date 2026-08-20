@@ -14,11 +14,11 @@ import {
     User,
     Sparkles,
     ShoppingCart,
-    BarChart3,
-    ArrowRight
+    IndianRupee
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import {
     Table,
@@ -29,6 +29,7 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 
 const WhatsAppIcon = (props: React.SVGProps<SVGSVGElement>) => (
@@ -332,36 +333,32 @@ Shree Banarasi Sarees Team`;
         });
     }, [wishlistItems, searchQuery]);
 
-
-
     return (
-        <div className="space-y-4 max-w-7xl mx-auto px-2">
+        <div className="space-y-5 max-w-7xl mx-auto px-2 pb-10">
             {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-gold/10 pb-3 gap-2">
-                <div className="flex items-center gap-2">
-                    <div className="p-1.5 bg-maroon/10 text-maroon rounded">
-                        <Heart className="h-5 w-5 text-maroon fill-maroon" />
-                    </div>
-                    <div>
-                        <h1 className="text-xl font-bold font-serif text-maroon tracking-wider">STOREFRONT & ENGAGEMENT</h1>
-                        <p className="text-xs text-gray-500 font-sans">Monitor products customer are wishlisting, check active shopping carts, and drive conversions</p>
-                    </div>
+            <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-gradient-to-br from-maroon to-maroon-dark text-gold rounded-xl shadow-md shadow-maroon/20">
+                    <Heart className="h-6 w-6 fill-gold/20" />
+                </div>
+                <div>
+                    <h1 className="text-xl md:text-2xl font-bold font-serif text-maroon tracking-wide">Storefront & Engagement</h1>
+                    <p className="text-xs text-gray-500 font-sans">Monitor wishlisted products, track active carts & drive conversions</p>
                 </div>
             </div>
 
             {/* Tabs Navigation */}
             <Tabs defaultValue="wishlist" className="w-full space-y-4">
-                <TabsList className="bg-slate-100 border border-gold/10 p-1 rounded-lg w-fit flex">
+                <TabsList className="bg-white border border-gold/25 p-1 rounded-lg w-fit flex shadow-sm">
                     <TabsTrigger 
                         value="wishlist"
-                        className="data-[state=active]:bg-white data-[state=active]:text-maroon data-[state=active]:shadow font-bold text-xs py-1.5 px-4 rounded-md text-gray-500 uppercase tracking-wider flex items-center gap-1.5"
+                        className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-maroon data-[state=active]:to-maroon-dark data-[state=active]:text-gold data-[state=active]:shadow-sm data-[state=active]:shadow-maroon/20 font-bold text-xs py-1.5 px-4 rounded-md text-gray-500 uppercase tracking-wider flex items-center gap-1.5"
                     >
                         <Heart className="h-3.5 w-3.5" />
                         Wishlists
                     </TabsTrigger>
                     <TabsTrigger 
                         value="carts"
-                        className="data-[state=active]:bg-white data-[state=active]:text-maroon data-[state=active]:shadow font-bold text-xs py-1.5 px-4 rounded-md text-gray-500 uppercase tracking-wider flex items-center gap-1.5"
+                        className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-maroon data-[state=active]:to-maroon-dark data-[state=active]:text-gold data-[state=active]:shadow-sm data-[state=active]:shadow-maroon/20 font-bold text-xs py-1.5 px-4 rounded-md text-gray-500 uppercase tracking-wider flex items-center gap-1.5"
                     >
                         <ShoppingCart className="h-3.5 w-3.5" />
                         Active Carts
@@ -371,52 +368,40 @@ Shree Banarasi Sarees Team`;
                 {/* WISHLISTS TAB */}
                 <TabsContent value="wishlist" className="space-y-4 outline-none">
                     {/* Stats Summary */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <Card className="border-gold/10 shadow-sm bg-white">
-                            <CardContent className="p-3 flex items-center justify-between">
-                                <div className="space-y-0.5">
-                                    <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Total Wishlist Items</span>
-                                    <h2 className="text-lg font-bold text-gray-900 font-mono">{wishlistStats.totalItems}</h2>
-                                </div>
-                                <div className="p-2 bg-slate-50 rounded-full">
-                                    <Heart className="h-4 w-4 text-maroon fill-maroon" />
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        <Card className="border-gold/10 shadow-sm bg-white">
-                            <CardContent className="p-3 flex items-center justify-between">
-                                <div className="space-y-0.5">
-                                    <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Unique Products Interest</span>
-                                    <h2 className="text-lg font-bold text-gray-900 font-mono">{wishlistStats.uniqueProducts}</h2>
-                                </div>
-                                <div className="p-2 bg-slate-50 rounded-full">
-                                    <ShoppingBag className="h-4 w-4 text-gray-400" />
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        <Card className="border-gold/10 shadow-sm bg-white">
-                            <CardContent className="p-3 flex items-center justify-between">
-                                <div className="space-y-0.5">
-                                    <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Active Customers Wishing</span>
-                                    <h2 className="text-lg font-bold text-gray-900 font-mono">{wishlistStats.uniqueCustomers}</h2>
-                                </div>
-                                <div className="p-2 bg-slate-50 rounded-full">
-                                    <User className="h-4 w-4 text-gray-400" />
-                                </div>
-                            </CardContent>
-                        </Card>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        {[
+                            { label: 'Wishlist Items', value: wishlistStats.totalItems, icon: Heart, from: 'from-rose-400', to: 'to-rose-600', text: 'text-gray-800', sub: 'Total saved products' },
+                            { label: 'Unique Products', value: wishlistStats.uniqueProducts, icon: ShoppingBag, from: 'from-slate-600', to: 'to-slate-800', text: 'text-gray-800', sub: 'Distinct sarees' },
+                            { label: 'Active Customers', value: wishlistStats.uniqueCustomers, icon: User, from: 'from-amber-400', to: 'to-amber-600', text: 'text-gray-800', sub: 'Customers wishing' },
+                        ].map((s, i) => (
+                            <motion.div key={s.label}
+                                initial={{ opacity: 0, y: 12 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.3, delay: i * 0.05 }}>
+                                <Card className="border-gold/20 shadow-sm hover:shadow-md transition-shadow bg-white">
+                                    <CardContent className="p-4 flex items-center justify-between">
+                                        <div className="space-y-1">
+                                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">{s.label}</span>
+                                            <span className={cn("text-2xl font-bold font-mono", s.text)}>{s.value}</span>
+                                            <span className="text-[10px] text-gray-400 block">{s.sub}</span>
+                                        </div>
+                                        <div className={cn("p-2.5 bg-gradient-to-br text-white rounded-xl shadow", s.from, s.to)}>
+                                            <s.icon className="h-5 w-5" />
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            </motion.div>
+                        ))}
                     </div>
 
                     {/* Search Bar */}
-                    <Card className="border-gold/10 shadow-sm bg-slate-50/50">
-                        <CardContent className="p-3">
+                    <Card className="border-gold/20 shadow-sm bg-white">
+                        <CardContent className="p-3.5">
                             <div className="relative max-w-md">
-                                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                                 <Input
                                     placeholder="Search wishlists by name, phone or SKU..."
-                                    className="pl-9 h-9 text-xs border-gold/30 bg-white"
+                                    className="pl-9 h-10 text-sm border-gold/30 bg-white"
                                     value={searchQuery}
                                     onChange={e => setSearchQuery(e.target.value)}
                                 />
@@ -425,7 +410,19 @@ Shree Banarasi Sarees Team`;
                     </Card>
 
                     {/* Wishlist Table */}
-                    <Card className="border-gold/10 shadow-sm bg-white overflow-hidden">
+                    <Card className="border-gold/20 shadow-md bg-white overflow-hidden">
+                        <CardHeader className="bg-gradient-to-r from-cream/40 to-transparent border-b border-gold/10 px-4 py-3">
+                            <CardTitle className="text-sm font-bold text-maroon uppercase tracking-wider flex items-center justify-between">
+                                <span className="flex items-center gap-2">
+                                    <Heart className="h-4 w-4 text-maroon/70" />
+                                    Wishlist Registry
+                                    <span className="text-[10px] font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full font-mono">
+                                        {filteredWishlistItems.length}
+                                    </span>
+                                </span>
+                                <span className="text-[10px] text-gray-500 normal-case font-normal hidden md:inline">Convert favourites to orders</span>
+                            </CardTitle>
+                        </CardHeader>
                         {isWishlistLoading ? (
                             <div className="py-24 text-center text-maroon/50 text-xs italic">
                                 <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2 text-maroon" />
@@ -433,83 +430,77 @@ Shree Banarasi Sarees Team`;
                             </div>
                         ) : filteredWishlistItems.length === 0 ? (
                             <div className="py-16 text-center">
-                                <ShieldAlert className="h-8 w-8 mx-auto text-gray-400 mb-2" />
-                                <p className="text-xs text-gray-500 italic">No wishlist records found matching the search</p>
+                                <div className="p-4 bg-gray-100 rounded-full inline-flex mb-3">
+                                    <ShieldAlert className="h-6 w-6 text-gray-400" />
+                                </div>
+                                <p className="text-sm text-gray-500">No wishlist records found</p>
+                                <p className="text-xs text-gray-400 mt-1">Try adjusting your search</p>
                             </div>
                         ) : (
                             <div className="overflow-x-auto">
                                 <Table>
-                                    <TableHeader className="bg-slate-50">
-                                        <TableRow className="border-b border-gold/10">
-                                            <TableHead className="text-xs font-bold text-maroon uppercase tracking-wider">Customer</TableHead>
-                                            <TableHead className="text-xs font-bold text-maroon uppercase tracking-wider">Wishlisted Saree</TableHead>
-                                            <TableHead className="text-xs font-bold text-maroon uppercase tracking-wider">Details</TableHead>
-                                            <TableHead className="text-xs font-bold text-maroon uppercase tracking-wider">Price</TableHead>
-                                            <TableHead className="text-xs font-bold text-maroon uppercase tracking-wider">Wishlist Date</TableHead>
-                                            <TableHead className="w-[180px] text-right text-xs font-bold text-maroon uppercase tracking-wider">Actions</TableHead>
+                                    <TableHeader className="bg-cream/10">
+                                        <TableRow className="border-b border-gold/10 hover:bg-transparent">
+                                            <TableHead className="h-10 text-[10px] font-bold text-maroon py-1 px-3 uppercase tracking-wider">Customer</TableHead>
+                                            <TableHead className="h-10 text-[10px] font-bold text-maroon py-1 uppercase tracking-wider">Wishlisted Saree</TableHead>
+                                            <TableHead className="h-10 text-[10px] font-bold text-maroon py-1 uppercase tracking-wider">Details</TableHead>
+                                            <TableHead className="h-10 text-[10px] font-bold text-maroon py-1 text-right uppercase tracking-wider">Price</TableHead>
+                                            <TableHead className="h-10 text-[10px] font-bold text-maroon py-1 uppercase tracking-wider">Wishlist Date</TableHead>
+                                            <TableHead className="w-[180px] text-right h-10 text-[10px] font-bold text-maroon py-1 px-3 uppercase tracking-wider">Actions</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                         {filteredWishlistItems.map((item) => (
-                                            <TableRow key={item.id} className="border-b border-gold/5 hover:bg-slate-50/50">
+                                            <TableRow key={item.id} className="border-b border-gold/5 hover:bg-cream/10 transition-colors">
                                                 {/* Customer */}
-                                                <TableCell>
-                                                    <div className="font-semibold text-xs text-gray-800">
-                                                        {item.customerName}
-                                                    </div>
-                                                    <div className="text-[10px] text-gray-500">
-                                                        {item.customerEmail}
-                                                    </div>
-                                                    {item.customerPhone && (
-                                                        <div className="text-[9px] text-gray-400 font-mono">
-                                                            {item.customerPhone}
+                                                <TableCell className="py-2 px-3">
+                                                    <div className="flex items-center gap-2.5">
+                                                        <div className="h-8 w-8 shrink-0 rounded-full bg-gradient-to-br from-maroon to-maroon-dark text-gold flex items-center justify-center text-[10px] font-bold font-sans shadow-sm">
+                                                            {item.customerName?.charAt(0).toUpperCase() || '?'}
                                                         </div>
-                                                    )}
+                                                        <div className="min-w-0">
+                                                            <div className="font-semibold text-xs text-gray-800 truncate">{item.customerName}</div>
+                                                            {item.customerEmail && <div className="text-[10px] text-gray-500 truncate">{item.customerEmail}</div>}
+                                                            {item.customerPhone && <div className="text-[9px] text-gray-400 font-mono">{item.customerPhone}</div>}
+                                                        </div>
+                                                    </div>
                                                 </TableCell>
 
                                                 {/* Product */}
-                                                <TableCell>
-                                                    <div className="font-semibold text-xs text-gray-800">
-                                                        {item.productName}
-                                                    </div>
-                                                    <div className="text-[9px] text-gray-400 font-mono uppercase">
-                                                        SKU: {item.productSku || 'N/A'}
-                                                    </div>
+                                                <TableCell className="py-2">
+                                                    <div className="font-semibold text-xs text-gray-800">{item.productName}</div>
+                                                    <div className="text-[9px] text-gray-400 font-mono uppercase">SKU: {item.productSku || 'N/A'}</div>
                                                 </TableCell>
 
                                                 {/* Details */}
-                                                <TableCell>
-                                                    <div className="flex gap-2 text-[10px] text-gray-600 font-medium">
+                                                <TableCell className="py-2">
+                                                    <div className="flex gap-1.5 flex-wrap text-[10px] text-gray-600 font-medium">
                                                         {item.productFabric && (
-                                                            <span className="bg-slate-100 px-1.5 py-0.5 rounded">
-                                                                Fabric: {item.productFabric}
-                                                            </span>
+                                                            <span className="bg-gold/10 px-1.5 py-0.5 rounded border border-gold/20">Fabric: {item.productFabric}</span>
                                                         )}
                                                         {item.productColor && (
-                                                            <span className="bg-slate-100 px-1.5 py-0.5 rounded">
-                                                                Color: {item.productColor}
-                                                            </span>
+                                                            <span className="bg-gold/10 px-1.5 py-0.5 rounded border border-gold/20">Color: {item.productColor}</span>
                                                         )}
                                                     </div>
                                                 </TableCell>
 
                                                 {/* Price */}
-                                                <TableCell className="font-mono text-xs font-bold text-maroon">
+                                                <TableCell className="py-2 font-mono text-xs font-bold text-maroon text-right">
                                                     ₹{(item.productPrice || 0).toLocaleString()}
                                                 </TableCell>
 
                                                 {/* Date */}
-                                                <TableCell className="text-xs text-gray-500 font-mono">
+                                                <TableCell className="py-2 text-[11px] text-gray-500 font-mono">
                                                     {new Date(item.createdAt).toLocaleDateString()} {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                 </TableCell>
 
-                                                                                                {/* Actions */}
-                                                <TableCell className="text-right">
+                                                {/* Actions */}
+                                                <TableCell className="py-2 text-right px-3">
                                                     <div className="flex items-center justify-end gap-1.5">
                                                         <Button
                                                             size="sm"
                                                             onClick={() => handleConvertToOrder(item)}
-                                                            className="bg-maroon hover:bg-maroon-dark text-gold h-7 text-[10px] font-bold shadow-sm uppercase tracking-wider gap-1"
+                                                            className="bg-gradient-to-r from-maroon to-maroon-dark hover:from-maroon-dark hover:to-maroon-dark text-gold h-7 text-[10px] font-bold shadow-sm uppercase tracking-wider gap-1"
                                                         >
                                                             <Sparkles className="h-3 w-3" />
                                                             Convert to Order
@@ -551,52 +542,40 @@ Shree Banarasi Sarees Team`;
                 {/* ACTIVE CARTS TAB */}
                 <TabsContent value="carts" className="space-y-4 outline-none">
                     {/* Stats Summary */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <Card className="border-gold/10 shadow-sm bg-white">
-                            <CardContent className="p-3 flex items-center justify-between">
-                                <div className="space-y-0.5">
-                                    <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Active Shopping Carts</span>
-                                    <h2 className="text-lg font-bold text-gray-900 font-mono">{cartStats.activeCarts}</h2>
-                                </div>
-                                <div className="p-2 bg-slate-50 rounded-full">
-                                    <ShoppingCart className="h-4 w-4 text-maroon" />
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        <Card className="border-gold/10 shadow-sm bg-white">
-                            <CardContent className="p-3 flex items-center justify-between">
-                                <div className="space-y-0.5">
-                                    <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Total Items in Carts</span>
-                                    <h2 className="text-lg font-bold text-gray-900 font-mono">{cartStats.totalItems}</h2>
-                                </div>
-                                <div className="p-2 bg-slate-50 rounded-full">
-                                    <ShoppingBag className="h-4 w-4 text-gray-400" />
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        <Card className="border-gold/10 shadow-sm bg-white">
-                            <CardContent className="p-3 flex items-center justify-between">
-                                <div className="space-y-0.5">
-                                    <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Est. Carts Value</span>
-                                    <h2 className="text-lg font-bold text-maroon font-mono">₹{cartStats.estValue.toLocaleString()}</h2>
-                                </div>
-                                <div className="p-2 bg-slate-50 rounded-full">
-                                    <span className="font-bold text-xs text-maroon font-serif">₹</span>
-                                </div>
-                            </CardContent>
-                        </Card>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        {[
+                            { label: 'Active Carts', value: cartStats.activeCarts, icon: ShoppingCart, from: 'from-maroon', to: 'to-maroon-dark', text: 'text-gray-800', sub: 'Open shopping carts' },
+                            { label: 'Items in Carts', value: cartStats.totalItems, icon: ShoppingBag, from: 'from-slate-600', to: 'to-slate-800', text: 'text-gray-800', sub: 'Total units held' },
+                            { label: 'Est. Cart Value', value: `₹${cartStats.estValue.toLocaleString()}`, icon: IndianRupee, from: 'from-emerald-500', to: 'to-emerald-700', text: 'text-maroon', sub: 'Projected revenue' },
+                        ].map((s, i) => (
+                            <motion.div key={s.label}
+                                initial={{ opacity: 0, y: 12 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.3, delay: i * 0.05 }}>
+                                <Card className="border-gold/20 shadow-sm hover:shadow-md transition-shadow bg-white">
+                                    <CardContent className="p-4 flex items-center justify-between">
+                                        <div className="space-y-1">
+                                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">{s.label}</span>
+                                            <span className={cn("text-2xl font-bold font-mono", s.text)}>{s.value}</span>
+                                            <span className="text-[10px] text-gray-400 block">{s.sub}</span>
+                                        </div>
+                                        <div className={cn("p-2.5 bg-gradient-to-br text-white rounded-xl shadow", s.from, s.to)}>
+                                            <s.icon className="h-5 w-5" />
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            </motion.div>
+                        ))}
                     </div>
 
                     {/* Search Bar */}
-                    <Card className="border-gold/10 shadow-sm bg-slate-50/50">
-                        <CardContent className="p-3">
+                    <Card className="border-gold/20 shadow-sm bg-white">
+                        <CardContent className="p-3.5">
                             <div className="relative max-w-md">
-                                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                                 <Input
                                     placeholder="Search carts by customer name or phone..."
-                                    className="pl-9 h-9 text-xs border-gold/30 bg-white"
+                                    className="pl-9 h-10 text-sm border-gold/30 bg-white"
                                     value={cartSearchQuery}
                                     onChange={e => setCartSearchQuery(e.target.value)}
                                 />
@@ -611,34 +590,40 @@ Shree Banarasi Sarees Team`;
                             Loading active shopper carts...
                         </div>
                     ) : cartGroups.length === 0 ? (
-                        <Card className="border-gold/10 shadow-sm bg-white">
-                            <div className="py-16 text-center">
-                                <ShieldAlert className="h-8 w-8 mx-auto text-gray-400 mb-2" />
-                                <p className="text-xs text-gray-500 italic">No active customer carts found matching the search</p>
-                            </div>
+                        <Card className="border-gold/20 shadow-sm bg-white">
+                            <CardContent className="py-16 text-center">
+                                <div className="p-4 bg-gray-100 rounded-full inline-flex mb-3">
+                                    <ShieldAlert className="h-6 w-6 text-gray-400" />
+                                </div>
+                                <p className="text-sm text-gray-500">No active carts found</p>
+                                <p className="text-xs text-gray-400 mt-1">Try adjusting your search</p>
+                            </CardContent>
                         </Card>
                     ) : (
                         <div className="space-y-3">
                             {cartGroups.map((group) => (
-                                <div 
-                                    key={group.phone} 
-                                    className="border border-gold/15 rounded-md overflow-hidden bg-white shadow-sm hover:shadow transition-shadow"
+                                <motion.div
+                                    key={group.phone}
+                                    initial={{ opacity: 0, y: 8 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ duration: 0.2 }}
+                                    className="border border-gold/20 rounded-xl overflow-hidden bg-white shadow-sm hover:shadow-md transition-shadow"
                                 >
-                                    <div className="p-3 bg-slate-50/50 flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-gold/5">
+                                    <div className="p-3.5 bg-gradient-to-r from-cream/40 to-transparent flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-gold/10">
                                         <div className="space-y-1">
                                             <div className="flex items-center gap-2">
-                                                <span className="font-bold text-xs text-maroon">{group.phone}</span>
-                                                <span className="text-[10px] bg-maroon/5 text-maroon px-1.5 py-0.5 rounded border border-maroon/10 font-medium">
+                                                <span className="font-bold text-sm font-mono text-maroon">{group.phone}</span>
+                                                <span className="text-[10px] bg-maroon/5 text-maroon px-2 py-0.5 rounded-full border border-maroon/15 font-semibold">
                                                     {group.customerName}
                                                 </span>
                                             </div>
-                                            <div className="text-[10px] text-gray-500 font-mono flex items-center gap-1">
+                                            <div className="text-[11px] text-gray-500 font-mono flex items-center gap-1">
                                                 <Clock className="h-3 w-3" />
                                                 Last Active: {new Date(group.lastUpdated).toLocaleString()}
                                             </div>
                                         </div>
 
-                                        <div className="flex items-center gap-4 text-xs">
+                                        <div className="flex items-center gap-5 text-xs">
                                             <div className="text-right">
                                                 <span className="text-gray-500 block text-[9px] uppercase font-bold">Items Count</span>
                                                 <span className="font-bold font-mono text-gray-700">{group.totalQty}</span>
@@ -659,7 +644,7 @@ Shree Banarasi Sarees Team`;
                                                 {expandedCartPhone === group.phone ? 'Hide Items' : 'View Items'}
                                             </Button>
                                             
-                                            <Button size="sm" onClick={() => handleConvertCartToOrder(group.phone, group.items)} className="h-7 text-[10px] bg-maroon hover:bg-maroon-dark text-gold font-bold shadow-sm uppercase tracking-wider gap-1"><Sparkles className="h-3 w-3" />Convert to Order</Button>
+                                            <Button size="sm" onClick={() => handleConvertCartToOrder(group.phone, group.items)} className="h-7 text-[10px] bg-gradient-to-r from-maroon to-maroon-dark hover:from-maroon-dark hover:to-maroon-dark text-gold font-bold shadow-sm uppercase tracking-wider gap-1"><Sparkles className="h-3 w-3" />Convert to Order</Button>
 
                                              <Button size="icon" variant="outline" onClick={() => handleWhatsAppCart(group)} className="h-7 w-7 border-green-200 text-green-600 hover:bg-green-50 hover:text-green-700 hover:border-green-300" title="Contact on WhatsApp"><WhatsAppIcon className="h-3.5 w-3.5" /></Button>
 
@@ -682,30 +667,34 @@ Shree Banarasi Sarees Team`;
                                     {expandedCartPhone === group.phone && (
                                         <div className="p-3 border-t border-gold/10 bg-white">
                                             <Table>
-                                                <TableHeader className="bg-slate-50">
-                                                    <TableRow className="border-b border-gold/5">
-                                                        <TableHead className="h-6 py-0.5 text-[9px] font-bold text-gray-500">Product</TableHead>
-                                                        <TableHead className="h-6 py-0.5 text-[9px] font-bold text-gray-500 text-center">Qty</TableHead>
-                                                        <TableHead className="h-6 py-0.5 text-[9px] font-bold text-gray-500 text-right">Price</TableHead>
-                                                        <TableHead className="h-6 py-0.5 text-[9px] font-bold text-gray-500 text-right">Total</TableHead>
-                                                        <TableHead className="h-6 py-0.5 text-[9px] font-bold text-gray-500 text-center w-16"></TableHead>
+                                                <TableHeader className="bg-cream/10">
+                                                    <TableRow className="border-b border-gold/10 hover:bg-transparent">
+                                                        <TableHead className="h-8 text-[10px] font-bold text-maroon py-1 uppercase tracking-wider">Product</TableHead>
+                                                        <TableHead className="h-8 text-[10px] font-bold text-maroon py-1 text-center uppercase tracking-wider">Qty</TableHead>
+                                                        <TableHead className="h-8 text-[10px] font-bold text-maroon py-1 text-right uppercase tracking-wider">Price</TableHead>
+                                                        <TableHead className="h-8 text-[10px] font-bold text-maroon py-1 text-right uppercase tracking-wider">Total</TableHead>
+                                                        <TableHead className="h-8 text-[10px] font-bold text-maroon py-1 text-center w-16 uppercase tracking-wider"></TableHead>
                                                     </TableRow>
                                                 </TableHeader>
                                                 <TableBody>
                                                     {group.items.map((item) => (
-                                                        <TableRow key={item.id} className="border-b border-gold/5 h-8">
-                                                            <TableCell className="py-1 text-xs">
+                                                        <TableRow key={item.id} className="border-b border-gold/5 hover:bg-cream/10 transition-colors">
+                                                            <TableCell className="py-2 text-xs">
                                                                 <div className="font-semibold text-gray-800">{item.product?.sareeName || 'Unknown Product'}</div>
-                                                                <div className="flex gap-2 text-[9px] text-gray-400 font-mono">
+                                                                <div className="flex gap-2 text-[9px] text-gray-400 font-mono mt-0.5">
                                                                     {item.product?.sku && <span>SKU: {item.product.sku}</span>}
                                                                     {item.product?.fabric && <span>Fabric: {item.product.fabric}</span>}
                                                                     {item.product?.color && <span>Color: {item.product.color}</span>}
                                                                 </div>
                                                             </TableCell>
-                                                            <TableCell className="py-1 text-xs text-center">{item.quantity}</TableCell>
-                                                            <TableCell className="py-1 text-xs text-right font-mono">₹{(item.product?.sellingPrice || 0).toLocaleString()}</TableCell>
-                                                            <TableCell className="py-1 text-xs text-right font-mono">₹{(item.quantity * (item.product?.sellingPrice || 0)).toLocaleString()}</TableCell>
-                                                            <TableCell className="py-1 text-center">
+                                                            <TableCell className="py-2 text-xs text-center">
+                                                                <span className="inline-flex items-center justify-center h-6 min-w-6 px-1.5 rounded-md bg-gray-100 text-gray-700 text-[10px] font-bold font-mono">
+                                                                    {item.quantity}
+                                                                </span>
+                                                            </TableCell>
+                                                            <TableCell className="py-2 text-xs text-right font-mono">₹{(item.product?.sellingPrice || 0).toLocaleString()}</TableCell>
+                                                            <TableCell className="py-2 text-xs text-right font-mono font-bold text-maroon">₹{(item.quantity * (item.product?.sellingPrice || 0)).toLocaleString()}</TableCell>
+                                                            <TableCell className="py-2 text-center">
                                                                  <div className="flex items-center justify-center gap-1.5">
                                                                      <button
                                                                          type="button"
@@ -731,7 +720,7 @@ Shree Banarasi Sarees Team`;
                                             </Table>
                                         </div>
                                     )}
-                                </div>
+                                </motion.div>
                             ))}
                         </div>
                     )}
