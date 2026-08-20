@@ -30,12 +30,12 @@ import { ReceiptModal } from '@/components/ReceiptModal';
 import { BarcodeScanner } from '@/components/sales/BarcodeScanner';
 import { RemoteScannerLink } from '@/components/sales/RemoteScannerLink';
 import { playBeep } from '@/lib/audio';
-import Peer from 'peerjs';
 import type { Sale } from '@/services/salesService';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import QRCode from 'react-qr-code';
 import { settingsService, type UpiSetting } from '@/services/settingsService';
 import { staffService, type Staff } from '@/services/staffService';
+import { supabase } from '@/lib/supabase';
 
 export default function SalesPage() {
     const customerNameInputRef = React.useRef<HTMLInputElement>(null);
@@ -284,8 +284,7 @@ export default function SalesPage() {
     const [remoteConnected, setRemoteConnected] = React.useState(false);
     const [connectionStatus, setConnectionStatus] = React.useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
 
-    const peerRef = React.useRef<Peer | null>(null);
-    const connRef = React.useRef<any>(null);
+    const channelRef = React.useRef<any>(null);
 
     const sareesRef = React.useRef(sarees);
     React.useEffect(() => {
@@ -297,135 +296,74 @@ export default function SalesPage() {
         addToCartRef.current = handleAddToCart;
     }, [handleAddToCart]);
 
-    const initializePeer = React.useCallback(() => {
-        if (peerRef.current) {
-            peerRef.current.destroy();
-            peerRef.current = null;
+    const initializeRealtime = React.useCallback(() => {
+        if (channelRef.current) {
+            supabase.removeChannel(channelRef.current);
+            channelRef.current = null;
         }
 
         try {
-            if (remoteMode === 'scanner') {
-                setConnectionStatus('connecting');
-                const peer = new Peer({
-                    host: '0.peerjs.com',
-                    port: 443,
-                    secure: true,
-                    debug: 1
-                });
-                peerRef.current = peer;
+            setConnectionStatus('connecting');
+            const targetChannelName = `room:POS-${sessionId}`;
+            console.log(`[POS Terminal] Connecting to Supabase Realtime channel: ${targetChannelName}`);
 
-                peer.on('open', (id) => {
-                    console.log('Scanner Peer registered with ID:', id);
-                    const conn = peer.connect(`POS-${sessionId}`, { reliable: true });
-                    connRef.current = conn;
+            const channel = supabase.channel(targetChannelName, {
+                config: { broadcast: { self: false } }
+            });
+            channelRef.current = channel;
 
-                    conn.on('open', () => {
+            channel
+                .on('broadcast', { event: 'scan' }, (payload) => {
+                    console.log('[POS Terminal] Realtime broadcast scan received:', payload);
+                    const data = payload?.payload;
+                    const barcode = typeof data === 'string' ? data.trim() : (data?.barcode ? String(data.barcode).trim() : '');
+
+                    if (barcode) {
+                        const foundSaree = sareesRef.current?.find(s =>
+                            s.id.toLowerCase() === barcode.toLowerCase() ||
+                            s.barcode?.toLowerCase() === barcode.toLowerCase()
+                        );
+
+                        if (foundSaree) {
+                            if (foundSaree.status !== 'active') {
+                                toast.error(`Saree "${foundSaree.sareeName}" is inactive.`);
+                                return;
+                            }
+                            playBeep();
+                            addToCartRef.current(foundSaree);
+                            toast.success(`Remote scanned: ${foundSaree.sareeName}`);
+                        } else {
+                            toast.error(`No active saree found for barcode: ${barcode}`);
+                        }
+                    }
+                })
+                .subscribe((status) => {
+                    if (status === 'SUBSCRIBED') {
+                        console.log('[POS Terminal] Supabase channel subscribed live!');
+                        setRemoteConnected(true);
                         setConnectionStatus('connected');
-                        toast.success('Connected to terminal');
-                    });
-
-                    conn.on('close', () => {
+                    } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+                        console.warn('[POS Terminal] Supabase channel status:', status);
+                        setRemoteConnected(false);
                         setConnectionStatus('disconnected');
-                        connRef.current = null;
-                    });
-
-                    conn.on('error', (err) => {
-                        console.error('Data connection error:', err);
-                        setConnectionStatus('disconnected');
-                        connRef.current = null;
-                        toast.error('Scanner connection lost');
-                    });
-                });
-
-                peer.on('error', (err) => {
-                    console.error('PeerJS error:', err);
-                    setConnectionStatus('disconnected');
-                    if (err.type === 'peer-unavailable') {
-                        toast.error('Terminal not online. Make sure checkout page is open.');
-                    } else {
-                        toast.error(`P2P Initialization error: ${err.type}`);
                     }
                 });
-
-                peer.on('close', () => {
-                    setConnectionStatus('disconnected');
-                });
-            } else {
-                const peerId = `POS-${sessionId}`;
-                const peer = new Peer(peerId, {
-                    host: '0.peerjs.com',
-                    port: 443,
-                    secure: true,
-                    debug: 1
-                });
-                peerRef.current = peer;
-
-                peer.on('open', (id) => {
-                    console.log('Master POS Terminal PeerJS open with ID:', id);
-                });
-
-                peer.on('connection', (conn) => {
-                    console.log('Terminal received connection from:', conn.peer);
-                    setRemoteConnected(true);
-                    connRef.current = conn;
-
-                    conn.on('data', (data) => {
-                        console.log('Terminal received barcode:', data);
-                        if (data && typeof data === 'string') {
-                            const barcode = data.trim();
-                            const foundSaree = sareesRef.current?.find(s =>
-                                s.id.toLowerCase() === barcode.toLowerCase() ||
-                                s.barcode?.toLowerCase() === barcode.toLowerCase()
-                            );
-
-                            if (foundSaree) {
-                                if (foundSaree.status !== 'active') {
-                                    toast.error(`Saree "${foundSaree.sareeName}" is inactive.`);
-                                    return;
-                                }
-                                playBeep();
-                                addToCartRef.current(foundSaree);
-                                toast.success(`Remote scanned: ${foundSaree.sareeName}`);
-                            } else {
-                                toast.error(`No active saree found for barcode: ${barcode}`);
-                            }
-                        }
-                    });
-
-                    conn.on('close', () => {
-                        setRemoteConnected(false);
-                        connRef.current = null;
-                        toast.info('Remote scanner disconnected');
-                    });
-
-                    conn.on('error', (err) => {
-                        console.error('Terminal dynamic connection error:', err);
-                        setRemoteConnected(false);
-                        connRef.current = null;
-                    });
-                });
-
-                peer.on('error', (err) => {
-                    console.error('Master peer error:', err);
-                });
-            }
         } catch (error) {
-            console.error('Peer instantiation error:', error);
+            console.error('Realtime initialization error:', error);
             setConnectionStatus('disconnected');
         }
-    }, [remoteMode, sessionId]);
+    }, [sessionId]);
 
     React.useEffect(() => {
-        initializePeer();
+        initializeRealtime();
 
         return () => {
-            if (peerRef.current) {
-                peerRef.current.destroy();
-                peerRef.current = null;
+            if (channelRef.current) {
+                supabase.removeChannel(channelRef.current);
+                channelRef.current = null;
             }
-            connRef.current = null;
         };
-    }, [initializePeer]);
+    }, [initializeRealtime]);
 
     const handleBarcodeScan = (decodedText: string) => {
         if (isProcessingScan || (lastScannedBarcode === decodedText)) return;
@@ -440,20 +378,24 @@ export default function SalesPage() {
         }, 2000);
 
         if (remoteMode === 'scanner') {
-            if (connRef.current && connRef.current.open) {
+            if (channelRef.current) {
                 try {
-                    connRef.current.send(decodedText);
+                    channelRef.current.send({
+                        type: 'broadcast',
+                        event: 'scan',
+                        payload: { barcode: decodedText, timestamp: Date.now() }
+                    });
                     playBeep();
                     if (navigator.vibrate) {
                         navigator.vibrate(100);
                     }
                     toast.success(`Scanned & sent: ${decodedText}`);
                 } catch (err) {
-                    console.error("Failed to send scan over WebRTC P2P:", err);
-                    toast.error("Failed to send scan over P2P link");
+                    console.error("Failed to send scan over Supabase Realtime:", err);
+                    toast.error("Failed to send scan over Realtime channel");
                 }
             } else {
-                toast.error("Not connected to terminal. Please tap Reconnect.");
+                toast.error("Not connected to terminal channel.");
             }
             return;
         }
@@ -609,7 +551,7 @@ export default function SalesPage() {
                                         variant="outline"
                                         size="sm"
                                         className="h-8 border-gold/20 text-maroon hover:bg-cream/10 text-xs px-3"
-                                        onClick={initializePeer}
+                                        onClick={initializeRealtime}
                                     >
                                         Reconnect to Terminal
                                     </Button>

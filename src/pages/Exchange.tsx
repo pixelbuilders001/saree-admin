@@ -6,7 +6,7 @@ import { salesService, type SaleReportItem } from '@/services/salesService';
 import { playBeep } from '@/lib/audio';
 import { BarcodeScanner } from '@/components/sales/BarcodeScanner';
 import { RemoteScannerLink } from '@/components/sales/RemoteScannerLink';
-import Peer from 'peerjs';
+import { supabase } from '@/lib/supabase';
 import {
     ArrowLeftRight,
     Search,
@@ -23,6 +23,8 @@ import {
     Scan,
     Link,
     RefreshCw,
+    Smartphone,
+    Camera,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -59,6 +61,8 @@ export default function ExchangePage() {
     const [isReceiptModalOpen, setIsReceiptModalOpen] = React.useState(false);
     const [isScannerOpen, setIsScannerOpen] = React.useState(false);
     const [isRemoteLinkOpen, setIsRemoteLinkOpen] = React.useState(false);
+    const [lastScannedBarcode, setLastScannedBarcode] = React.useState<string | null>(null);
+    const [isProcessingScan, setIsProcessingScan] = React.useState(false);
 
     function handleAddReplacement(saree: Saree) {
         const existing = replaceItems.find(i => i.sareeId === saree.id);
@@ -80,6 +84,7 @@ export default function ExchangePage() {
 
     const [searchParams] = useSearchParams();
     const urlSessionId = searchParams.get('sessionId');
+    const remoteMode = searchParams.get('remoteMode');
 
     // Persist session ID
     const [sessionId, setSessionId] = React.useState(() => {
@@ -147,30 +152,10 @@ export default function ExchangePage() {
         }
     });
 
-    const handleBarcodeScan = (decodedText: string) => {
-        const saree = sarees?.find(s =>
-            s.id.toLowerCase() === decodedText.trim().toLowerCase() ||
-            (s.barcode && s.barcode.toLowerCase() === decodedText.trim().toLowerCase())
-        );
-
-        if (saree) {
-            if (saree.status !== 'active') {
-                toast.error(`Saree "${saree.sareeName}" is inactive and cannot be exchanged.`);
-                return;
-            }
-            playBeep();
-            handleAddReplacement(saree);
-            setIsScannerOpen(false);
-        } else {
-            toast.error(`No saree found with barcode: ${decodedText}`);
-        }
-    };
-
     const [remoteConnected, setRemoteConnected] = React.useState(false);
-    const [peerActive, setPeerActive] = React.useState(false);
+    const [connectionStatus, setConnectionStatus] = React.useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
 
-    const peerRef = React.useRef<Peer | null>(null);
-    const connRef = React.useRef<any>(null);
+    const channelRef = React.useRef<any>(null);
 
     const sareesRef = React.useRef(sarees);
     React.useEffect(() => {
@@ -189,36 +174,29 @@ export default function ExchangePage() {
         toast.info(`Regenerated Session ID: ${id}`);
     }, []);
 
-    const initializePeer = React.useCallback(() => {
-        if (peerRef.current) {
-            peerRef.current.destroy();
-            peerRef.current = null;
+    const initializeRealtime = React.useCallback(() => {
+        if (channelRef.current) {
+            supabase.removeChannel(channelRef.current);
+            channelRef.current = null;
         }
 
         try {
-            const peerId = `POS-${sessionId}`;
-            const peer = new Peer(peerId, {
-                host: '0.peerjs.com',
-                port: 443,
-                secure: true,
-                debug: 1
+            setConnectionStatus('connecting');
+            const targetChannelName = `room:POS-${sessionId}`;
+            console.log(`[Exchange Terminal] Connecting to Supabase Realtime channel: ${targetChannelName}`);
+
+            const channel = supabase.channel(targetChannelName, {
+                config: { broadcast: { self: false } }
             });
-            peerRef.current = peer;
+            channelRef.current = channel;
 
-            peer.on('open', (id) => {
-                console.log('Master POS Terminal PeerJS open with ID:', id);
-                setPeerActive(true);
-            });
+            channel
+                .on('broadcast', { event: 'scan' }, (payload) => {
+                    console.log('[Exchange Terminal] Realtime broadcast scan received:', payload);
+                    const data = payload?.payload;
+                    const barcode = typeof data === 'string' ? data.trim() : (data?.barcode ? String(data.barcode).trim() : '');
 
-            peer.on('connection', (conn) => {
-                console.log('Terminal received connection from:', conn.peer);
-                setRemoteConnected(true);
-                connRef.current = conn;
-
-                conn.on('data', (data) => {
-                    console.log('Terminal received barcode:', data);
-                    if (data && typeof data === 'string') {
-                        const barcode = data.trim();
+                    if (barcode) {
                         const foundSaree = sareesRef.current?.find(s =>
                             s.id.toLowerCase() === barcode.toLowerCase() ||
                             s.barcode?.toLowerCase() === barcode.toLowerCase()
@@ -236,54 +214,86 @@ export default function ExchangePage() {
                             toast.error(`No active saree found for barcode: ${barcode}`);
                         }
                     }
+                })
+                .subscribe((status) => {
+                    if (status === 'SUBSCRIBED') {
+                        console.log('[Exchange Terminal] Supabase channel subscribed live!');
+                        setRemoteConnected(true);
+                        setConnectionStatus('connected');
+                    } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+                        console.warn('[Exchange Terminal] Supabase channel status:', status);
+                        setRemoteConnected(false);
+                        setConnectionStatus('disconnected');
+                    }
                 });
-
-                conn.on('close', () => {
-                    setRemoteConnected(false);
-                    connRef.current = null;
-                    toast.info('Remote scanner disconnected');
-                });
-
-                conn.on('error', (err) => {
-                    console.error('Terminal dynamic connection error:', err);
-                    setRemoteConnected(false);
-                    connRef.current = null;
-                });
-            });
-
-            peer.on('close', () => {
-                setPeerActive(false);
-            });
-
-            peer.on('error', (err) => {
-                console.error('Master peer error:', err);
-                if (err.type === 'unavailable-id') {
-                    console.log('Peer ID taken, auto-regenerating session...');
-                    const newId = 'E-' + Math.random().toString(36).substring(2, 7).toUpperCase();
-                    localStorage.setItem('exchange_session_id', newId);
-                    setSessionId(newId);
-                } else {
-                    setPeerActive(false);
-                }
-            });
         } catch (error) {
-            console.error('Peer instantiation error:', error);
-            setPeerActive(false);
+            console.error('Realtime initialization error:', error);
+            setConnectionStatus('disconnected');
         }
     }, [sessionId]);
 
     React.useEffect(() => {
-        initializePeer();
+        initializeRealtime();
 
         return () => {
-            if (peerRef.current) {
-                peerRef.current.destroy();
-                peerRef.current = null;
+            if (channelRef.current) {
+                supabase.removeChannel(channelRef.current);
+                channelRef.current = null;
             }
-            connRef.current = null;
-            setPeerActive(false);
         };
-    }, [initializePeer]);
+    }, [initializeRealtime]);
+
+    const handleBarcodeScan = (decodedText: string) => {
+        if (isProcessingScan || (lastScannedBarcode === decodedText)) return;
+
+        setIsProcessingScan(true);
+        setLastScannedBarcode(decodedText);
+
+        setTimeout(() => {
+            setIsProcessingScan(false);
+            setLastScannedBarcode(null);
+        }, 2000);
+
+        if (remoteMode === 'scanner') {
+            if (channelRef.current) {
+                try {
+                    channelRef.current.send({
+                        type: 'broadcast',
+                        event: 'scan',
+                        payload: { barcode: decodedText, timestamp: Date.now() }
+                    });
+                    playBeep();
+                    if (navigator.vibrate) {
+                        navigator.vibrate(100);
+                    }
+                    toast.success(`Scanned & sent: ${decodedText}`);
+                } catch (err) {
+                    console.error("Failed to send scan over Supabase Realtime:", err);
+                    toast.error("Failed to send scan over Realtime channel");
+                }
+            } else {
+                toast.error("Not connected to terminal channel.");
+            }
+            return;
+        }
+
+        const saree = sarees?.find(s =>
+            s.id.toLowerCase() === decodedText.trim().toLowerCase() ||
+            (s.barcode && s.barcode.toLowerCase() === decodedText.trim().toLowerCase())
+        );
+
+        if (saree) {
+            if (saree.status !== 'active') {
+                toast.error(`Saree "${saree.sareeName}" is inactive and cannot be exchanged.`);
+                return;
+            }
+            playBeep();
+            handleAddReplacement(saree);
+            setIsScannerOpen(false);
+        } else {
+            toast.error(`No saree found with barcode: ${decodedText}`);
+        }
+    };
 
     const handleLookupSale = () => {
         if (!originalSaleId) return;
@@ -358,6 +368,73 @@ export default function ExchangePage() {
         });
     };
 
+    if (remoteMode === 'scanner') {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[80vh] p-4 space-y-6">
+                <Card className="w-full max-w-sm border-gold/20 shadow-xl overflow-hidden">
+                    <CardHeader className="bg-maroon text-gold text-center py-8">
+                        <div className="flex justify-center mb-4">
+                            <div className="p-4 bg-gold/10 rounded-full border-2 border-gold/20 animate-pulse">
+                                <Smartphone className="h-12 w-12" />
+                            </div>
+                        </div>
+                        <CardTitle className="text-2xl">Remote Scanner</CardTitle>
+                        <p className="text-gold/60 mt-2 font-mono text-sm">Session: {sessionId}</p>
+                    </CardHeader>
+                    <CardContent className="p-6 space-y-6 text-center">
+                        <p className="text-gray-500 text-sm italic">
+                            Your phone is now acting as a wireless scanner for your laptop.
+                        </p>
+                        <Button
+                            className="w-full h-20 bg-gold hover:bg-gold-dark text-maroon font-bold text-xl gap-3 shadow-lg"
+                            disabled={connectionStatus !== 'connected'}
+                            onClick={() => setIsScannerOpen(true)}
+                        >
+                            <Camera className="h-8 w-8" />
+                            Open Camera
+                        </Button>
+                        <div className="pt-4 border-t border-gray-100 flex flex-col items-center gap-2">
+                            {connectionStatus === 'connected' ? (
+                                <div className="flex items-center gap-2 text-green-600 font-medium text-sm">
+                                    <span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse"></span>
+                                    Connected (Realtime Live)
+                                </div>
+                            ) : connectionStatus === 'connecting' ? (
+                                <div className="flex items-center gap-2 text-amber-600 font-medium text-sm">
+                                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
+                                    Connecting...
+                                </div>
+                            ) : (
+                                <div className="flex flex-col items-center gap-2">
+                                    <div className="flex items-center gap-2 text-red-600 font-medium text-sm">
+                                        <span className="w-2.5 h-2.5 rounded-full bg-red-500"></span>
+                                        Disconnected
+                                    </div>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-8 border-gold/20 text-maroon hover:bg-cream/10 text-xs px-3"
+                                        onClick={initializeRealtime}
+                                    >
+                                        Reconnect to Terminal
+                                    </Button>
+                                </div>
+                            )}
+                            <Button variant="ghost" className="text-gray-400 text-xs mt-2" onClick={() => window.location.href = '/exchange'}>
+                                Exit Scanner Mode
+                            </Button>
+                        </div>
+                    </CardContent>
+                </Card>
+                <BarcodeScanner
+                    isOpen={isScannerOpen}
+                    onClose={() => setIsScannerOpen(false)}
+                    onScan={handleBarcodeScan}
+                />
+            </div>
+        );
+    }
+
     return (
         <div className="flex flex-col h-[calc(100vh-80px)] overflow-hidden max-w-7xl mx-auto px-4 space-y-3 py-3">
             {/* Header Banner */}
@@ -381,11 +458,18 @@ export default function ExchangePage() {
                 </div>
                 <div className="flex items-center gap-2">
                     <span
-                        className={`h-2.5 w-2.5 rounded-full border ${peerActive ? (remoteConnected ? 'bg-green-500 border-green-300 animate-pulse' : 'bg-green-400 border-green-200') : 'bg-gray-300 border-gray-200'}`}
-                        title={peerActive ? (remoteConnected ? 'Mobile scanner connected' : 'Ready') : 'Offline'}
+                        className={cn(
+                            "h-2.5 w-2.5 rounded-full border",
+                            connectionStatus === 'connected'
+                                ? "bg-green-500 border-green-300 animate-pulse"
+                                : connectionStatus === 'connecting'
+                                ? "bg-amber-500 border-amber-300 animate-pulse"
+                                : "bg-gray-300 border-gray-200"
+                        )}
+                        title={connectionStatus === 'connected' ? 'Supabase Realtime Live' : connectionStatus}
                     />
                     <span className="text-[10px] font-mono bg-cream/35 border border-gold/20 text-maroon px-2.5 py-0.5 rounded-md flex items-center gap-1.5 shadow-sm font-bold">
-                        P2P Code: {sessionId}
+                        Session Code: {sessionId}
                         <button
                             type="button"
                             onClick={handleRegenerateSession}
