@@ -285,6 +285,44 @@ export const ordersService = {
             }]);
 
         if (historyError) throw historyError;
+
+        // Trigger rich push notification to customer
+        try {
+            const { data: orderRow } = await supabase
+                .from('orders')
+                .select('*, order_items(*)')
+                .eq('id', orderId)
+                .single();
+
+            if (orderRow && orderRow.user_id) {
+                const statusLower = (status || '').toLowerCase();
+                let stageKey: any = 'placed';
+                if (statusLower.includes('confirm')) stageKey = 'confirmed';
+                else if (statusLower.includes('pack')) stageKey = 'packed';
+                else if (statusLower.includes('ship') || statusLower.includes('dispatch')) stageKey = 'shipped';
+                else if (statusLower.includes('out_for_delivery') || statusLower.includes('out for delivery')) stageKey = 'out_for_delivery';
+                else if (statusLower.includes('deliver')) stageKey = 'delivered';
+                else if (statusLower.includes('cancel')) stageKey = 'cancelled';
+
+                const firstItemSnapshot = orderRow.order_items?.[0]?.product_snapshot;
+                const firstItemImage = firstItemSnapshot?.images?.[0] || null;
+
+                await supabase.functions.invoke('send-push', {
+                    body: {
+                        audience: 'user',
+                        target_user_id: orderRow.user_id,
+                        order_status: stageKey,
+                        order_number: orderRow.order_number,
+                        customer_name: orderRow.customer_name || orderRow.shipping_address?.name,
+                        total_amount: Number(orderRow.total_amount),
+                        image_url: firstItemImage,
+                        notification_type: 'order',
+                    },
+                });
+            }
+        } catch (err) {
+            console.error('Failed to send push notification from admin update:', err);
+        }
     },
 
     updatePaymentStatus: async (orderId: string, paymentStatus: string): Promise<void> => {
