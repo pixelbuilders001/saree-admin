@@ -307,6 +307,8 @@ export const ordersService = {
                 const firstItemSnapshot = orderRow.order_items?.[0]?.product_snapshot;
                 const firstItemImage = firstItemSnapshot?.images?.[0] || null;
 
+                const targetUrl = `/account?orderId=${encodeURIComponent(orderRow.order_number)}`;
+
                 await supabase.functions.invoke('send-push', {
                     body: {
                         audience: 'user',
@@ -317,11 +319,81 @@ export const ordersService = {
                         total_amount: Number(orderRow.total_amount),
                         image_url: firstItemImage,
                         notification_type: 'order',
+                        url: targetUrl,
                     },
                 });
             }
         } catch (err) {
             console.error('Failed to send push notification from admin update:', err);
+        }
+    },
+
+    processPendingReviewReminders: async (delayHours = 24): Promise<number> => {
+        try {
+            const cutoffDate = new Date(Date.now() - delayHours * 60 * 60 * 1000).toISOString();
+
+            const { data: deliveredHistory, error: hErr } = await supabase
+                .from('order_status_history')
+                .select('order_id, created_at')
+                .eq('status', 'delivered')
+                .lte('created_at', cutoffDate);
+
+            if (hErr || !deliveredHistory || deliveredHistory.length === 0) return 0;
+
+            const orderIds = deliveredHistory.map((h: any) => h.order_id);
+
+            const { data: orders, error: oErr } = await supabase
+                .from('orders')
+                .select('*, order_items(*)')
+                .in('id', orderIds)
+                .eq('order_status', 'delivered');
+
+            if (oErr || !orders || orders.length === 0) return 0;
+
+            let count = 0;
+            for (const order of orders) {
+                if (!order.user_id) continue;
+
+                // Check if review reminder was already sent
+                const { data: sentReminders } = await supabase
+                    .from('push_notifications')
+                    .select('id')
+                    .eq('target_user_id', order.user_id)
+                    .eq('notification_type', 'review_reminder')
+                    .ilike('body', `%${order.order_number}%`);
+
+                if (sentReminders && sentReminders.length > 0) continue;
+
+                // Check if customer already reviewed all items in this order
+                const { data: existingReviews } = await supabase
+                    .from('product_reviews')
+                    .select('id')
+                    .eq('order_id', order.id);
+
+                if (existingReviews && existingReviews.length >= (order.order_items?.length || 1)) continue;
+
+                const firstItemImage = order.order_items?.[0]?.product_snapshot?.images?.[0] || null;
+
+                await supabase.functions.invoke('send-push', {
+                    body: {
+                        audience: 'user',
+                        target_user_id: order.user_id,
+                        title: 'How is your new Banarasi Saree? ✨',
+                        body: `We hope you love your saree! Tap to rate your purchase for Order #${order.order_number} and share your feedback.`,
+                        order_number: order.order_number,
+                        customer_name: order.customer_name,
+                        image_url: firstItemImage,
+                        notification_type: 'review_reminder',
+                        url: `/review?orderId=${encodeURIComponent(order.order_number)}`
+                    }
+                });
+                count++;
+            }
+
+            return count;
+        } catch (err) {
+            console.error('Error processing pending review reminders:', err);
+            return 0;
         }
     },
 
