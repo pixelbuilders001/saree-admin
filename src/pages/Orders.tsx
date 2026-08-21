@@ -153,74 +153,14 @@ export default function OrdersPage() {
         queryFn: inventoryService.getSarees
     });
 
-    // Helper: Send order push notification (fire-and-forget — never throws)
-    const sendOrderPushNotification = async (
-        order: Order,
-        status: 'confirmed' | 'out_for_delivery' | 'delivered'
-    ): Promise<void> => {
-        if (!order.userId) return; // No authenticated user — skip silently
-
-        const orderNumber = order.orderNumber;
-        const orderId = order.id;
-        const targetUserId = order.userId;
-
-        const notificationMap: Record<typeof status, { title: string; body: string }> = {
-            confirmed: {
-                title: 'Order Confirmed 🎉',
-                body: `Your order #${orderNumber} has been confirmed and is being prepared.`,
-            },
-            out_for_delivery: {
-                title: 'Out for Delivery 🛵',
-                body: `Your order #${orderNumber} is out for delivery and will reach you soon.`,
-            },
-            delivered: {
-                title: 'Order Delivered ✅',
-                body: `Your order #${orderNumber} has been delivered. Thank you for shopping with Shree Banarasi Sarees ❤️`,
-            },
-        };
-
-        const { title, body } = notificationMap[status];
-
-        try {
-            await pushNotificationService.sendNotification({
-                title,
-                body,
-                url: `/account`,
-                imageUrl: null,
-                audience: 'user',
-                targetUserId,
-                notificationType: 'order',
-            });
-        } catch (pushErr: any) {
-            // Push failure is non-fatal — log and warn only
-            console.warn('[Orders] Push notification failed (non-fatal):', pushErr?.message || pushErr);
-            toast.warning('Order updated, but push notification could not be sent.', { duration: 4000 });
-        }
-    };
-
     // Mutations
     const updateStatusMutation = useMutation({
         mutationFn: ({ orderId, status, note }: { orderId: string; status: string; note?: string }) =>
             ordersService.updateOrderStatus(orderId, status, note),
-        onSuccess: (_data, variables) => {
+        onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['orders'] });
             toast.success('Order status updated successfully');
             setStatusNote('');
-
-            // Fire push notification for customer-facing status milestones
-            const pushStatuses = ['confirmed', 'out_for_delivery', 'delivered'] as const;
-            type PushStatus = typeof pushStatuses[number];
-            const isPushStatus = (s: string): s is PushStatus => (pushStatuses as readonly string[]).includes(s);
-
-            if (isPushStatus(variables.status)) {
-                // Resolve the order from cached data (available synchronously)
-                const cachedOrders = queryClient.getQueryData<Order[]>(['orders']);
-                const order = cachedOrders?.find(o => o.id === variables.orderId);
-                if (order) {
-                    // Detach from the mutation flow — failures do not propagate
-                    sendOrderPushNotification(order, variables.status);
-                }
-            }
         },
         onError: (err: any) => {
             toast.error(err.message || 'Failed to update order status');
