@@ -22,6 +22,7 @@ import {
     IndianRupee,
     AlertTriangle,
     Sparkles,
+    Printer,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -57,6 +58,7 @@ import {
 } from "@/components/ui/dialog";
 import { SareeForm } from '@/components/inventory/SareeForm';
 import { BarcodeGenerator } from '@/components/inventory/BarcodeGenerator';
+import { BatchBarcodePrinter } from '@/components/inventory/BatchBarcodePrinter';
 import { CsvImportModal } from '@/components/inventory/CsvImportModal';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
@@ -73,7 +75,8 @@ export default function InventoryPage() {
     const [pendingSareeId, setPendingSareeId] = React.useState<string | null>(null);
     const [isPasswordDialogOpen, setIsPasswordDialogOpen] = React.useState(false);
     const [passwordInput, setPasswordInput] = React.useState('');
-    const [barcodeToShow, setBarcodeToShow] = React.useState<{ value: string, label: string } | null>(null);
+    const [barcodeToShow, setBarcodeToShow] = React.useState<Saree | null>(null);
+    const [isBatchBarcodeOpen, setIsBatchBarcodeOpen] = React.useState(false);
     const [isImportOpen, setIsImportOpen] = React.useState(false);
     const [galleryState, setGalleryState] = React.useState<{ images: { imageUrl: string }[], title: string } | null>(null);
     const [galleryActiveIndex, setGalleryActiveIndex] = React.useState<number>(0);
@@ -167,7 +170,7 @@ export default function InventoryPage() {
         onSuccess: (data) => {
             queryClient.invalidateQueries({ queryKey: ['sarees'] });
             setIsFormOpen(false);
-            setBarcodeToShow({ value: data.id, label: data.sareeName });
+            setBarcodeToShow(data);
         }
     });
 
@@ -373,16 +376,27 @@ export default function InventoryPage() {
                     </div>
                 </div>
 
-                <Button
-                    className="bg-gradient-to-r from-maroon to-maroon-dark text-gold gap-1.5 h-9 px-4 text-xs font-bold shadow-md shadow-maroon/20 hover:shadow-lg hover:shadow-maroon/30 transition-all"
-                    onClick={() => {
-                        setEditingSaree(undefined);
-                        setIsFormOpen(true);
-                    }}
-                >
-                    <Plus className="h-4 w-4" />
-                    Add New Saree
-                </Button>
+                <div className="flex items-center gap-2">
+                    <Button
+                        variant="outline"
+                        className="border-gold/40 text-maroon hover:bg-gold/10 gap-1.5 h-9 px-3.5 text-xs font-bold transition-all shadow-sm bg-white"
+                        onClick={() => setIsBatchBarcodeOpen(true)}
+                    >
+                        <Printer className="h-4 w-4 text-maroon" />
+                        Print All Barcodes (A4)
+                    </Button>
+
+                    <Button
+                        className="bg-gradient-to-r from-maroon to-maroon-dark text-gold gap-1.5 h-9 px-4 text-xs font-bold shadow-md shadow-maroon/20 hover:shadow-lg hover:shadow-maroon/30 transition-all"
+                        onClick={() => {
+                            setEditingSaree(undefined);
+                            setIsFormOpen(true);
+                        }}
+                    >
+                        <Plus className="h-4 w-4" />
+                        Add New Saree
+                    </Button>
+                </div>
             </div>
 
             {/* KPI Summary Cards */}
@@ -840,7 +854,7 @@ export default function InventoryPage() {
                                                     </DropdownMenuItem>
                                                     <DropdownMenuItem
                                                         className="gap-2 cursor-pointer text-xs font-medium"
-                                                        onClick={() => setBarcodeToShow({ value: saree.id, label: saree.sareeName })}
+                                                        onClick={() => setBarcodeToShow(saree)}
                                                     >
                                                         <BarcodeIcon className="h-3.5 w-3.5" /> Generate Barcode
                                                     </DropdownMenuItem>
@@ -976,8 +990,18 @@ export default function InventoryPage() {
             <BarcodeGenerator
                 isOpen={!!barcodeToShow}
                 onClose={() => setBarcodeToShow(null)}
-                value={barcodeToShow?.value || ''}
-                label={barcodeToShow?.label || ''}
+                value={barcodeToShow?.barcode || barcodeToShow?.id || ''}
+                sareeName={barcodeToShow?.sareeName}
+                mrp={barcodeToShow?.mrp}
+                sellingPrice={barcodeToShow?.sellingPrice}
+                code={barcodeToShow?.id}
+                stock={barcodeToShow?.stock}
+            />
+
+            <BatchBarcodePrinter
+                sarees={sarees || []}
+                isOpen={isBatchBarcodeOpen}
+                onClose={() => setIsBatchBarcodeOpen(false)}
             />
 
             <CsvImportModal
