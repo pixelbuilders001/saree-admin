@@ -21,6 +21,7 @@ export interface Sale {
     salespersonId?: string;
     commissionEarned?: number;
     discountAmount?: number;
+    discountPercentage?: number;
     paymentMode?: string;
 }
 
@@ -140,6 +141,7 @@ export const salesService = {
         commissionEarned?: number;
         paymentMode?: string;
         discountAmount?: number;
+        discountPercentage?: number;
         voucherCode?: string;
         voucherAmount?: number;
     }): Promise<Sale> => {
@@ -211,12 +213,13 @@ export const salesService = {
         const randPart = Math.floor(1000 + Math.random() * 9000);
         const invoiceNumber = `INV-${datePart}-${randPart}`;
         const discount = sale.discountAmount ?? 0;
+        const discountPct = sale.discountPercentage ?? (totalAmount > 0 ? parseFloat(((discount / totalAmount) * 100).toFixed(2)) : 0);
         const voucherVal = sale.voucherAmount ?? 0;
         
-        // Note: Individual item discounts are already deducted from the item's sellingPrice.
-        // Therefore, totalAmount is already the discounted sum. We only deduct voucherVal for the net total paid.
-        const netAmount = Math.max(0, totalAmount - voucherVal);
-        const netProfit = Math.max(0, totalProfit - voucherVal);
+        // Individual item discounts are deducted from item sellingPrice.
+        // We deduct extra manual discount and voucherVal for the net total paid.
+        const netAmount = Math.max(0, totalAmount - discount - voucherVal);
+        const netProfit = Math.max(0, totalProfit - discount - voucherVal);
 
         const { data: insertedSale, error: saleInsertError } = await supabase
             .from('sales')
@@ -229,6 +232,7 @@ export const salesService = {
                 invoice_number: invoiceNumber,
                 payment_mode: sale.paymentMode || 'cash',
                 discount_amount: discount,
+                discount_percentage: discountPct,
                 created_by: userEmail,
                 updated_by: userEmail
             }])
@@ -285,6 +289,7 @@ export const salesService = {
             salespersonId: sale.salespersonId,
             commissionEarned: sale.commissionEarned,
             discountAmount: sale.discountAmount ?? 0,
+            discountPercentage: discountPct,
             paymentMode: sale.paymentMode || 'cash',
         };
     },

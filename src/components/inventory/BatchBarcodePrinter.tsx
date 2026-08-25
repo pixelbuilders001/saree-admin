@@ -229,13 +229,17 @@ export function BatchBarcodePrinter({ sarees, isOpen, onClose }: BatchBarcodePri
                             height: 100%;
                         }
                         .brand-header {
-                            font-size: 8.5px;
-                            font-weight: 800;
-                            letter-spacing: 0.5px;
-                            color: #800020;
-                            text-transform: uppercase;
-                            line-height: 1.1;
-                            margin-bottom: 1px;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            margin-bottom: 2px;
+                            width: 100%;
+                        }
+                        .brand-logo {
+                            height: 16px;
+                            width: auto;
+                            object-fit: contain;
+                            max-height: 16px;
                         }
                         .product-title {
                             font-size: ${gridConfig.titleSize};
@@ -524,8 +528,8 @@ export function BatchBarcodePrinter({ sarees, isOpen, onClose }: BatchBarcodePri
                                                             key={`${saree.id}-${copyIndex}-${itemIdx}`}
                                                             className="border border-dashed border-slate-300 rounded p-1 flex flex-col items-center justify-between text-center bg-white overflow-hidden"
                                                         >
-                                                            <div className="text-[7px] font-extrabold text-maroon uppercase tracking-tight leading-none mb-0.5">
-                                                                SHREE BANARASI SAREES
+                                                            <div className="mb-0.5 flex items-center justify-center w-full">
+                                                                <img src="/logo.png" alt="Logo" className="h-4 w-auto object-contain max-h-[16px]" />
                                                             </div>
                                                             <div className="text-[8px] font-semibold text-gray-900 leading-tight line-clamp-1 max-w-[120px]">
                                                                 {saree.sareeName}
@@ -571,7 +575,9 @@ export function BatchBarcodePrinter({ sarees, isOpen, onClose }: BatchBarcodePri
 
                                 return (
                                     <div key={`print-item-${saree.id}-${copyIndex}-${itemIdx}`} className="sticker-card">
-                                        <div className="brand-header">SHREE BANARASI SAREES</div>
+                                        <div className="brand-header">
+                                            <img src="/logo.png" alt="Logo" className="brand-logo" />
+                                        </div>
                                         <div className="product-title">{saree.sareeName}</div>
                                         <div className="price-row">
                                             {formattedMrp && (

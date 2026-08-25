@@ -121,13 +121,17 @@ export function BarcodeGenerator({
                             page-break-inside: avoid;
                         }
                         .brand-header {
-                            font-size: 10px;
-                            font-weight: 800;
-                            letter-spacing: 0.5px;
-                            color: #800020;
-                            text-transform: uppercase;
-                            margin-bottom: 2px;
-                            line-height: 1.1;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            margin-bottom: 3px;
+                            width: 100%;
+                        }
+                        .brand-logo {
+                            height: 22px;
+                            width: auto;
+                            object-fit: contain;
+                            max-height: 22px;
                         }
                         .product-title {
                             font-size: 9.5px;
@@ -222,9 +226,9 @@ export function BarcodeGenerator({
                         ref={printRef}
                         className="w-[220px] p-3 bg-white border border-dashed border-gray-300 rounded-lg shadow-sm flex flex-col items-center text-center select-none"
                     >
-                        {/* Brand Title */}
-                        <div className="brand-header text-[10px] font-extrabold tracking-wider text-maroon uppercase mb-1">
-                            SHREE BANARASI SAREES
+                        {/* Store Logo Header */}
+                        <div className="brand-header mb-1.5 flex items-center justify-center w-full">
+                            <img src="/logo.png" alt="Store Logo" className="brand-logo h-6 w-auto object-contain max-h-[24px]" />
                         </div>
 
                         {/* Saree Name */}
