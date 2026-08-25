@@ -2,6 +2,8 @@ import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/useAuthStore';
 import { creditService } from './creditService';
 
+import { calculateGst } from '@/config/gstConfig';
+
 export interface SaleItem {
     sareeId: string;
     sareeName: string;
@@ -23,6 +25,16 @@ export interface Sale {
     discountAmount?: number;
     discountPercentage?: number;
     paymentMode?: string;
+    isGstApplied?: boolean;
+    gstRate?: number;
+    taxableAmount?: number;
+    cgstRate?: number;
+    cgstAmount?: number;
+    sgstRate?: number;
+    sgstAmount?: number;
+    igstRate?: number;
+    igstAmount?: number;
+    totalGst?: number;
 }
 
 export interface SaleReportItem {
@@ -144,6 +156,7 @@ export const salesService = {
         discountPercentage?: number;
         voucherCode?: string;
         voucherAmount?: number;
+        isGstApplied?: boolean;
     }): Promise<Sale> => {
         if (!sale.items || sale.items.length === 0) {
             throw new Error("No items in sale");
@@ -206,7 +219,7 @@ export const salesService = {
             totalProfit += rowProfit;
         });
 
-        // 3. Create Sale Header
+        // 3. Create Sale Header & calculate GST
         const userEmail = useAuthStore.getState().user?.email || 'system';
         const now = new Date();
         const datePart = now.toISOString().slice(0, 10).replace(/-/g, '');
@@ -215,17 +228,20 @@ export const salesService = {
         const discount = sale.discountAmount ?? 0;
         const discountPct = sale.discountPercentage ?? (totalAmount > 0 ? parseFloat(((discount / totalAmount) * 100).toFixed(2)) : 0);
         const voucherVal = sale.voucherAmount ?? 0;
-        
-        // Individual item discounts are deducted from item sellingPrice.
-        // We deduct extra manual discount and voucherVal for the net total paid.
-        const netAmount = Math.max(0, totalAmount - discount - voucherVal);
+
+        // Base taxable amount after product selling prices & extra bill discount
+        const taxableBase = Math.max(0, totalAmount - discount);
+        const gstData = calculateGst(taxableBase, sale.isGstApplied ?? false);
+
+        // Final grand total including GST minus store credit voucher
+        const grandTotal = Math.max(0, gstData.grandTotal - voucherVal);
         const netProfit = Math.max(0, totalProfit - discount - voucherVal);
 
         const { data: insertedSale, error: saleInsertError } = await supabase
             .from('sales')
             .insert([{
                 customer_id: customerId,
-                total_amount: netAmount,
+                total_amount: grandTotal,
                 profit: netProfit,
                 salesperson_id: sale.salespersonId || null,
                 commission_earned: sale.commissionEarned ?? 0,
@@ -234,7 +250,17 @@ export const salesService = {
                 discount_amount: discount,
                 discount_percentage: discountPct,
                 created_by: userEmail,
-                updated_by: userEmail
+                updated_by: userEmail,
+                is_gst_applied: gstData.isGstApplied,
+                gst_rate: gstData.gstRate,
+                taxable_amount: gstData.taxableAmount,
+                cgst_rate: gstData.cgstRate,
+                cgst_amount: gstData.cgstAmount,
+                sgst_rate: gstData.sgstRate,
+                sgst_amount: gstData.sgstAmount,
+                igst_rate: gstData.igstRate,
+                igst_amount: gstData.igstAmount,
+                total_gst: gstData.totalGst,
             }])
             .select()
             .single();
@@ -281,7 +307,7 @@ export const salesService = {
             saleId: getFriendlyId(insertedSale.id, false),
             invoiceNumber,
             items: sale.items,
-            totalAmount: netAmount,
+            totalAmount: grandTotal,
             profit: netProfit,
             date: insertedSale.created_at,
             customerName: sale.customerName,
@@ -291,6 +317,16 @@ export const salesService = {
             discountAmount: sale.discountAmount ?? 0,
             discountPercentage: discountPct,
             paymentMode: sale.paymentMode || 'cash',
+            isGstApplied: gstData.isGstApplied,
+            gstRate: gstData.gstRate,
+            taxableAmount: gstData.taxableAmount,
+            cgstRate: gstData.cgstRate,
+            cgstAmount: gstData.cgstAmount,
+            sgstRate: gstData.sgstRate,
+            sgstAmount: gstData.sgstAmount,
+            igstRate: gstData.igstRate,
+            igstAmount: gstData.igstAmount,
+            totalGst: gstData.totalGst,
         };
     },
 

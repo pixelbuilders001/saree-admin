@@ -65,8 +65,10 @@ export function ReceiptModal({ isOpen, onClose, sale }: ReceiptModalProps) {
                     <div className="w-11 h-11 rounded-full bg-white/15 flex items-center justify-center mx-auto mb-3">
                         <Receipt className="h-5 w-5 text-white" />
                     </div>
-                    <p className="text-xs font-semibold uppercase tracking-widest text-white/70 mb-0.5">Sale Complete</p>
-                    <h2 className="text-lg font-bold text-white">₹{sale.totalAmount.toLocaleString('en-IN')}</h2>
+                    <p className="text-xs font-semibold uppercase tracking-widest text-white/70 mb-0.5">
+                        Sale Complete {sale.isGstApplied ? '• Incl. GST (5%)' : ''}
+                    </p>
+                    <h2 className="text-lg font-bold text-white">₹{sale.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h2>
                     <p className="text-white/60 text-[11px] font-mono mt-1">{sale.invoiceNumber}</p>
                 </div>
 

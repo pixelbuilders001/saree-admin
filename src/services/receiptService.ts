@@ -106,16 +106,30 @@ export const receiptService = {
 
         const finalY = (doc as any).lastAutoTable.finalY + 10;
 
-        // Total
+        let currentY = finalY;
+        if (sale.isGstApplied) {
+            doc.setFontSize(10);
+            doc.setFont("helvetica", "normal");
+            drawText(`Taxable Amount: Rs. ${(sale.taxableAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, 190, currentY, { align: 'right' });
+            currentY += 6;
+            drawText(`CGST @ ${sale.cgstRate || 2.5}%: Rs. ${(sale.cgstAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, 190, currentY, { align: 'right' });
+            currentY += 6;
+            drawText(`SGST @ ${sale.sgstRate || 2.5}%: Rs. ${(sale.sgstAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, 190, currentY, { align: 'right' });
+            currentY += 6;
+            drawText(`Total GST: Rs. ${(sale.totalGst || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, 190, currentY, { align: 'right' });
+            currentY += 8;
+        }
+
+        // Total / Grand Total
         doc.setFontSize(14);
         doc.setFont("helvetica", "bold");
-        drawText(`Total Amount: Rs. ${sale.totalAmount.toLocaleString()}`, 190, finalY, { align: 'right' });
+        drawText(`${sale.isGstApplied ? 'Grand Total' : 'Total Amount'}: Rs. ${sale.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, 190, currentY, { align: 'right' });
 
         // Footer
         doc.setFontSize(10);
         doc.setFont("helvetica", "italic");
         doc.setTextColor(150);
-        drawText("Thank you for shopping with us!", 105, finalY + 30, { align: 'center' });
+        drawText("Thank you for shopping with us!", 105, currentY + 25, { align: 'center' });
 
         return doc;
     },

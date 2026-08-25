@@ -48,6 +48,7 @@ import { settingsService, type UpiSetting } from '@/services/settingsService';
 import { staffService, type Staff } from '@/services/staffService';
 import { supabase } from '@/lib/supabase';
 import { motion } from 'framer-motion';
+import { calculateGst } from '@/config/gstConfig';
 
 export default function SalesPage() {
     const customerNameInputRef = React.useRef<HTMLInputElement>(null);
@@ -66,6 +67,7 @@ export default function SalesPage() {
     const [highlightedIndex, setHighlightedIndex] = React.useState<number>(0);
     const [manualDiscountType, setManualDiscountType] = React.useState<'amount' | 'percentage'>('percentage');
     const [manualDiscountInput, setManualDiscountInput] = React.useState<string>('0');
+    const [isGstApplied, setIsGstApplied] = React.useState<boolean>(false);
     const [editingCartIndex, setEditingCartIndex] = React.useState<number | null>(null);
     const [editingSellingPriceInput, setEditingSellingPriceInput] = React.useState<string>('');
     const [cart, setCart] = React.useState<Array<{
@@ -142,6 +144,7 @@ export default function SalesPage() {
             setCustomerMobile('');
             setAppliedVoucher(null);
             setVoucherCodeInput('');
+            setIsGstApplied(false);
             setLastCompletedSale(data);
             setIsReceiptModalOpen(true);
         },
@@ -279,7 +282,10 @@ export default function SalesPage() {
     const totalDiscountAmount = itemDiscountAmount + manualBillDiscountAmount;
     const overallDiscountPercentage = subtotal > 0 ? parseFloat(((totalDiscountAmount / subtotal) * 100).toFixed(2)) : 0;
 
-    const cartTotal = Math.max(0, subtotal - totalDiscountAmount);
+    const taxableAmount = Math.max(0, subtotal - totalDiscountAmount);
+    const gstData = calculateGst(taxableAmount, isGstApplied);
+
+    const cartTotal = gstData.grandTotal;
     const appliedVoucherAmount = appliedVoucher ? Math.min(appliedVoucher.amount, Math.max(0, cartTotal)) : 0;
     const netPayable = Math.max(0, cartTotal - appliedVoucherAmount);
 
@@ -539,6 +545,7 @@ export default function SalesPage() {
             discountPercentage: billDiscountPercent,
             voucherCode: appliedVoucher?.code,
             voucherAmount: appliedVoucherAmount,
+            isGstApplied,
         });
     };
 
@@ -835,45 +842,45 @@ export default function SalesPage() {
                 initial={{ opacity: 0, x: 16 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.3, delay: 0.05 }}
-                className="w-full lg:w-[360px] xl:w-[410px] shrink-0 flex flex-col bg-white rounded-xl border border-gold/20 shadow-lg overflow-hidden h-full"
+                className="w-full lg:w-[380px] xl:w-[420px] shrink-0 flex flex-col bg-white rounded-xl border border-gold/20 shadow-lg overflow-hidden h-full"
             >
                 {/* Header */}
-                <div className="bg-gradient-to-r from-maroon via-maroon-dark to-maroon-dark px-4 py-3.5 flex items-center justify-between text-gold border-b border-gold/20">
-                    <div className="flex items-center gap-2.5">
-                        <div className="p-1.5 bg-gold/15 rounded-lg border border-gold/25">
-                            <ShoppingCart className="h-4.5 w-4.5" />
+                <div className="bg-gradient-to-r from-maroon via-maroon-dark to-maroon-dark px-3.5 py-2.5 flex items-center justify-between text-gold border-b border-gold/20 shrink-0">
+                    <div className="flex items-center gap-2">
+                        <div className="p-1 bg-gold/15 rounded-md border border-gold/25">
+                            <ShoppingCart className="h-4 w-4 text-gold" />
                         </div>
                         <div>
                             <div className="font-bold text-xs uppercase tracking-wider leading-none">Checkout Terminal</div>
                             <div className="text-[9px] text-gold/60 font-mono mt-0.5">POS Billing & Payments</div>
                         </div>
                         {remoteConnected && (
-                            <span className="flex items-center gap-1 bg-green-500/15 text-green-300 border border-green-500/30 px-2 py-0.5 rounded-full text-[9px] font-semibold leading-none animate-pulse ml-1">
+                            <span className="flex items-center gap-1 bg-green-500/15 text-green-300 border border-green-500/30 px-1.5 py-0.5 rounded-full text-[9px] font-semibold leading-none animate-pulse ml-1">
                                 <span className="h-1.5 w-1.5 rounded-full bg-green-400"></span>
                                 Live
                             </span>
                         )}
                     </div>
-                    <span className="text-[10px] font-mono bg-gold/15 text-gold-light px-2 py-1 rounded-md border border-gold/20">
-                        ID: {sessionId}
-                    </span>
+                    {cart.length > 0 && (
+                        <button
+                            type="button"
+                            onClick={() => setCart([])}
+                            className="text-[10px] text-gold/80 hover:text-white bg-gold/10 hover:bg-gold/20 border border-gold/20 px-2 py-0.5 rounded transition-colors font-medium flex items-center gap-1"
+                            title="Clear all cart items"
+                        >
+                            <Trash2 className="h-3 w-3" />
+                            Clear
+                        </button>
+                    )}
                 </div>
 
-                {/* Customer Details Form */}
-                <div className="px-3.5 pt-3 pb-2.5 border-b border-gray-100 bg-gradient-to-b from-cream/20 to-transparent shrink-0">
-                    {/* Row 1: Mobile + Name */}
-                    <div className="flex items-center gap-1.5 mb-2">
-                        <div className="p-1 rounded-md bg-maroon/5 text-maroon">
-                            <UserRound className="h-3.5 w-3.5" />
-                        </div>
-                        <span className="text-[10px] font-bold text-maroon uppercase tracking-wider">Customer</span>
-                        <span className="text-[9px] text-gray-400 ml-auto">Auto-search on 10 digits</span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 mb-2">
+                {/* Customer & Staff Details Form (Compact) */}
+                <div className="px-3 py-2 border-b border-gray-100 bg-stone-50/50 space-y-1.5 shrink-0">
+                    <div className="grid grid-cols-2 gap-1.5">
                         <div className="relative">
                             <Input
-                                placeholder="Mobile Number"
-                                className="h-9 text-xs border-gold/25 focus-visible:ring-maroon pr-8 placeholder:text-gray-400 bg-white shadow-sm"
+                                placeholder="Mobile (10 digits)"
+                                className="h-8 text-xs border-gold/25 focus-visible:ring-maroon pr-8 placeholder:text-gray-400 bg-white shadow-xs"
                                 value={customerMobile}
                                 onChange={(e) => {
                                     const val = e.target.value.replace(/\D/g, '').slice(0, 10);
@@ -885,7 +892,7 @@ export default function SalesPage() {
                                 <button
                                     type="button"
                                     onClick={() => handleCustomerSearch()}
-                                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-maroon hover:text-maroon-dark font-bold"
+                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-maroon hover:text-maroon-dark font-bold"
                                 >
                                     Find
                                 </button>
@@ -894,23 +901,19 @@ export default function SalesPage() {
                         <Input
                             ref={customerNameInputRef}
                             placeholder="Customer Name"
-                            className="h-9 text-xs border-gold/25 focus-visible:ring-maroon placeholder:text-gray-400 bg-white shadow-sm"
+                            className="h-8 text-xs border-gold/25 focus-visible:ring-maroon placeholder:text-gray-400 bg-white shadow-xs"
                             value={customerName}
                             onChange={(e) => setCustomerName(e.target.value)}
                         />
                     </div>
 
-                    {/* Row 2: Salesperson */}
-                    <div className="flex items-center gap-2">
-                        <div className="p-1 rounded-md bg-maroon/5 text-maroon shrink-0">
-                            <UserCheck className="h-3.5 w-3.5" />
-                        </div>
+                    <div className="flex items-center gap-1.5">
                         <select
                             value={selectedStaffId}
                             onChange={(e) => setSelectedStaffId(e.target.value)}
                             className={cn(
-                                "flex-1 h-9 text-xs border rounded-lg px-2.5 bg-white focus:outline-none focus:ring-1 focus:ring-maroon/30 shadow-sm",
-                                selectedStaffId ? "border-gold/25 text-gray-700" : "border-amber-300 text-amber-700"
+                                "flex-1 h-8 text-xs border rounded-lg px-2 bg-white focus:outline-none focus:ring-1 focus:ring-maroon/30 shadow-xs",
+                                selectedStaffId ? "border-gold/25 text-gray-700 font-medium" : "border-amber-300 text-amber-700 font-bold"
                             )}
                         >
                             <option value="">— Assign Salesperson * —</option>
@@ -923,43 +926,42 @@ export default function SalesPage() {
                     </div>
                 </div>
 
-                {/* Cart Items List */}
-                <div className="flex-1 min-h-0 overflow-y-auto px-3.5 py-2.5 space-y-2 bg-gray-50/30">
-                    <div className="flex items-center justify-between text-[10px] text-gray-500 font-semibold pb-2 border-b border-gray-200">
+                {/* Cart Items List (FLEX-1, MAXIMUM SPACE) */}
+                <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-1.5 bg-gray-50/30">
+                    <div className="flex items-center justify-between text-[10px] text-gray-500 font-semibold pb-1.5 border-b border-gray-200 sticky top-0 bg-gray-50/90 backdrop-blur-xs z-10">
                         <span className="inline-flex items-center gap-1.5">
-                            <ReceiptText className="h-3.5 w-3.5 text-maroon/60" />
-                            Bill Items
+                            <ReceiptText className="h-3.5 w-3.5 text-maroon/70" />
+                            Cart Items
                         </span>
                         <span className="inline-flex items-center gap-1">
-                            <span className="bg-maroon/10 text-maroon px-2 py-0.5 rounded-full font-bold font-mono">{cart.length}</span>
-                            Amount
+                            <span className="bg-maroon/10 text-maroon px-2 py-0.5 rounded-full font-bold font-mono text-[10px]">{cart.length} items</span>
                         </span>
                     </div>
 
                     {cart.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center text-gray-400 py-10 space-y-2">
-                            <div className="p-4 bg-white border border-dashed border-gray-200 rounded-full">
-                                <ShoppingCart className="h-8 w-8 text-gray-300 stroke-1" />
+                        <div className="flex flex-col items-center justify-center text-gray-400 h-full py-12 space-y-2">
+                            <div className="p-3.5 bg-white border border-dashed border-gray-200 rounded-full">
+                                <ShoppingCart className="h-7 w-7 text-gray-300 stroke-1" />
                             </div>
-                            <span className="text-sm font-medium text-gray-500">Cart is empty</span>
-                            <span className="text-[10px] text-center max-w-[200px] text-gray-400">
-                                Scan a barcode or tap a product from the catalogue.
+                            <span className="text-xs font-medium text-gray-500">Cart is empty</span>
+                            <span className="text-[10px] text-center max-w-[180px] text-gray-400">
+                                Scan a barcode or tap a saree from catalogue.
                             </span>
                         </div>
                     ) : (
                         cart.map((item, index) => (
                             <motion.div
                                 key={item.sareeId}
-                                initial={{ opacity: 0, x: -8 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                transition={{ duration: 0.15 }}
-                                className="flex flex-col gap-1.5 border border-gray-100 rounded-lg bg-white p-2 shadow-sm"
+                                initial={{ opacity: 0, y: 4 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.12 }}
+                                className="flex flex-col gap-1 border border-gray-100 rounded-lg bg-white p-2 shadow-xs hover:border-gold/30 transition-colors"
                             >
-                                <div className="flex gap-2.5 items-center justify-between">
+                                <div className="flex gap-2 items-center justify-between">
                                     <div className="flex-1 min-w-0">
-                                        <div className="font-semibold text-xs text-gray-800 truncate">{item.sareeName}</div>
+                                        <div className="font-bold text-xs text-gray-800 truncate">{item.sareeName}</div>
                                         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[9px] text-gray-400 mt-0.5">
-                                            <span className="font-mono bg-gray-50 px-1 py-0.5 rounded">{item.sareeId}</span>
+                                            <span className="font-mono bg-gray-50 px-1 py-0.2 rounded border border-gray-100">{item.sareeId}</span>
                                             {item.mrp > item.sellingPrice ? (
                                                 <span className="text-red-500 font-semibold">
                                                     MRP <span className="line-through">₹{item.mrp}</span> (-₹{item.discountAmount} / {item.discountPercentage}%)
@@ -969,12 +971,13 @@ export default function SalesPage() {
                                             )}
                                         </div>
                                     </div>
+
                                     <div className="flex items-center gap-1.5 shrink-0">
                                         {/* Quantity Controls */}
-                                        <div className="flex items-center gap-0.5 bg-gray-50 border border-gray-200 rounded-lg p-0.5">
+                                        <div className="flex items-center gap-0.5 bg-stone-50 border border-stone-200 rounded-md p-0.5">
                                             <button
                                                 type="button"
-                                                className="w-5 h-5 rounded-md hover:bg-white flex items-center justify-center text-gray-600 active:scale-90 transition-all"
+                                                className="w-4 h-4 rounded hover:bg-white flex items-center justify-center text-gray-600 active:scale-90 transition-all"
                                                 onClick={() => {
                                                     const newCart = [...cart];
                                                     if (newCart[index].quantity > 1) {
@@ -987,10 +990,10 @@ export default function SalesPage() {
                                             >
                                                 <Minus className="h-2.5 w-2.5" />
                                             </button>
-                                            <span className="w-5 text-center text-xs font-bold text-gray-800">{item.quantity}</span>
+                                            <span className="w-4 text-center text-xs font-bold font-mono text-gray-800">{item.quantity}</span>
                                             <button
                                                 type="button"
-                                                className="w-5 h-5 rounded-md hover:bg-white flex items-center justify-center text-gray-600 active:scale-90 transition-all"
+                                                className="w-4 h-4 rounded hover:bg-white flex items-center justify-center text-gray-600 active:scale-90 transition-all"
                                                 onClick={() => {
                                                     const limit = sarees?.find(s => s.id === item.sareeId)?.stock || 999;
                                                     const newCart = [...cart];
@@ -1006,12 +1009,12 @@ export default function SalesPage() {
                                             </button>
                                         </div>
 
-                                        {/* Price & Edit button */}
+                                        {/* Price & Actions */}
                                         <div className="flex items-center gap-1">
-                                            <span className="font-bold text-xs text-maroon w-16 text-right font-mono">₹{(item.sellingPrice * item.quantity).toLocaleString()}</span>
+                                            <span className="font-bold text-xs text-maroon w-14 text-right font-mono">₹{(item.sellingPrice * item.quantity).toLocaleString()}</span>
                                             <button
                                                 type="button"
-                                                title="Edit item selling price / discount"
+                                                title="Edit item price / discount"
                                                 onClick={() => {
                                                     if (editingCartIndex === index) {
                                                         setEditingCartIndex(null);
@@ -1021,7 +1024,7 @@ export default function SalesPage() {
                                                     }
                                                 }}
                                                 className={cn(
-                                                    "p-1 rounded-md transition-colors text-gray-400 hover:text-maroon hover:bg-gold/10",
+                                                    "p-0.5 rounded transition-colors text-gray-400 hover:text-maroon hover:bg-gold/10",
                                                     editingCartIndex === index && "bg-maroon text-gold hover:bg-maroon"
                                                 )}
                                             >
@@ -1029,7 +1032,7 @@ export default function SalesPage() {
                                             </button>
                                             <button
                                                 type="button"
-                                                className="text-gray-300 hover:text-red-500 transition-colors p-1 hover:bg-red-50 rounded-md"
+                                                className="text-gray-300 hover:text-red-500 transition-colors p-0.5 hover:bg-red-50 rounded"
                                                 onClick={() => handleRemoveFromCart(index)}
                                             >
                                                 <Trash2 className="h-3.5 w-3.5" />
@@ -1040,16 +1043,16 @@ export default function SalesPage() {
 
                                 {/* Inline Item Price Edit Box */}
                                 {editingCartIndex === index && (
-                                    <div className="pt-1.5 mt-1 border-t border-dashed border-gray-200 flex items-center justify-between gap-2 bg-cream/20 p-1.5 rounded-md">
+                                    <div className="pt-1 mt-1 border-t border-dashed border-gray-200 flex items-center justify-between gap-2 bg-cream/20 p-1 rounded">
                                         <span className="text-[10px] font-bold text-gray-600 shrink-0">Unit Price:</span>
-                                        <div className="flex items-center gap-1.5 flex-1">
+                                        <div className="flex items-center gap-1 flex-1">
                                             <div className="relative flex-1">
-                                                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 font-bold">₹</span>
+                                                <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 font-bold">₹</span>
                                                 <input
                                                     type="number"
                                                     value={editingSellingPriceInput}
                                                     onChange={(e) => setEditingSellingPriceInput(e.target.value)}
-                                                    className="w-full h-7 pl-5 pr-2 text-xs font-mono font-bold border border-gold/40 rounded bg-white focus:outline-none focus:ring-1 focus:ring-maroon"
+                                                    className="w-full h-6 pl-4 pr-1 text-xs font-mono font-bold border border-gold/40 rounded bg-white focus:outline-none focus:ring-1 focus:ring-maroon"
                                                     placeholder="Price"
                                                     autoFocus
                                                 />
@@ -1057,14 +1060,14 @@ export default function SalesPage() {
                                             <button
                                                 type="button"
                                                 onClick={() => handleSaveItemPrice(index, parseFloat(editingSellingPriceInput))}
-                                                className="px-2 py-1 bg-maroon text-gold text-[10px] font-bold rounded hover:bg-maroon-dark transition-colors"
+                                                className="px-2 py-0.5 bg-maroon text-gold text-[10px] font-bold rounded hover:bg-maroon-dark transition-colors"
                                             >
                                                 Save
                                             </button>
                                             <button
                                                 type="button"
                                                 onClick={() => setEditingCartIndex(null)}
-                                                className="px-2 py-1 text-gray-400 hover:text-gray-600 text-[10px]"
+                                                className="px-1.5 py-0.5 text-gray-400 hover:text-gray-600 text-[10px]"
                                             >
                                                 Cancel
                                             </button>
@@ -1076,7 +1079,197 @@ export default function SalesPage() {
                     )}
                 </div>
 
+                {/* Cart Financial Breakdown & Checkout Section (Fixed at Bottom) */}
+                <div className="border-t border-stone-200 bg-stone-50/80 p-3 space-y-2 shrink-0 shadow-[0_-4px_16px_rgba(0,0,0,0.05)]">
+                    
+                    {/* Controls Row: Payment Mode & GST Toggle */}
+                    <div className="grid grid-cols-2 gap-2">
+                        {/* Payment Mode Selector */}
+                        <div className="flex items-center bg-white border border-stone-200 rounded-lg p-0.5 shadow-xs">
+                            {(['cash', 'card', 'upi'] as const).map((mode) => (
+                                <button
+                                    key={mode}
+                                    type="button"
+                                    onClick={() => setPaymentMode(mode)}
+                                    className={cn(
+                                        "flex-1 flex items-center justify-center gap-1 py-1 rounded-md text-[10px] font-bold transition-all capitalize select-none h-6.5",
+                                        paymentMode === mode
+                                            ? "bg-maroon text-gold shadow-xs"
+                                            : "text-stone-600 hover:bg-stone-100"
+                                    )}
+                                >
+                                    {mode === 'cash' && <Coins className="h-2.5 w-2.5" />}
+                                    {mode === 'card' && <CreditCard className="h-2.5 w-2.5" />}
+                                    {mode === 'upi' && <QrCode className="h-2.5 w-2.5" />}
+                                    {mode}
+                                </button>
+                            ))}
+                        </div>
 
+                        {/* GST Toggle Control */}
+                        <div className="flex items-center justify-between bg-white border border-stone-200 rounded-lg px-2 py-0.5 shadow-xs">
+                            <span className="text-[10px] font-bold text-stone-700">Apply GST</span>
+                            <button
+                                type="button"
+                                onClick={() => setIsGstApplied(prev => !prev)}
+                                className={cn(
+                                    "flex items-center gap-1 px-2 py-0.5 rounded border text-[10px] font-bold transition-all select-none h-5.5",
+                                    isGstApplied
+                                        ? "bg-emerald-600 text-white border-emerald-700"
+                                        : "bg-stone-100 text-stone-500 border-stone-200 hover:bg-stone-200"
+                                )}
+                            >
+                                <span className={cn("w-1.5 h-1.5 rounded-full", isGstApplied ? "bg-white animate-pulse" : "bg-stone-400")} />
+                                <span>{isGstApplied ? "5% [ ON ]" : "OFF"}</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Controls Row: Extra Discount & Store Voucher */}
+                    <div className="grid grid-cols-2 gap-2">
+                        {/* Extra Discount Input */}
+                        <div className="flex items-center justify-between bg-white border border-stone-200 rounded-lg px-2 py-1 shadow-xs">
+                            <span className="text-[10px] font-bold text-maroon shrink-0 flex items-center gap-0.5">
+                                <Edit2 className="h-2.5 w-2.5" /> Extra Disc
+                            </span>
+                            <div className="flex items-center gap-1">
+                                <input
+                                    type="number"
+                                    min="0"
+                                    value={manualDiscountInput}
+                                    onChange={(e) => setManualDiscountInput(e.target.value)}
+                                    className="w-10 h-5 text-xs font-mono font-bold border border-amber-300 rounded bg-amber-50/80 text-center text-maroon focus:outline-none focus:ring-1 focus:ring-maroon"
+                                    placeholder="0"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setManualDiscountType(prev => prev === 'percentage' ? 'amount' : 'percentage')}
+                                    className="text-[9px] font-bold bg-maroon text-gold hover:bg-maroon-dark px-1.5 h-5 rounded font-mono transition-colors flex items-center justify-center"
+                                    title="Toggle % or ₹"
+                                >
+                                    {manualDiscountType === 'percentage' ? '%' : '₹'}
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Store Voucher Input / Badge */}
+                        <div className="flex items-center bg-white border border-stone-200 rounded-lg p-1 shadow-xs">
+                            {appliedVoucher ? (
+                                <div className="flex items-center justify-between w-full text-[10px] bg-amber-50 rounded border border-amber-200 px-1.5 py-0.5 h-5.5">
+                                    <span className="font-bold text-amber-900 font-mono truncate">{appliedVoucher.code} (-₹{appliedVoucherAmount})</span>
+                                    <button
+                                        type="button"
+                                        onClick={handleClearVoucher}
+                                        className="text-[9px] text-red-600 hover:text-red-800 font-bold uppercase ml-1 shrink-0"
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="flex items-center gap-1 w-full">
+                                    <input
+                                        type="text"
+                                        placeholder="Voucher Code"
+                                        value={voucherCodeInput}
+                                        onChange={(e) => setVoucherCodeInput(e.target.value.toUpperCase())}
+                                        className="w-full text-[10px] border border-stone-200 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-maroon uppercase font-mono h-5.5 bg-white text-stone-800"
+                                        onKeyDown={(e) => e.key === 'Enter' && handleApplyVoucher()}
+                                    />
+                                    <button
+                                        type="button"
+                                        disabled={isCheckingVoucher || !voucherCodeInput.trim()}
+                                        onClick={handleApplyVoucher}
+                                        className="bg-maroon hover:bg-maroon-dark text-gold disabled:opacity-50 text-[9px] font-bold px-2 rounded transition-colors h-5.5 uppercase shrink-0"
+                                    >
+                                        {isCheckingVoucher ? '...' : 'APPLY'}
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Complete Price Breakup Summary */}
+                    <div className="bg-white rounded-lg border border-stone-200/90 p-2.5 text-xs space-y-1 shadow-xs">
+                        <div className="flex justify-between text-stone-600">
+                            <span>Subtotal (MRP)</span>
+                            <span className="font-mono font-medium">₹{subtotal.toLocaleString('en-IN')}</span>
+                        </div>
+                        {itemDiscountAmount > 0 && (
+                            <div className="flex justify-between text-emerald-700 text-[11px]">
+                                <span>Item Discount</span>
+                                <span className="font-mono font-medium">-₹{itemDiscountAmount.toLocaleString('en-IN')}</span>
+                            </div>
+                        )}
+                        {totalDiscountAmount > itemDiscountAmount && (
+                            <div className="flex justify-between text-amber-700 text-[11px]">
+                                <span>Extra Discount</span>
+                                <span className="font-mono font-medium">-₹{(totalDiscountAmount - itemDiscountAmount).toLocaleString('en-IN')}</span>
+                            </div>
+                        )}
+                        {overallDiscountPercentage > 0 && (
+                            <div className="flex justify-between text-emerald-800 text-[10px] font-semibold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                <span>Total Savings</span>
+                                <span className="font-mono">-₹{totalDiscountAmount.toLocaleString('en-IN')} ({overallDiscountPercentage}%)</span>
+                            </div>
+                        )}
+
+                        {isGstApplied && (
+                            <div className="pt-1 mt-1 border-t border-stone-100 space-y-0.5">
+                                <div className="flex justify-between text-stone-700 font-semibold text-[11px]">
+                                    <span>Taxable Amount</span>
+                                    <span className="font-mono">₹{gstData.taxableAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                </div>
+                                <div className="flex justify-between text-stone-500 text-[10px] pl-1.5">
+                                    <span>CGST (2.5%) + SGST (2.5%)</span>
+                                    <span className="font-mono">₹{gstData.totalGst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                </div>
+                            </div>
+                        )}
+
+                        {appliedVoucherAmount > 0 && (
+                            <div className="flex justify-between text-amber-800 text-[11px] pt-1 border-t border-amber-100">
+                                <span>Voucher Redeem</span>
+                                <span className="font-mono">-₹{appliedVoucherAmount.toLocaleString('en-IN')}</span>
+                            </div>
+                        )}
+
+                        <div className="flex justify-between items-center text-maroon font-bold text-base pt-1.5 border-t border-stone-200">
+                            <span>Net Payable</span>
+                            <span className="font-mono font-black text-lg text-maroon">
+                                ₹{netPayable.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                        </div>
+                    </div>
+
+                    {/* Primary Checkout Button */}
+                    <Button
+                        type="button"
+                        disabled={cart.length === 0 || !selectedStaffId || createSaleMutation.isPending}
+                        onClick={handleCheckoutClick}
+                        className={cn(
+                            "w-full h-11 bg-gradient-to-r from-maroon via-maroon-dark to-maroon hover:from-maroon-dark hover:to-maroon text-gold font-bold text-xs uppercase tracking-wider gap-2 shadow-md shadow-maroon/20 rounded-xl transition-all active:scale-[0.98] duration-100",
+                            (cart.length === 0 || !selectedStaffId || createSaleMutation.isPending) && "opacity-60 shadow-none"
+                        )}
+                    >
+                        {createSaleMutation.isPending ? (
+                            <>
+                                <Loader2 className="h-4 w-4 animate-spin text-gold" />
+                                Processing...
+                            </>
+                        ) : paymentMode === 'upi' ? (
+                            <>
+                                <QrCode className="h-4 w-4 text-gold" />
+                                <span>Pay via UPI &amp; Generate QR</span>
+                            </>
+                        ) : (
+                            <>
+                                <CheckCircle2 className="h-4 w-4 text-gold" />
+                                <span>Finalize Bill &amp; Print Receipt</span>
+                            </>
+                        )}
+                    </Button>
+
+                </div>
 
                 {/* Modals & Dialog Components */}
                 <ReceiptModal
@@ -1187,166 +1380,6 @@ export default function SalesPage() {
                 </Dialog>
             </motion.div>
             </div>
-
-            {/* Floating Bottom Billing Bar — modern POS footer */}
-            <motion.div
-                initial={{ opacity: 0, y: 24 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.35, ease: 'easeOut' }}
-                className="shrink-0"
-            >
-                <div className="rounded-2xl border border-gold/30 bg-white shadow-[0_-8px_32px_-8px_rgba(128,0,32,0.22)] p-3 sm:px-5 sm:py-3.5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                    
-                    {/* Left: Payment mode + Voucher */}
-                    <div className="flex flex-wrap items-center gap-3">
-                        {/* Payment Mode Selector */}
-                        <div className="flex items-center gap-2 bg-stone-50 border border-stone-200/80 rounded-xl px-2.5 py-1.5">
-                            <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider shrink-0">Pay via</span>
-                            <div className="flex items-center gap-1">
-                                {(['cash', 'card', 'upi'] as const).map((mode) => (
-                                    <button
-                                        key={mode}
-                                        type="button"
-                                        onClick={() => setPaymentMode(mode)}
-                                        className={cn(
-                                            "flex items-center justify-center gap-1 px-2.5 py-1 rounded-lg border text-xs font-bold transition-all capitalize select-none h-7",
-                                            paymentMode === mode
-                                                ? "border-maroon bg-gradient-to-r from-maroon to-maroon-dark text-gold shadow-sm shadow-maroon/20"
-                                                : "border-stone-200 bg-white text-stone-600 hover:bg-stone-100"
-                                        )}
-                                    >
-                                        {mode === 'cash' && <Coins className="h-3 w-3" />}
-                                        {mode === 'card' && <CreditCard className="h-3 w-3" />}
-                                        {mode === 'upi' && <QrCode className="h-3 w-3" />}
-                                        {mode}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* Store Credit Voucher Input / Applied Badge */}
-                        <div className="flex items-center gap-1.5 bg-stone-50 border border-stone-200/80 rounded-xl p-1.5">
-                            {appliedVoucher ? (
-                                <div className="flex items-center justify-between gap-2 text-xs bg-amber-50 rounded-lg border border-amber-200 px-2.5 py-0.5 h-7">
-                                    <div className="flex items-center gap-1 min-w-0">
-                                        <BadgeCheck className="h-3.5 w-3.5 text-amber-700 shrink-0" />
-                                        <span className="font-bold text-amber-900 font-mono text-xs truncate max-w-[100px]">{appliedVoucher.code}</span>
-                                    </div>
-                                    <div className="flex items-center gap-1.5 shrink-0">
-                                        <span className="font-bold text-amber-700 font-mono text-xs">-₹{appliedVoucherAmount.toLocaleString()}</span>
-                                        <button
-                                            type="button"
-                                            onClick={handleClearVoucher}
-                                            className="text-[10px] text-red-600 hover:text-red-800 font-bold uppercase ml-1"
-                                        >
-                                            Remove
-                                        </button>
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="flex items-center gap-1">
-                                    <input
-                                        type="text"
-                                        placeholder="Voucher Code"
-                                        value={voucherCodeInput}
-                                        onChange={(e) => setVoucherCodeInput(e.target.value.toUpperCase())}
-                                        className="w-32 text-xs border border-stone-200 rounded-lg px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-maroon uppercase font-mono h-7 bg-white text-stone-800"
-                                        onKeyDown={(e) => e.key === 'Enter' && handleApplyVoucher()}
-                                    />
-                                    <button
-                                        type="button"
-                                        disabled={isCheckingVoucher || !voucherCodeInput.trim()}
-                                        onClick={handleApplyVoucher}
-                                        className="bg-maroon hover:bg-maroon-dark text-gold disabled:opacity-50 text-[10px] font-bold px-2.5 rounded-lg transition-colors h-7 uppercase tracking-wider shrink-0"
-                                    >
-                                        {isCheckingVoucher ? '...' : 'APPLY'}
-                                    </button>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Middle: Clear Price Breakup Display */}
-                    <div className="flex items-center gap-3 flex-wrap text-xs bg-stone-50 border border-stone-200/80 rounded-xl px-3 py-1.5">
-                        {/* Total MRP */}
-                        <div className="flex flex-col justify-center">
-                            <span className="text-[9px] font-bold text-stone-400 uppercase tracking-wider">Total MRP</span>
-                            <span className="font-mono font-semibold text-stone-700 text-xs">₹{subtotal.toLocaleString()}</span>
-                        </div>
-
-                        {/* Item Disc */}
-                        <div className="flex flex-col justify-center border-l border-stone-200 pl-2.5">
-                            <span className="text-[9px] font-bold text-emerald-700 uppercase tracking-wider">Item Disc</span>
-                            <span className="font-mono font-bold text-emerald-700 text-xs">-₹{itemDiscountAmount.toLocaleString()}</span>
-                        </div>
-
-                        {/* Extra Manual Discount Control */}
-                        <div className="flex flex-col justify-center border-l border-stone-200 pl-2.5">
-                            <span className="text-[9px] font-bold text-maroon uppercase tracking-wider flex items-center gap-0.5">
-                                <Edit2 className="h-2.5 w-2.5" /> Extra Disc
-                            </span>
-                            <div className="flex items-center gap-1 mt-0.5">
-                                <input
-                                    type="number"
-                                    min="0"
-                                    value={manualDiscountInput}
-                                    onChange={(e) => setManualDiscountInput(e.target.value)}
-                                    className="w-12 h-5 text-xs font-mono font-bold border border-amber-300 rounded bg-amber-50/80 text-center text-maroon focus:outline-none focus:ring-1 focus:ring-maroon"
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => setManualDiscountType(prev => prev === 'percentage' ? 'amount' : 'percentage')}
-                                    className="text-[10px] font-bold bg-maroon text-gold hover:bg-maroon-dark px-1.5 h-5 rounded font-mono transition-colors flex items-center justify-center"
-                                    title="Toggle % or ₹"
-                                >
-                                    {manualDiscountType === 'percentage' ? '%' : '₹'}
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Overall Savings Badge */}
-                        {overallDiscountPercentage > 0 && (
-                            <div className="flex flex-col justify-center border-l border-stone-200 pl-2.5">
-                                <span className="text-[9px] font-bold text-emerald-700 uppercase tracking-wider">Total Savings</span>
-                                <span className="inline-flex items-center gap-0.5 font-mono font-bold text-emerald-800 text-[11px] bg-emerald-100/90 border border-emerald-300 px-1.5 py-0.2 rounded-full mt-0.5">
-                                    -₹{totalDiscountAmount.toLocaleString()} ({overallDiscountPercentage}%)
-                                </span>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Right: Net Payable & CTA */}
-                    <div className="flex items-center justify-between lg:justify-end gap-3 shrink-0">
-                        <div className="text-right">
-                            <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest block leading-none mb-0.5">Net Payable</span>
-                            <span className="font-mono font-black text-xl text-maroon leading-none block">₹{netPayable.toLocaleString()}</span>
-                        </div>
-
-                        <Button
-                            type="button"
-                            disabled={cart.length === 0 || !selectedStaffId || createSaleMutation.isPending}
-                            onClick={handleCheckoutClick}
-                            className={cn(
-                                "h-10 sm:h-11 px-5 bg-gradient-to-r from-maroon via-maroon-dark to-maroon hover:from-maroon-dark hover:to-maroon text-gold font-bold text-xs uppercase tracking-wider gap-2 shadow-lg shadow-maroon/25 rounded-xl transition-all active:scale-[0.98] duration-100 shrink-0",
-                                (cart.length === 0 || !selectedStaffId || createSaleMutation.isPending) && "opacity-60 shadow-none"
-                            )}
-                        >
-                            {createSaleMutation.isPending ? (
-                                <>
-                                    <Loader2 className="h-4 w-4 animate-spin text-gold" />
-                                    Processing...
-                                </>
-                            ) : (
-                                <>
-                                    <CheckCircle2 className="h-4 w-4 text-gold" />
-                                    <span>Finalize Bill &amp; Print</span>
-                                </>
-                            )}
-                        </Button>
-                    </div>
-
-                </div>
-            </motion.div>
         </div>
     );
 }
