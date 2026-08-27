@@ -432,7 +432,7 @@ export default function WeaversPage() {
                             Add Partner / Vendor
                         </Button>
                     </DialogTrigger>
-                    <DialogContent className="border-gold/20 max-w-sm">
+                    <DialogContent className="border-gold/20 max-w-sm bg-white shadow-2xl z-[60]">
                         <DialogHeader className="border-b border-gold/10 pb-2">
                             <DialogTitle className="text-xs font-bold uppercase tracking-wider text-maroon font-serif flex items-center gap-2">
                                 <Building2 className="h-3.5 w-3.5 text-gold" />
@@ -619,7 +619,7 @@ export default function WeaversPage() {
                                                     Procure Goods
                                                 </Button>
                                             </DialogTrigger>
-                                            <DialogContent className="border-gold/20 max-w-sm">
+                                            <DialogContent className="border-gold/20 max-w-sm bg-white shadow-2xl z-[60]">
                                                 <DialogHeader className="border-b border-gold/10 pb-2">
                                                     <DialogTitle className="text-xs font-bold uppercase tracking-wider text-maroon font-serif flex items-center gap-1.5">
                                                         <FileSpreadsheet className="h-4 w-4 text-gold" />
@@ -627,27 +627,35 @@ export default function WeaversPage() {
                                                     </DialogTitle>
                                                 </DialogHeader>
                                                 <form onSubmit={handleCreatePurchase} className="space-y-3 pt-2">
-                                                    <div className="bg-cream/10 border border-gold/10 p-2 rounded text-[10px] text-maroon">
+                                                    <div className="bg-cream/20 border border-gold/20 p-2 rounded text-[10px] text-maroon font-medium">
                                                         <strong>Vendor:</strong> {selectedWeaver.name}
                                                     </div>
                                                     <div className="space-y-1">
                                                         <label className="text-[9px] font-bold text-gray-500 uppercase font-sans">Select Saree design *</label>
-                                                        <Select value={selectedSareeId} onValueChange={setSelectedSareeId}>
-                                                            <SelectTrigger className="border-gold/25 h-8.5 text-xs focus-visible:ring-maroon">
-                                                                <SelectValue placeholder="Choose saree model" />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                {sarees && sarees.length > 0 ? (
-                                                                    sarees.map(s => (
-                                                                        <SelectItem key={s.id} value={s.id} className="text-xs">
-                                                                            {s.sareeName} (Stock: {s.stock} | Current Cost: ₹{s.purchasePrice})
-                                                                        </SelectItem>
-                                                                    ))
-                                                                ) : (
-                                                                    <SelectItem value="none" disabled>No sarees in catalog</SelectItem>
-                                                                )}
-                                                            </SelectContent>
-                                                        </Select>
+                                                        <select 
+                                                            value={selectedSareeId} 
+                                                            onChange={(e) => {
+                                                                const val = e.target.value;
+                                                                setSelectedSareeId(val);
+                                                                const selectedObj = sarees?.find(s => s.id === val);
+                                                                if (selectedObj) {
+                                                                    setPurchasePriceVal(selectedObj.purchasePrice.toString());
+                                                                }
+                                                            }}
+                                                            className="w-full h-8.5 px-3 text-xs bg-white text-gray-900 border border-gold/30 rounded-md focus:outline-none focus:ring-1 focus:ring-maroon shadow-sm cursor-pointer"
+                                                            style={{ backgroundColor: '#ffffff', color: '#111827' }}
+                                                        >
+                                                            <option value="" disabled style={{ backgroundColor: '#ffffff', color: '#9CA3AF' }}>Choose saree model...</option>
+                                                            {sarees && sarees.length > 0 ? (
+                                                                sarees.map(s => (
+                                                                    <option key={s.id} value={s.id} style={{ backgroundColor: '#ffffff', color: '#111827' }}>
+                                                                        {s.sareeName} (Stock: {s.stock} | Current Cost: ₹{s.purchasePrice})
+                                                                    </option>
+                                                                ))
+                                                            ) : (
+                                                                <option value="" disabled style={{ backgroundColor: '#ffffff', color: '#9CA3AF' }}>No sarees in catalog</option>
+                                                            )}
+                                                        </select>
                                                     </div>
                                                     <div className="grid grid-cols-2 gap-3">
                                                         <div className="space-y-1">
@@ -693,7 +701,7 @@ export default function WeaversPage() {
                                                     Record Payout
                                                 </Button>
                                             </DialogTrigger>
-                                            <DialogContent className="border-gold/20 max-w-sm">
+                                            <DialogContent className="border-gold/20 max-w-sm bg-white shadow-2xl z-[60]">
                                                 <DialogHeader className="border-b border-gold/10 pb-2">
                                                     <DialogTitle className="text-xs font-bold uppercase tracking-wider text-maroon font-serif flex items-center gap-2">
                                                         <Coins className="h-3.5 w-3.5 text-gold" />
@@ -714,18 +722,15 @@ export default function WeaversPage() {
                                                     </div>
                                                     <div className="space-y-1">
                                                         <label className="text-[9px] font-bold text-gray-500 uppercase">Payment Method</label>
-                                                        <Select
+                                                        <select
                                                             value={paymentMethod}
-                                                            onValueChange={(v) => setPaymentMethod(v as 'Cash' | 'UPI')}
+                                                            onChange={(e) => setPaymentMethod(e.target.value as 'Cash' | 'UPI')}
+                                                            className="w-full h-8.5 px-3 text-xs bg-white text-gray-900 border border-gold/30 rounded-md focus:outline-none focus:ring-1 focus:ring-maroon shadow-sm cursor-pointer"
+                                                            style={{ backgroundColor: '#ffffff', color: '#111827' }}
                                                         >
-                                                            <SelectTrigger className="border-gold/25 h-8.5 text-xs focus-visible:ring-maroon">
-                                                                <SelectValue placeholder="Select payment strategy" />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                <SelectItem value="UPI">UPI / Bank Transfer</SelectItem>
-                                                                <SelectItem value="Cash">Cash Payment</SelectItem>
-                                                            </SelectContent>
-                                                        </Select>
+                                                            <option value="UPI" style={{ backgroundColor: '#ffffff', color: '#111827' }}>UPI / Bank Transfer</option>
+                                                            <option value="Cash" style={{ backgroundColor: '#ffffff', color: '#111827' }}>Cash Payment</option>
+                                                        </select>
                                                     </div>
                                                     <div className="space-y-1">
                                                         <label className="text-[9px] font-bold text-gray-500 uppercase">Notes / Transaction Reference</label>
@@ -754,7 +759,7 @@ export default function WeaversPage() {
                                                     <Edit3 className="h-3 w-3" />
                                                 </Button>
                                             </DialogTrigger>
-                                            <DialogContent className="border-gold/20 max-w-sm">
+                                            <DialogContent className="border-gold/20 max-w-sm bg-white shadow-2xl z-[60]">
                                                 <DialogHeader className="border-b border-gold/10 pb-2">
                                                     <DialogTitle className="text-xs font-bold uppercase tracking-wider text-maroon font-serif flex items-center gap-2">
                                                         <Edit3 className="h-3.5 w-3.5 text-gold" />
