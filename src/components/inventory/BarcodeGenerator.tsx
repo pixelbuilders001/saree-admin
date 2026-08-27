@@ -18,6 +18,7 @@ interface BarcodeGeneratorProps {
     sellingPrice?: number;
     code?: string;
     stock?: number;
+    sku?: string;
     isOpen: boolean;
     onClose: () => void;
 }
@@ -29,6 +30,7 @@ export function BarcodeGenerator({
     mrp = 0,
     sellingPrice = 0,
     code = '',
+    sku = '',
     isOpen,
     onClose
 }: BarcodeGeneratorProps) {
@@ -44,8 +46,9 @@ export function BarcodeGenerator({
 
     const nameToShow = sareeName || label || 'Saree Product';
     const barcodeVal = value || code || '';
-    const formattedMrp = mrp ? mrp.toLocaleString('en-IN') : null;
-    const formattedSellingPrice = sellingPrice ? sellingPrice.toLocaleString('en-IN') : null;
+    const displayMrp = mrp && mrp > 0 ? mrp : sellingPrice;
+    const formattedMrp = displayMrp ? displayMrp.toLocaleString('en-IN') : '0';
+    const skuToShow = sku || code || '';
 
     const handlePrint = () => {
         const content = printRef.current;
@@ -140,27 +143,26 @@ export function BarcodeGenerator({
                             line-height: 1.15;
                             max-height: 23px;
                             overflow: hidden;
-                            margin-bottom: 3px;
+                            margin-bottom: 2px;
                             word-break: break-word;
+                        }
+                        .sku-text {
+                            font-size: 8.5px;
+                            font-weight: 600;
+                            color: #475569;
+                            font-family: monospace;
+                            margin-bottom: 2px;
                         }
                         .price-container {
                             display: flex;
                             align-items: center;
                             justify-content: center;
-                            gap: 8px;
-                            font-size: 9.5px;
+                            font-size: 10px;
                             line-height: 1.1;
                             margin-bottom: 2px;
                             width: 100%;
                         }
                         .mrp-text {
-                            color: #475569;
-                            font-size: 9px;
-                        }
-                        .mrp-strike {
-                            text-decoration: line-through;
-                        }
-                        .selling-price-text {
                             font-weight: 700;
                             color: #000000;
                             font-size: 10.5px;
@@ -232,22 +234,20 @@ export function BarcodeGenerator({
                         </div>
 
                         {/* Saree Name */}
-                        <div className="product-title text-[10px] font-semibold text-gray-800 leading-tight mb-1.5 max-w-[200px] line-clamp-2">
+                        <div className="product-title text-[10px] font-semibold text-gray-800 leading-tight mb-1 max-w-[200px] line-clamp-2">
                             {nameToShow}
                         </div>
 
-                        {/* Price Details */}
-                        <div className="price-container flex items-center justify-center gap-2 text-[10px] mb-1 w-full font-mono">
-                            {formattedMrp && (
-                                <span className="mrp-text text-gray-500 text-[9.5px]">
-                                    MRP: <span className={mrp > sellingPrice ? "mrp-strike line-through" : ""}>₹{formattedMrp}</span>
-                                </span>
-                            )}
-                            {formattedSellingPrice && (
-                                <span className="selling-price-text font-bold text-gray-900 text-[10.5px]">
-                                    Price: ₹{formattedSellingPrice}
-                                </span>
-                            )}
+                        {/* SKU Code */}
+                        <div className="sku-text text-[9px] font-mono font-medium text-gray-500 mb-1 tracking-wide">
+                            SKU: {skuToShow}
+                        </div>
+
+                        {/* Price Details - Only MRP */}
+                        <div className="price-container flex items-center justify-center text-[10.5px] mb-1 w-full font-mono font-bold text-gray-900">
+                            <span className="mrp-text">
+                                MRP: ₹{formattedMrp}
+                            </span>
                         </div>
 
                         {/* Barcode Graphic */}

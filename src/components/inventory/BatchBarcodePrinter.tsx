@@ -251,23 +251,22 @@ export function BatchBarcodePrinter({ sarees, isOpen, onClose }: BatchBarcodePri
                             word-break: break-word;
                             margin-bottom: 1px;
                         }
+                        .sku-row {
+                            font-size: 8px;
+                            font-weight: 600;
+                            color: #475569;
+                            font-family: monospace;
+                            margin-bottom: 1px;
+                        }
                         .price-row {
                             display: flex;
                             align-items: center;
                             justify-content: center;
-                            gap: 6px;
                             font-size: 8.5px;
                             line-height: 1.1;
                             width: 100%;
                         }
                         .mrp-text {
-                            color: #475569;
-                            font-size: 8px;
-                        }
-                        .mrp-strike {
-                            text-decoration: line-through;
-                        }
-                        .selling-price-text {
                             font-weight: 800;
                             color: #000000;
                             font-size: 9.5px;
@@ -520,8 +519,9 @@ export function BatchBarcodePrinter({ sarees, isOpen, onClose }: BatchBarcodePri
                                             >
                                                 {pageItems.map(({ saree, copyIndex }, itemIdx) => {
                                                     const barcodeVal = saree.barcode || saree.id;
-                                                    const formattedMrp = saree.mrp && saree.mrp > saree.sellingPrice ? saree.mrp.toLocaleString('en-IN') : null;
-                                                    const formattedSelling = saree.sellingPrice.toLocaleString('en-IN');
+                                                    const displayMrp = saree.mrp && saree.mrp > 0 ? saree.mrp : saree.sellingPrice;
+                                                    const formattedMrp = displayMrp.toLocaleString('en-IN');
+                                                    const skuVal = saree.sku || saree.id;
 
                                                     return (
                                                         <div
@@ -534,11 +534,11 @@ export function BatchBarcodePrinter({ sarees, isOpen, onClose }: BatchBarcodePri
                                                             <div className="text-[8px] font-semibold text-gray-900 leading-tight line-clamp-1 max-w-[120px]">
                                                                 {saree.sareeName}
                                                             </div>
-                                                            <div className="flex items-center justify-center gap-1 text-[7.5px] leading-none my-0.5 font-mono">
-                                                                {formattedMrp && (
-                                                                    <span className="text-gray-400 line-through">₹{formattedMrp}</span>
-                                                                )}
-                                                                <span className="font-bold text-gray-900">₹{formattedSelling}</span>
+                                                            <div className="text-[7.5px] font-mono text-gray-500 font-medium leading-none my-0.5 truncate max-w-[120px]">
+                                                                SKU: {skuVal}
+                                                            </div>
+                                                            <div className="flex items-center justify-center text-[8px] leading-none my-0.5 font-mono font-bold text-gray-900">
+                                                                <span>MRP: ₹{formattedMrp}</span>
                                                             </div>
                                                             <div className="w-full flex justify-center items-center my-0.5">
                                                                 <Barcode
@@ -570,8 +570,9 @@ export function BatchBarcodePrinter({ sarees, isOpen, onClose }: BatchBarcodePri
                         <div key={`print-page-${pageIdx}`} className="print-a4-page-block">
                             {pageItems.map(({ saree, copyIndex }, itemIdx) => {
                                 const barcodeVal = saree.barcode || saree.id;
-                                const formattedMrp = saree.mrp && saree.mrp > saree.sellingPrice ? saree.mrp.toLocaleString('en-IN') : null;
-                                const formattedSelling = saree.sellingPrice.toLocaleString('en-IN');
+                                const displayMrp = saree.mrp && saree.mrp > 0 ? saree.mrp : saree.sellingPrice;
+                                const formattedMrp = displayMrp.toLocaleString('en-IN');
+                                const skuVal = saree.sku || saree.id;
 
                                 return (
                                     <div key={`print-item-${saree.id}-${copyIndex}-${itemIdx}`} className="sticker-card">
@@ -579,11 +580,9 @@ export function BatchBarcodePrinter({ sarees, isOpen, onClose }: BatchBarcodePri
                                             <img src="/logo.png" alt="Logo" className="brand-logo" />
                                         </div>
                                         <div className="product-title">{saree.sareeName}</div>
+                                        <div className="sku-row">SKU: {skuVal}</div>
                                         <div className="price-row">
-                                            {formattedMrp && (
-                                                <span className="mrp-text">MRP: <span className="mrp-strike">₹{formattedMrp}</span></span>
-                                            )}
-                                            <span className="selling-price-text">Price: ₹{formattedSelling}</span>
+                                            <span className="mrp-text">MRP: ₹{formattedMrp}</span>
                                         </div>
                                         <div className="barcode-box">
                                             <Barcode

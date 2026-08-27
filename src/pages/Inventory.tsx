@@ -996,6 +996,7 @@ export default function InventoryPage() {
                 sellingPrice={barcodeToShow?.sellingPrice}
                 code={barcodeToShow?.id}
                 stock={barcodeToShow?.stock}
+                sku={barcodeToShow?.sku}
             />
 
             <BatchBarcodePrinter
