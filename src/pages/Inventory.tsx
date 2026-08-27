@@ -10,9 +10,6 @@ import {
     Edit,
     Trash2,
     Loader2,
-    Eye,
-    EyeOff,
-    Lock,
     Barcode as BarcodeIcon,
     ChevronLeft,
     ChevronRight,
@@ -71,10 +68,6 @@ export default function InventoryPage() {
 
     const [isFormOpen, setIsFormOpen] = React.useState(false);
     const [editingSaree, setEditingSaree] = React.useState<Saree | undefined>();
-    const [visiblePrices, setVisiblePrices] = React.useState<Set<string>>(new Set());
-    const [pendingSareeId, setPendingSareeId] = React.useState<string | null>(null);
-    const [isPasswordDialogOpen, setIsPasswordDialogOpen] = React.useState(false);
-    const [passwordInput, setPasswordInput] = React.useState('');
     const [barcodeToShow, setBarcodeToShow] = React.useState<Saree | null>(null);
     const [isBatchBarcodeOpen, setIsBatchBarcodeOpen] = React.useState(false);
     const [isImportOpen, setIsImportOpen] = React.useState(false);
@@ -332,33 +325,6 @@ export default function InventoryPage() {
                 saree: values,
                 images: imagesToUpload
             });
-        }
-    };
-
-    const handleTogglePurchasePrice = (sareeId: string) => {
-        if (visiblePrices.has(sareeId)) {
-            const next = new Set(visiblePrices);
-            next.delete(sareeId);
-            setVisiblePrices(next);
-        } else {
-            setPendingSareeId(sareeId);
-            setIsPasswordDialogOpen(true);
-        }
-    };
-
-    const verifyPassword = () => {
-        if (passwordInput === '123456') {
-            if (pendingSareeId) {
-                const next = new Set(visiblePrices);
-                next.add(pendingSareeId);
-                setVisiblePrices(next);
-            }
-            setIsPasswordDialogOpen(false);
-            setPendingSareeId(null);
-            setPasswordInput('');
-            toast.success('Access granted');
-        } else {
-            toast.error('Incorrect password');
         }
     };
 
@@ -768,26 +734,8 @@ export default function InventoryPage() {
                                                 </div>
                                             ) : '—'}
                                         </TableCell>
-                                        <TableCell className="py-1 text-xs text-right whitespace-nowrap">
-                                            <div className="flex items-center justify-end gap-1">
-                                                <span className="font-semibold text-gray-500 font-mono text-[11px]">
-                                                    {visiblePrices.has(saree.id)
-                                                        ? `₹${saree.purchasePrice.toLocaleString()}`
-                                                        : '••••••'}
-                                                </span>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="h-5 w-5 text-gray-400 hover:text-maroon p-0 rounded-full"
-                                                    onClick={() => handleTogglePurchasePrice(saree.id)}
-                                                >
-                                                    {visiblePrices.has(saree.id) ? (
-                                                        <EyeOff className="h-3 w-3" />
-                                                    ) : (
-                                                        <Eye className="h-3 w-3" />
-                                                    )}
-                                                </Button>
-                                            </div>
+                                        <TableCell className="py-1 text-xs text-right font-mono font-semibold text-gray-600 whitespace-nowrap">
+                                            ₹{(saree.purchasePrice || 0).toLocaleString()}
                                         </TableCell>
                                         <TableCell className="py-1 text-xs text-right font-bold text-maroon font-mono whitespace-nowrap">
                                             <span className="inline-flex items-center gap-0.5">
@@ -943,46 +891,6 @@ export default function InventoryPage() {
                             onSubmit={handleFormSubmit}
                             onCancel={() => setIsFormOpen(false)}
                         />
-                    </div>
-                </DialogContent>
-            </Dialog>
-
-            <Dialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>
-                <DialogContent className="sm:max-w-sm border-gold/25 shadow-xl p-4">
-                    <DialogHeader className="border-b border-gold/10 pb-2">
-                        <DialogTitle className="flex items-center gap-1.5 text-maroon font-bold text-sm">
-                            <Lock className="h-4 w-4" />
-                            ADMIN ACCESS PERMISSION
-                        </DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-3 pt-2">
-                        <p className="text-xs text-gray-500 leading-normal">
-                            Enter the administrative security PIN to expose original purchase prices.
-                        </p>
-                        <Input
-                            type="password"
-                            placeholder="Security Pin"
-                            className="border-gold/30 h-8 text-xs font-mono"
-                            value={passwordInput}
-                            onChange={(e) => setPasswordInput(e.target.value)}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                    verifyPassword();
-                                }
-                            }}
-                            autoFocus
-                        />
-                        <div className="flex justify-end gap-2 pt-1">
-                            <Button variant="ghost" className="h-8 text-xs hover:bg-gray-100" onClick={() => setIsPasswordDialogOpen(false)}>
-                                Cancel
-                            </Button>
-                            <Button
-                                className="bg-maroon hover:bg-maroon-dark text-gold h-8 text-xs font-bold"
-                                onClick={verifyPassword}
-                            >
-                                VERIFY PIN
-                            </Button>
-                        </div>
                     </div>
                 </DialogContent>
             </Dialog>
