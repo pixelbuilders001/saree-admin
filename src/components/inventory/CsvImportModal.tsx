@@ -12,32 +12,74 @@ import { useQueryClient } from '@tanstack/react-query';
 
 // ── Column map: CSV header → internal field ────────────────────────────────────
 const COL_MAP: Record<string, string> = {
-    'saree_name': 'sareeName', 'name': 'sareeName', 'saree name': 'sareeName',
-    'category': 'category',
-    'fabric': 'fabric',
-    'color': 'color',
+    // Saree Name
+    'saree_name': 'sareeName', 'saree name': 'sareeName', 'name': 'sareeName',
+    'title': 'sareeName', 'item': 'sareeName', 'product': 'sareeName',
+    'product_name': 'sareeName', 'product name': 'sareeName', 'saree': 'sareeName',
+    'item_name': 'sareeName', 'item name': 'sareeName',
+
+    // Category
+    'category': 'category', 'category_name': 'category', 'category name': 'category',
+    'cat': 'category', 'type': 'category',
+
+    // Fabric
+    'fabric': 'fabric', 'material': 'fabric', 'fabric_type': 'fabric', 'fabric type': 'fabric',
+
+    // Color
+    'color': 'color', 'colour': 'color', 'shade': 'color',
+
+    // Purchase Price
     'purchase_price': 'purchasePrice', 'purchase price': 'purchasePrice', 'cost': 'purchasePrice',
+    'cost_price': 'purchasePrice', 'cost price': 'purchasePrice', 'buy_price': 'purchasePrice',
+    'buy price': 'purchasePrice', 'purchase': 'purchasePrice', 'buy': 'purchasePrice',
+
+    // Selling Price
     'selling_price': 'sellingPrice', 'selling price': 'sellingPrice', 'price': 'sellingPrice',
-    'stock': 'stock', 'qty': 'stock', 'quantity': 'stock',
-    'rack_no': 'rackNo', 'rack no': 'rackNo', 'rack': 'rackNo',
-    'barcode': 'barcode',
+    'sale_price': 'sellingPrice', 'sale price': 'sellingPrice', 'rate': 'sellingPrice',
+    'selling': 'sellingPrice', 'mrp_selling': 'sellingPrice',
+
+    // Stock
+    'stock': 'stock', 'qty': 'stock', 'quantity': 'stock', 'count': 'stock', 'units': 'stock',
+
+    // Rack No
+    'rack_no': 'rackNo', 'rack no': 'rackNo', 'rack': 'rackNo', 'location': 'rackNo', 'rack_number': 'rackNo',
+
+    // Barcode
+    'barcode': 'barcode', 'code': 'barcode', 'barcode_no': 'barcode',
+
+    // Status
     'status': 'status',
+
+    // SKU
     'sku': 'sku', 'sku_code': 'sku', 'sku code': 'sku',
+
+    // Design Code / Variant Group
+    'design_code': 'designCode', 'design code': 'designCode', 'design': 'designCode',
+    'group_id': 'designCode', 'group id': 'designCode', 'variant_code': 'designCode',
+    'variant code': 'designCode', 'style_code': 'designCode', 'style code': 'designCode',
+
+    // HSN Code
+    'hsn_code': 'hsnCode', 'hsn code': 'hsnCode', 'hsn': 'hsnCode', 'hsncode': 'hsnCode',
+
+    // Category ID & Description
     'category_id': 'categoryId', 'category id': 'categoryId',
-    'description': 'description',
+    'description': 'description', 'desc': 'description', 'details': 'description',
+
+    // Pricing & Discounts
     'mrp': 'mrp', 'maximum_retail_price': 'mrp', 'maximum retail price': 'mrp',
     'discount_amount': 'discountAmount', 'discount amount': 'discountAmount', 'discount': 'discountAmount',
     'discount_percentage': 'discountPercentage', 'discount percentage': 'discountPercentage', 'discount %': 'discountPercentage'
 };
 
-const REQUIRED = ['sareeName', 'category', 'fabric', 'color', 'purchasePrice', 'sellingPrice'];
-const TEMPLATE_HEADERS = 'saree_name,category,fabric,color,purchase_price,selling_price,stock,rack_no,barcode,status,sku,category_id,description,mrp,discount_amount,discount_percentage';
-const TEMPLATE_EXAMPLE = 'Kanjivaram Red Silk,Kanjivaram,Silk,Red,4500,8000,5,A-12,,active,SKU-KAN-001,cat_101,Beautiful handwoven Kanjivaram silk saree,10000,2000,20\nBanarasi Gold Zari,Banarasi,Silk,Gold,5000,9500,3,B-04,,active,SKU-BAN-002,cat_102,Stunning gold zari Banarasi silk,12000,2500,20.83';
+const TEMPLATE_HEADERS = 'saree_name,category,fabric,color,purchase_price,selling_price,stock,rack_no,barcode,status,design_code,hsn_code,sku,category_id,description,mrp,discount_amount,discount_percentage';
+const TEMPLATE_EXAMPLE = 'Kanjivaram Red Silk,Kanjivaram,Silk,Red,4500,8000,5,A-12,,active,KATAN-101,5407,SKU-KAN-001,cat_101,Beautiful handwoven Kanjivaram silk saree,10000,2000,20\nBanarasi Gold Zari,Banarasi,Silk,Gold,5000,9500,3,B-04,,active,KATAN-101,5407,SKU-BAN-002,cat_102,Stunning gold zari Banarasi silk,12000,2500,20.83';
 
 interface ParsedRow {
     sareeName: string;
     category: string;
     categoryId?: string;
+    designCode?: string;
+    hsnCode?: string;
     sku?: string;
     description?: string;
     fabric: string;
@@ -93,35 +135,42 @@ export function CsvImportModal({ isOpen, onClose }: CsvImportModalProps) {
         const parsed: ParsedRow[] = [];
 
         data.forEach((rawRow, idx) => {
-            // Normalize headers
+            // Normalize headers (cleaning UTF-8 BOM & leading/trailing spaces)
             const row: Record<string, string> = {};
             Object.entries(rawRow).forEach(([k, v]) => {
-                const mapped = COL_MAP[k.trim().toLowerCase()];
-                if (mapped) row[mapped] = v !== undefined && v !== null ? String(v) : '';
+                const cleanKey = k.replace(/^\uFEFF/, '').trim().toLowerCase();
+                const mapped = COL_MAP[cleanKey];
+                if (mapped) row[mapped] = v !== undefined && v !== null ? String(v).trim() : '';
             });
 
-            // Check required
-            const missing = REQUIRED.filter(f => !row[f]?.trim());
-            if (missing.length) {
-                errs.push(`Row ${idx + 2}: Missing ${missing.join(', ')}`);
+            // Saree Name check
+            const name = row.sareeName;
+            if (!name) {
+                errs.push(`Row ${idx + 2}: Missing Saree Name`);
                 return;
             }
 
+            // Selling Price check
+            const sellingPrice = parseFloat(row.sellingPrice) || 0;
+            const purchasePrice = parseFloat(row.purchasePrice) || 0;
+
             parsed.push({
-                sareeName: row.sareeName?.trim() || '',
-                category: row.category?.trim() || '',
-                categoryId: row.categoryId?.trim() || '',
-                sku: row.sku?.trim() || '',
-                description: row.description?.trim() || '',
-                fabric: row.fabric?.trim() || '',
-                color: row.color?.trim() || '',
-                purchasePrice: parseFloat(row.purchasePrice) || 0,
-                sellingPrice: parseFloat(row.sellingPrice) || 0,
-                stock: parseInt(row.stock) || 0,
-                rackNo: row.rackNo?.trim() || '',
-                barcode: row.barcode?.trim() || '',
-                status: row.status?.trim() || 'active',
-                mrp: parseFloat(row.mrp) || parseFloat(row.sellingPrice) || 0,
+                sareeName: name,
+                category: row.category || 'General',
+                categoryId: row.categoryId || '',
+                designCode: row.designCode ? row.designCode.toUpperCase() : '',
+                hsnCode: row.hsnCode || '',
+                sku: row.sku || '',
+                description: row.description || '',
+                fabric: row.fabric || 'Silk',
+                color: row.color || 'Multicolor',
+                purchasePrice: purchasePrice,
+                sellingPrice: sellingPrice,
+                stock: parseInt(row.stock) || 1,
+                rackNo: row.rackNo || '',
+                barcode: row.barcode || '',
+                status: row.status === 'inactive' ? 'inactive' : 'active',
+                mrp: parseFloat(row.mrp) || sellingPrice,
                 discountAmount: parseFloat(row.discountAmount) || 0,
                 discountPercentage: parseFloat(row.discountPercentage) || 0,
             });
@@ -129,8 +178,11 @@ export function CsvImportModal({ isOpen, onClose }: CsvImportModalProps) {
 
         setParseErrors(errs);
         setRows(parsed);
-        if (parsed.length > 0) setStep('preview');
-        else toast.error('No valid rows found in file. Check your file format.');
+        setStep('preview');
+
+        if (parsed.length === 0) {
+            toast.error('No valid rows found in file. Please check column names or errors below.');
+        }
     };
 
     const handleFile = (file: File) => {
@@ -166,7 +218,8 @@ export function CsvImportModal({ isOpen, onClose }: CsvImportModalProps) {
         } else {
             Papa.parse(file, {
                 header: true,
-                skipEmptyLines: true,
+                skipEmptyLines: 'greedy',
+                transformHeader: (h) => h.replace(/^\uFEFF/, '').trim(),
                 complete: ({ data, errors }) => {
                     const errs: string[] = errors.map(e => `Parse error row ${e.row}: ${e.message}`);
                     processRawData(data as Record<string, string>[], errs);
@@ -193,7 +246,7 @@ export function CsvImportModal({ isOpen, onClose }: CsvImportModalProps) {
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
-            <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col border-gold/20 shadow-2xl p-0 overflow-hidden">
+            <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col border-gold/20 shadow-2xl p-0 overflow-hidden">
 
                 <DialogHeader className="border-b border-gold/15 px-5 py-3 shrink-0">
                     <DialogTitle className="text-base font-bold font-serif text-maroon flex items-center gap-2">
@@ -243,9 +296,9 @@ export function CsvImportModal({ isOpen, onClose }: CsvImportModalProps) {
 
                         {/* Required columns info */}
                         <div className="w-full max-w-md bg-amber-50/50 border border-amber-200/60 rounded-lg px-4 py-3 text-xs text-amber-800">
-                            <p className="font-bold mb-1">Required columns:</p>
+                            <p className="font-bold mb-1">Recommended columns:</p>
                             <p className="font-mono text-[11px] text-amber-700">saree_name, category, fabric, color, purchase_price, selling_price</p>
-                            <p className="mt-1 text-amber-600">Optional: stock, rack_no, barcode, status</p>
+                            <p className="mt-1 text-amber-600">Optional: design_code, hsn_code, stock, rack_no, barcode, status, mrp, discount_amount</p>
                         </div>
                     </div>
                 )}
@@ -262,7 +315,7 @@ export function CsvImportModal({ isOpen, onClose }: CsvImportModalProps) {
                             {parseErrors.length > 0 && (
                                 <div className="flex items-center gap-1.5 bg-red-50 border border-red-200 rounded-lg px-3 py-1.5 text-xs text-red-700 font-semibold">
                                     <AlertCircle className="h-3.5 w-3.5" />
-                                    {parseErrors.length} rows skipped
+                                    {parseErrors.length} rows skipped / issues found
                                 </div>
                             )}
                             <button onClick={reset} className="ml-auto flex items-center gap-1 text-xs text-gray-400 hover:text-maroon transition-colors">
@@ -272,7 +325,8 @@ export function CsvImportModal({ isOpen, onClose }: CsvImportModalProps) {
 
                         {/* Parse errors */}
                         {parseErrors.length > 0 && (
-                            <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 max-h-24 overflow-y-auto shrink-0">
+                            <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 max-h-28 overflow-y-auto shrink-0">
+                                <p className="text-xs font-bold text-red-700 mb-1">File Warnings / Errors:</p>
                                 {parseErrors.map((e, i) => (
                                     <p key={i} className="text-[11px] text-red-600 font-mono">{e}</p>
                                 ))}
@@ -280,37 +334,49 @@ export function CsvImportModal({ isOpen, onClose }: CsvImportModalProps) {
                         )}
 
                         {/* Preview table */}
-                        <div className="flex-1 min-h-0 overflow-auto border border-gold/15 rounded-lg">
-                            <table className="w-full text-[11px] border-collapse">
-                                <thead className="bg-cream/20 sticky top-0">
-                                    <tr>
-                                        {['#', 'Name', 'Category', 'Fabric', 'Color', 'Purchase ₹', 'Selling ₹', 'Stock', 'Rack', 'Status'].map(h => (
-                                            <th key={h} className="text-left px-2 py-1.5 text-maroon font-bold border-b border-gold/15 whitespace-nowrap">{h}</th>
-                                        ))}
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {rows.map((r, i) => (
-                                        <tr key={i} className="border-b border-gold/5 hover:bg-cream/5">
-                                            <td className="px-2 py-1 text-gray-400">{i + 1}</td>
-                                            <td className="px-2 py-1 font-medium text-gray-800 max-w-[140px] truncate">{r.sareeName}</td>
-                                            <td className="px-2 py-1 text-gray-600">{r.category}</td>
-                                            <td className="px-2 py-1 text-gray-600">{r.fabric}</td>
-                                            <td className="px-2 py-1 text-gray-600">{r.color}</td>
-                                            <td className="px-2 py-1 text-right text-gray-500">₹{r.purchasePrice.toLocaleString()}</td>
-                                            <td className="px-2 py-1 text-right font-bold text-maroon">₹{r.sellingPrice.toLocaleString()}</td>
-                                            <td className="px-2 py-1 text-center">{r.stock}</td>
-                                            <td className="px-2 py-1 text-gray-500">{r.rackNo || '—'}</td>
-                                            <td className="px-2 py-1">
-                                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${r.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                                                    {r.status}
-                                                </span>
-                                            </td>
+                        {rows.length > 0 ? (
+                            <div className="flex-1 min-h-0 overflow-auto border border-gold/15 rounded-lg">
+                                <table className="w-full text-[11px] border-collapse">
+                                    <thead className="bg-cream/20 sticky top-0">
+                                        <tr>
+                                            {['#', 'Name', 'Category', 'Fabric', 'Color', 'Design Code', 'HSN Code', 'Purchase ₹', 'Selling ₹', 'Stock', 'Rack', 'Status'].map(h => (
+                                                <th key={h} className="text-left px-2 py-1.5 text-maroon font-bold border-b border-gold/15 whitespace-nowrap">{h}</th>
+                                            ))}
                                         </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
+                                    </thead>
+                                    <tbody>
+                                        {rows.map((r, i) => (
+                                            <tr key={i} className="border-b border-gold/5 hover:bg-cream/5">
+                                                <td className="px-2 py-1 text-gray-400">{i + 1}</td>
+                                                <td className="px-2 py-1 font-medium text-gray-800 max-w-[140px] truncate">{r.sareeName}</td>
+                                                <td className="px-2 py-1 text-gray-600">{r.category}</td>
+                                                <td className="px-2 py-1 text-gray-600">{r.fabric}</td>
+                                                <td className="px-2 py-1 text-gray-600">{r.color}</td>
+                                                <td className="px-2 py-1 font-mono text-purple-700 font-bold">{r.designCode || '—'}</td>
+                                                <td className="px-2 py-1 font-mono text-gray-600">{r.hsnCode || '—'}</td>
+                                                <td className="px-2 py-1 text-right text-gray-500">₹{r.purchasePrice.toLocaleString()}</td>
+                                                <td className="px-2 py-1 text-right font-bold text-maroon">₹{r.sellingPrice.toLocaleString()}</td>
+                                                <td className="px-2 py-1 text-center">{r.stock}</td>
+                                                <td className="px-2 py-1 text-gray-500">{r.rackNo || '—'}</td>
+                                                <td className="px-2 py-1">
+                                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${r.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                                                        {r.status}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ) : (
+                            <div className="flex-1 flex flex-col items-center justify-center text-center p-6 border border-dashed border-red-200 rounded-lg bg-red-50/20">
+                                <AlertCircle className="h-8 w-8 text-red-500 mb-2" />
+                                <p className="text-sm font-bold text-red-800">No Valid Rows Parsed</p>
+                                <p className="text-xs text-gray-600 max-w-md mt-1">
+                                    Please review the file warnings above. Ensure your file headers include at least <span className="font-semibold text-maroon">saree_name</span>.
+                                </p>
+                            </div>
+                        )}
                     </div>
                 )}
 

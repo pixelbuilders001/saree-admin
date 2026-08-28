@@ -17,6 +17,8 @@ export interface Saree {
     sareeName: string;
     category: string;
     categoryId?: string;
+    designCode?: string;
+    hsnCode?: string;
     sku?: string;
     description?: string;
     fabric: string;
@@ -50,6 +52,8 @@ export const inventoryService = {
             sareeName: item.saree_name,
             category: item.category,
             categoryId: item.category_id || '',
+            designCode: item.design_code || '',
+            hsnCode: item.hsn_code || '',
             sku: item.sku || '',
             description: item.description || '',
             fabric: item.fabric,
@@ -93,6 +97,8 @@ export const inventoryService = {
             sareeName: data.saree_name,
             category: data.category,
             categoryId: data.category_id || '',
+            designCode: data.design_code || '',
+            hsnCode: data.hsn_code || '',
             sku: data.sku || '',
             description: data.description || '',
             fabric: data.fabric,
@@ -133,6 +139,8 @@ export const inventoryService = {
             saree_name: saree.sareeName,
             category: saree.category,
             category_id: saree.categoryId || null,
+            design_code: saree.designCode ? saree.designCode.trim().toUpperCase() : null,
+            hsn_code: saree.hsnCode ? saree.hsnCode.trim() : null,
             sku: saree.sku || null,
             description: saree.description || null,
             fabric: saree.fabric,
@@ -211,11 +219,13 @@ export const inventoryService = {
             }
         }
 
-        return {
+            return {
             id: data.id,
             sareeName: data.saree_name,
             category: data.category,
             categoryId: data.category_id || '',
+            designCode: data.design_code || '',
+            hsnCode: data.hsn_code || '',
             sku: data.sku || '',
             description: data.description || '',
             fabric: data.fabric,
@@ -247,6 +257,8 @@ export const inventoryService = {
         if (saree.sareeName !== undefined) updateData.saree_name = saree.sareeName;
         if (saree.category !== undefined) updateData.category = saree.category;
         if (saree.categoryId !== undefined) updateData.category_id = saree.categoryId || null;
+        if (saree.designCode !== undefined) updateData.design_code = saree.designCode ? saree.designCode.trim().toUpperCase() : null;
+        if (saree.hsnCode !== undefined) updateData.hsn_code = saree.hsnCode ? saree.hsnCode.trim() : null;
         if (saree.sku !== undefined) updateData.sku = saree.sku || null;
         if (saree.description !== undefined) updateData.description = saree.description || null;
         if (saree.fabric !== undefined) updateData.fabric = saree.fabric;
@@ -373,6 +385,7 @@ export const inventoryService = {
             sareeName: data.saree_name,
             category: data.category,
             categoryId: data.category_id || '',
+            designCode: data.design_code || '',
             sku: data.sku || '',
             description: data.description || '',
             fabric: data.fabric,
@@ -524,6 +537,8 @@ export const inventoryService = {
                 saree_name: String(row.sareeName).trim(),
                 category: String(row.category).trim(),
                 category_id: row.categoryId ? String(row.categoryId).trim() : null,
+                design_code: row.designCode ? String(row.designCode).trim().toUpperCase() : null,
+                hsn_code: row.hsnCode ? String(row.hsnCode).trim() : null,
                 sku: row.sku ? String(row.sku).trim() : null,
                 description: row.description ? String(row.description).trim() : null,
                 fabric: String(row.fabric).trim(),

@@ -252,7 +252,9 @@ export default function InventoryPage() {
             saree.sareeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
             saree.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
             saree.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            saree.rackNo.toLowerCase().includes(searchTerm.toLowerCase())
+            saree.rackNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (saree.designCode && saree.designCode.toLowerCase().includes(searchTerm.toLowerCase())) ||
+            (saree.sku && saree.sku.toLowerCase().includes(searchTerm.toLowerCase()))
         ) : true;
 
         // Category check
@@ -701,6 +703,11 @@ export default function InventoryPage() {
                                                 )}
                                                 <div className="min-w-0 flex-1">
                                                     <span className="font-semibold block truncate max-w-[140px]">{saree.sareeName}</span>
+                                                    {saree.designCode && (
+                                                        <span className="inline-block text-[9px] font-mono text-purple-800 bg-purple-50 px-1 py-0.2 rounded border border-purple-200 tracking-wider truncate max-w-[140px] font-bold mt-0.5" title={`Design Code: ${saree.designCode}`}>
+                                                            {saree.designCode}
+                                                        </span>
+                                                    )}
                                                     {saree.sku && (
                                                         <span className="block text-[9px] text-gray-400 font-mono tracking-wider truncate max-w-[140px]" title={`SKU: ${saree.sku}`}>
                                                             SKU: {saree.sku}
