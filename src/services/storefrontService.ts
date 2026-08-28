@@ -35,6 +35,17 @@ export interface WishlistItem {
     customerPhone?: string;
 }
 
+export interface PwaInstall {
+    id: string;
+    userId: string | null;
+    platform: string | null;
+    userAgent: string | null;
+    createdAt: string;
+    customerName?: string;
+    customerEmail?: string;
+    customerPhone?: string;
+}
+
 export const storefrontService = {
     // Reviews Services
     getReviews: async (): Promise<ProductReview[]> => {
@@ -167,5 +178,45 @@ export const storefrontService = {
             .eq('id', id);
 
         if (error) throw error;
+    },
+
+    // PWA Installs Services
+    getPwaInstalls: async (): Promise<PwaInstall[]> => {
+        const { data: installsData, error: installsError } = await supabase
+            .from('pwa_installs')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (installsError) {
+            console.error('Error fetching pwa_installs:', installsError);
+            return [];
+        }
+
+        const userIds = [...new Set((installsData || []).map((i: any) => i.user_id).filter(Boolean))];
+        let profiles: any[] = [];
+        if (userIds.length > 0) {
+            const { data: profilesData, error: profilesError } = await supabase
+                .from('profiles')
+                .select('id, full_name, email, phone_number')
+                .in('id', userIds);
+
+            if (!profilesError && profilesData) {
+                profiles = profilesData;
+            }
+        }
+
+        return (installsData || []).map((item: any) => {
+            const profile = profiles.find((p: any) => p.id === item.user_id);
+            return {
+                id: item.id,
+                userId: item.user_id,
+                platform: item.platform || 'unknown',
+                userAgent: item.user_agent || null,
+                createdAt: item.created_at,
+                customerName: profile?.full_name || 'Guest User',
+                customerEmail: profile?.email || '',
+                customerPhone: profile?.phone_number ? profile.phone_number.toString() : '',
+            };
+        });
     }
 };

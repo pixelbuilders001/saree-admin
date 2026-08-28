@@ -16,7 +16,11 @@ import {
     RefreshCw,
     Activity,
     Layers3,
-    IndianRupee
+    IndianRupee,
+    Smartphone,
+    Download,
+    Monitor,
+    Globe
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -61,10 +65,15 @@ export default function StorefrontReportsPage() {
         queryFn: ordersService.getOrders
     });
 
-    const isLoading = isStatsLoading || isWishlistLoading || isCartsLoading || isOrdersLoading;
+    const { data: pwaInstalls, isLoading: isPwaLoading, refetch: refetchPwaInstalls } = useQuery({
+        queryKey: ['pwaInstalls'],
+        queryFn: storefrontService.getPwaInstalls
+    });
+
+    const isLoading = isStatsLoading || isWishlistLoading || isCartsLoading || isOrdersLoading || isPwaLoading;
 
     const handleSync = async () => {
-        await Promise.all([refetchStats(), refetchWishlists(), refetchCarts(), refetchOrders()]);
+        await Promise.all([refetchStats(), refetchWishlists(), refetchCarts(), refetchOrders(), refetchPwaInstalls()]);
         toast.success("Online activity reports synchronized");
     };
 
@@ -117,6 +126,36 @@ export default function StorefrontReportsPage() {
             totalPipeline
         };
     }, [wishlistItems, cartItems, groupedCarts, orders]);
+
+    // PWA INSTALL METRICS CALCULATIONS
+    const pwaMetrics = React.useMemo(() => {
+        const installs = pwaInstalls || [];
+        const totalInstalls = installs.length;
+
+        const platformCounts: { [key: string]: number } = {
+            android: 0,
+            ios: 0,
+            windows: 0,
+            mac: 0,
+            linux: 0,
+            other: 0
+        };
+
+        installs.forEach(item => {
+            const plat = (item.platform || 'other').toLowerCase();
+            if (platformCounts[plat] !== undefined) {
+                platformCounts[plat]++;
+            } else {
+                platformCounts['other']++;
+            }
+        });
+
+        return {
+            totalInstalls,
+            platformCounts,
+            recentInstalls: installs.slice(0, 10)
+        };
+    }, [pwaInstalls]);
 
     // POPULAR PRODUCTS GROUPING
     const popularProducts = React.useMemo(() => {
@@ -309,7 +348,7 @@ Shree Banarasi Sarees Team`;
                     </div>
                     <div>
                         <h1 className="text-xl md:text-2xl font-bold font-serif text-maroon tracking-wide">Online Business Reports</h1>
-                        <p className="text-xs text-gray-500 font-sans">Analytical insights into wishlists, cart pipelines & digital order conversions</p>
+                        <p className="text-xs text-gray-500 font-sans">Analytical insights into wishlists, cart pipelines, PWA installs & digital conversions</p>
                     </div>
                 </div>
 
@@ -323,25 +362,26 @@ Shree Banarasi Sarees Team`;
             </div>
 
             {/* KPI Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                 {[
                     { label: 'Wishlist Interest', value: `${reportData.wishlistCount} saved`, sub: formatCurrency(reportData.wishlistValue), icon: Heart, from: 'from-rose-400', to: 'to-rose-600', text: 'text-gray-800' },
                     { label: 'Active Shopping Carts', value: `${reportData.cartCount} active`, sub: formatCurrency(reportData.cartTotalValue), icon: ShoppingCart, from: 'from-amber-400', to: 'to-amber-600', text: 'text-gray-800' },
                     { label: 'Completed Online Sales', value: `${reportData.completedOnlineCount} sales`, sub: formatCurrency(reportData.totalOnlineRevenue), icon: ShoppingBag, from: 'from-emerald-500', to: 'to-emerald-700', text: 'text-gray-800' },
+                    { label: 'PWA App Installs', value: `${pwaMetrics.totalInstalls} installs`, sub: `${pwaMetrics.platformCounts.android} Android | ${pwaMetrics.platformCounts.ios} iOS`, icon: Smartphone, from: 'from-purple-500', to: 'to-purple-700', text: 'text-purple-900' },
                     { label: 'Total Storefront Pipeline', value: formatCurrency(reportData.totalPipeline), sub: `${reportData.recoveryRate}% conversion`, icon: Activity, from: 'from-indigo-500', to: 'to-indigo-700', text: 'text-maroon' },
                 ].map((s, i) => (
                     <motion.div key={s.label}
                         initial={{ opacity: 0, y: 12 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.3, delay: i * 0.05 }}>
-                        <Card className="border-gold/20 shadow-sm hover:shadow-md transition-shadow bg-white">
+                        <Card className="border-gold/20 shadow-sm hover:shadow-md transition-shadow bg-white h-full">
                             <CardContent className="p-4 flex items-center justify-between">
-                                <div className="space-y-1">
-                                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">{s.label}</span>
-                                    <span className={cn("text-lg font-bold font-mono leading-tight block", s.text)}>{s.value}</span>
-                                    <span className="text-[10px] text-gray-400 block">{s.sub}</span>
+                                <div className="space-y-1 min-w-0 flex-1">
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block truncate">{s.label}</span>
+                                    <span className={cn("text-lg font-bold font-mono leading-tight block truncate", s.text)}>{s.value}</span>
+                                    <span className="text-[10px] text-gray-400 block truncate">{s.sub}</span>
                                 </div>
-                                <div className={cn("p-2.5 bg-gradient-to-br text-white rounded-xl shadow", s.from, s.to)}>
+                                <div className={cn("p-2.5 bg-gradient-to-br text-white rounded-xl shadow shrink-0 ml-2", s.from, s.to)}>
                                     <s.icon className="h-5 w-5" />
                                 </div>
                             </CardContent>
@@ -549,6 +589,101 @@ Shree Banarasi Sarees Team`;
                     </CardContent>
                 </Card>
             </div>
+
+            {/* Dedicated PWA App Installation Tracking Section */}
+            <Card className="border-gold/20 shadow-md bg-white flex flex-col overflow-hidden">
+                <CardHeader className="bg-gradient-to-r from-cream/40 to-transparent border-b border-gold/10 p-3 flex justify-between items-center flex-row">
+                    <div>
+                        <CardTitle className="text-sm font-bold text-maroon tracking-wider uppercase flex items-center gap-2">
+                            <Smartphone className="h-4 w-4 text-purple-600" />
+                            PWA App Installation Analytics
+                        </CardTitle>
+                        <p className="text-[10px] text-gray-400">Tracked Progressive Web App installations across devices</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <span className="px-2.5 py-1 bg-purple-50 text-purple-700 border border-purple-200 rounded-full text-[10px] font-bold font-mono">
+                            Total: {pwaMetrics.totalInstalls} Installs
+                        </span>
+                    </div>
+                </CardHeader>
+                <CardContent className="p-4 space-y-4">
+                    {/* Platform distribution badges */}
+                    <div className="flex flex-wrap items-center gap-3 p-3 bg-purple-50/50 rounded-lg border border-purple-100">
+                        <span className="text-xs font-bold text-purple-900 uppercase font-serif mr-1">Platforms:</span>
+                        {[
+                            { name: 'Android', count: pwaMetrics.platformCounts.android, color: 'bg-emerald-100 text-emerald-800 border-emerald-300' },
+                            { name: 'iOS', count: pwaMetrics.platformCounts.ios, color: 'bg-blue-100 text-blue-800 border-blue-300' },
+                            { name: 'Windows', count: pwaMetrics.platformCounts.windows, color: 'bg-sky-100 text-sky-800 border-sky-300' },
+                            { name: 'Mac', count: pwaMetrics.platformCounts.mac, color: 'bg-indigo-100 text-indigo-800 border-indigo-300' },
+                            { name: 'Linux', count: pwaMetrics.platformCounts.linux, color: 'bg-amber-100 text-amber-800 border-amber-300' },
+                            { name: 'Other / Web', count: pwaMetrics.platformCounts.other, color: 'bg-gray-100 text-gray-800 border-gray-300' },
+                        ].map((plat) => (
+                            <div key={plat.name} className={cn("px-2.5 py-1 rounded-md text-xs font-semibold border flex items-center gap-1.5 shadow-2xs", plat.color)}>
+                                <span>{plat.name}:</span>
+                                <span className="font-mono font-bold">{plat.count}</span>
+                                {pwaMetrics.totalInstalls > 0 && (
+                                    <span className="text-[9px] opacity-75 font-mono">
+                                        ({Math.round((plat.count / pwaMetrics.totalInstalls) * 100)}%)
+                                    </span>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Installation logs table */}
+                    <div className="rounded-md border border-gold/10 overflow-hidden">
+                        <Table>
+                            <TableHeader className="bg-cream/20">
+                                <TableRow className="border-b border-gold/10 hover:bg-transparent">
+                                    <TableHead className="py-2 h-8 text-[10px] font-bold text-maroon uppercase px-3">User / Customer</TableHead>
+                                    <TableHead className="py-2 h-8 text-[10px] font-bold text-maroon uppercase text-center">Platform</TableHead>
+                                    <TableHead className="py-2 h-8 text-[10px] font-bold text-maroon uppercase text-center">Installed At</TableHead>
+                                    <TableHead className="py-2 h-8 text-[10px] font-bold text-maroon uppercase px-3">User Agent</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {pwaMetrics.recentInstalls.length > 0 ? (
+                                    pwaMetrics.recentInstalls.map((inst) => {
+                                        const platformLower = (inst.platform || 'other').toLowerCase();
+                                        const badgeStyle = 
+                                            platformLower === 'android' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                            platformLower === 'ios' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                                            platformLower === 'windows' ? 'bg-sky-50 text-sky-700 border-sky-200' :
+                                            platformLower === 'mac' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
+                                            'bg-gray-50 text-gray-700 border-gray-200';
+
+                                        return (
+                                            <TableRow key={inst.id} className="border-b border-gold/5 hover:bg-cream/10 h-10 transition-colors">
+                                                <TableCell className="py-2 text-xs px-3">
+                                                    <div className="font-bold text-gray-800">{inst.customerName}</div>
+                                                    {inst.customerPhone && <div className="text-[9px] text-gray-400 font-mono">{inst.customerPhone}</div>}
+                                                </TableCell>
+                                                <TableCell className="py-2 text-xs text-center">
+                                                    <span className={cn("inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold font-mono border uppercase", badgeStyle)}>
+                                                        {inst.platform || 'unknown'}
+                                                    </span>
+                                                </TableCell>
+                                                <TableCell className="py-2 text-xs text-center font-mono text-gray-600">
+                                                    {inst.createdAt ? `${new Date(inst.createdAt).toLocaleDateString()} ${new Date(inst.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'N/A'}
+                                                </TableCell>
+                                                <TableCell className="py-2 text-xs px-3 font-mono text-gray-400 max-w-[300px] truncate" title={inst.userAgent || 'N/A'}>
+                                                    {inst.userAgent || 'N/A'}
+                                                </TableCell>
+                                            </TableRow>
+                                        );
+                                    })
+                                ) : (
+                                    <TableRow>
+                                        <TableCell colSpan={4} className="h-24 text-center text-xs text-gray-400 italic">
+                                            No PWA installations recorded yet.
+                                        </TableCell>
+                                    </TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
+                    </div>
+                </CardContent>
+            </Card>
         </motion.div>
     );
 }
