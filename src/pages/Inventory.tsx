@@ -18,8 +18,9 @@ import {
     PackageX,
     IndianRupee,
     AlertTriangle,
-    Sparkles,
     Printer,
+    Layers,
+    Wallet,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -57,8 +58,8 @@ import { SareeForm } from '@/components/inventory/SareeForm';
 import { BarcodeGenerator } from '@/components/inventory/BarcodeGenerator';
 import { BatchBarcodePrinter } from '@/components/inventory/BatchBarcodePrinter';
 import { CsvImportModal } from '@/components/inventory/CsvImportModal';
+import { CategoryProductsModal } from '@/components/inventory/CategoryProductsModal';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabase';
 import { motion } from 'framer-motion';
 
 export default function InventoryPage() {
@@ -71,72 +72,12 @@ export default function InventoryPage() {
     const [barcodeToShow, setBarcodeToShow] = React.useState<Saree | null>(null);
     const [isBatchBarcodeOpen, setIsBatchBarcodeOpen] = React.useState(false);
     const [isImportOpen, setIsImportOpen] = React.useState(false);
+    const [isCategoryProductsOpen, setIsCategoryProductsOpen] = React.useState(false);
+    const [categoryProductsTarget, setCategoryProductsTarget] = React.useState<string | undefined>();
     const [galleryState, setGalleryState] = React.useState<{ images: { imageUrl: string }[], title: string } | null>(null);
     const [galleryActiveIndex, setGalleryActiveIndex] = React.useState<number>(0);
-    const [isSeeding, setIsSeeding] = React.useState(false);
 
     const queryClient = useQueryClient();
-
-    const handleSeedImages = async () => {
-        if (!sarees || sarees.length === 0) {
-            toast.error("No sarees found to seed images for");
-            return;
-        }
-
-        setIsSeeding(true);
-        const toastId = toast.loading("Checking inventory database and seeding missing images...");
-
-        try {
-            const mockSareeImages = [
-                "https://images.unsplash.com/photo-1610030469983-98e550d6193c?auto=format&fit=crop&w=600&q=80",
-                "https://images.unsplash.com/photo-1617627143750-d86bc21e42bb?auto=format&fit=crop&w=600&q=80",
-                "https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?auto=format&fit=crop&w=600&q=80",
-                "https://images.unsplash.com/photo-1609357605129-26f69add5d6e?auto=format&fit=crop&w=600&q=80",
-                "https://images.unsplash.com/photo-1610030469983-98e550d6193c?auto=format&fit=crop&w=600&q=80",
-                "https://images.unsplash.com/photo-1621184455862-c163dfb30e0f?auto=format&fit=crop&w=600&q=80"
-            ];
-
-            let seededCount = 0;
-
-            for (const saree of sarees) {
-                const currentImagesCount = saree.images?.length || 0;
-                if (currentImagesCount < 2) {
-                    const needed = 2 - currentImagesCount;
-                    const inserts = [];
-
-                    for (let i = 0; i < needed; i++) {
-                        const randomUrl = mockSareeImages[Math.floor(Math.random() * mockSareeImages.length)];
-                        inserts.push({
-                            inventory_id: saree.id,
-                            image_url: randomUrl,
-                            is_primary: currentImagesCount === 0 && i === 0,
-                            sort_order: currentImagesCount + i
-                        });
-                    }
-
-                    if (inserts.length > 0) {
-                        const { error } = await supabase
-                            .from('inventory_images')
-                            .insert(inserts);
-
-                        if (error) {
-                            console.error(`Failed to insert images for saree ${saree.id}:`, error);
-                            throw error;
-                        }
-                        seededCount++;
-                    }
-                }
-            }
-
-            await queryClient.invalidateQueries({ queryKey: ['sarees'] });
-            toast.success(`Seeded missing images for ${seededCount} sarees!`, { id: toastId });
-        } catch (err: any) {
-            console.error(err);
-            toast.error(`Error seeding images: ${err.message || err}`, { id: toastId });
-        } finally {
-            setIsSeeding(false);
-        }
-    };
 
     // Filter states
     const [isFilterPanelOpen, setIsFilterPanelOpen] = React.useState(false);
@@ -233,17 +174,20 @@ export default function InventoryPage() {
         setMaxPrice('');
     };
 
+
+
     // Pure UI — inventory summary stats
     const inventoryStats = React.useMemo(() => {
-        if (!Array.isArray(sarees)) return { total: 0, units: 0, lowStock: 0, outOfStock: 0, stockValue: 0 };
-        let units = 0, lowStock = 0, outOfStock = 0, stockValue = 0;
+        if (!Array.isArray(sarees)) return { total: 0, units: 0, lowStock: 0, outOfStock: 0, stockValue: 0, costValue: 0 };
+        let units = 0, lowStock = 0, outOfStock = 0, stockValue = 0, costValue = 0;
         sarees.forEach(s => {
             units += s.stock;
             if (s.stock === 0) outOfStock++;
             else if (s.stock < 5) lowStock++;
             stockValue += s.stock * s.sellingPrice;
+            costValue += s.stock * (s.purchasePrice || 0);
         });
-        return { total: sarees.length, units, lowStock, outOfStock, stockValue };
+        return { total: sarees.length, units, lowStock, outOfStock, stockValue, costValue };
     }, [sarees]);
 
     const filteredSarees = Array.isArray(sarees) ? sarees.filter(saree => {
@@ -368,77 +312,96 @@ export default function InventoryPage() {
             </div>
 
             {/* KPI Summary Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
-                <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-                    <Card className="border-gold/20 shadow-sm hover:shadow-md transition-shadow bg-white">
-                        <CardContent className="p-4 flex items-center justify-between">
-                            <div className="space-y-1">
-                                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Total Products</span>
-                                <span className="text-2xl font-bold font-mono text-gray-800">{inventoryStats.total}</span>
-                                <span className="text-[10px] text-gray-400 block">Catalogue items</span>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
+                    <Card className="border-gold/20 shadow-xs hover:shadow-md transition-shadow bg-white">
+                        <CardContent className="p-3 flex items-center justify-between gap-1.5">
+                            <div className="space-y-0.5 min-w-0">
+                                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block truncate">Total Products</span>
+                                <span className="text-lg sm:text-xl font-bold font-mono text-gray-800 block leading-tight">{inventoryStats.total}</span>
+                                <span className="text-[9px] text-gray-400 block truncate">Catalogue items</span>
                             </div>
-                            <div className="p-2.5 bg-gradient-to-br from-slate-600 to-slate-800 rounded-xl text-white shadow">
-                                <Package className="h-5 w-5" />
-                            </div>
-                        </CardContent>
-                    </Card>
-                </motion.div>
-
-                <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.05 }}>
-                    <Card className="border-gold/20 shadow-sm hover:shadow-md transition-shadow bg-white">
-                        <CardContent className="p-4 flex items-center justify-between">
-                            <div className="space-y-1">
-                                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Total Units</span>
-                                <span className="text-2xl font-bold font-mono text-indigo-600">{inventoryStats.units}</span>
-                                <span className="text-[10px] text-gray-400 block">Across all products</span>
-                            </div>
-                            <div className="p-2.5 bg-gradient-to-br from-indigo-500 to-indigo-700 rounded-xl text-white shadow">
-                                <Boxes className="h-5 w-5" />
+                            <div className="p-1.5 sm:p-2 bg-gradient-to-br from-slate-600 to-slate-800 rounded-lg text-white shadow-xs shrink-0">
+                                <Package className="h-4 w-4" />
                             </div>
                         </CardContent>
                     </Card>
                 </motion.div>
 
-                <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.1 }}>
-                    <Card className="border-gold/20 shadow-sm hover:shadow-md transition-shadow bg-white">
-                        <CardContent className="p-4 flex items-center justify-between">
-                            <div className="space-y-1">
-                                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Low Stock</span>
-                                <span className="text-2xl font-bold font-mono text-amber-600">{inventoryStats.lowStock}</span>
-                                <span className="text-[10px] text-gray-400 block">&lt; 5 units remaining</span>
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: 0.04 }}>
+                    <Card className="border-gold/20 shadow-xs hover:shadow-md transition-shadow bg-white">
+                        <CardContent className="p-3 flex items-center justify-between gap-1.5">
+                            <div className="space-y-0.5 min-w-0">
+                                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block truncate">Total Units</span>
+                                <span className="text-lg sm:text-xl font-bold font-mono text-indigo-600 block leading-tight">{inventoryStats.units}</span>
+                                <span className="text-[9px] text-gray-400 block truncate">In stock quantity</span>
                             </div>
-                            <div className="p-2.5 bg-gradient-to-br from-amber-400 to-amber-600 rounded-xl text-white shadow">
-                                <AlertTriangle className="h-5 w-5" />
-                            </div>
-                        </CardContent>
-                    </Card>
-                </motion.div>
-
-                <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.15 }}>
-                    <Card className="border-gold/20 shadow-sm hover:shadow-md transition-shadow bg-white">
-                        <CardContent className="p-4 flex items-center justify-between">
-                            <div className="space-y-1">
-                                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Out of Stock</span>
-                                <span className="text-2xl font-bold font-mono text-red-600">{inventoryStats.outOfStock}</span>
-                                <span className="text-[10px] text-gray-400 block">Needs restock</span>
-                            </div>
-                            <div className="p-2.5 bg-gradient-to-br from-red-500 to-red-700 rounded-xl text-white shadow">
-                                <PackageX className="h-5 w-5" />
+                            <div className="p-1.5 sm:p-2 bg-gradient-to-br from-indigo-500 to-indigo-700 rounded-lg text-white shadow-xs shrink-0">
+                                <Boxes className="h-4 w-4" />
                             </div>
                         </CardContent>
                     </Card>
                 </motion.div>
 
-                <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.2 }}>
-                    <Card className="border-gold/20 shadow-sm hover:shadow-md transition-shadow bg-white">
-                        <CardContent className="p-4 flex items-center justify-between">
-                            <div className="space-y-1">
-                                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Stock Value</span>
-                                <span className="text-2xl font-bold font-mono text-emerald-600">₹{inventoryStats.stockValue.toLocaleString()}</span>
-                                <span className="text-[10px] text-gray-400 block">At selling price</span>
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: 0.08 }}>
+                    <Card className="border-gold/20 shadow-xs hover:shadow-md transition-shadow bg-white">
+                        <CardContent className="p-3 flex items-center justify-between gap-1.5">
+                            <div className="space-y-0.5 min-w-0">
+                                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block truncate">Low Stock</span>
+                                <span className="text-lg sm:text-xl font-bold font-mono text-amber-600 block leading-tight">{inventoryStats.lowStock}</span>
+                                <span className="text-[9px] text-gray-400 block truncate">&lt; 5 units left</span>
                             </div>
-                            <div className="p-2.5 bg-gradient-to-br from-emerald-500 to-emerald-700 rounded-xl text-white shadow">
-                                <IndianRupee className="h-5 w-5" />
+                            <div className="p-1.5 sm:p-2 bg-gradient-to-br from-amber-400 to-amber-600 rounded-lg text-white shadow-xs shrink-0">
+                                <AlertTriangle className="h-4 w-4" />
+                            </div>
+                        </CardContent>
+                    </Card>
+                </motion.div>
+
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: 0.12 }}>
+                    <Card className="border-gold/20 shadow-xs hover:shadow-md transition-shadow bg-white">
+                        <CardContent className="p-3 flex items-center justify-between gap-1.5">
+                            <div className="space-y-0.5 min-w-0">
+                                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block truncate">Out of Stock</span>
+                                <span className="text-lg sm:text-xl font-bold font-mono text-red-600 block leading-tight">{inventoryStats.outOfStock}</span>
+                                <span className="text-[9px] text-gray-400 block truncate">Needs restock</span>
+                            </div>
+                            <div className="p-1.5 sm:p-2 bg-gradient-to-br from-red-500 to-red-700 rounded-lg text-white shadow-xs shrink-0">
+                                <PackageX className="h-4 w-4" />
+                            </div>
+                        </CardContent>
+                    </Card>
+                </motion.div>
+
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: 0.16 }}>
+                    <Card className="border-gold/20 shadow-xs hover:shadow-md transition-shadow bg-white">
+                        <CardContent className="p-3 flex items-center justify-between gap-1.5">
+                            <div className="space-y-0.5 min-w-0">
+                                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block truncate">Asset (Cost)</span>
+                                <span className="text-lg sm:text-xl font-bold font-mono text-teal-700 block leading-tight truncate" title={`₹${inventoryStats.costValue.toLocaleString()}`}>
+                                    ₹{inventoryStats.costValue.toLocaleString()}
+                                </span>
+                                <span className="text-[9px] text-gray-400 block truncate">At purchase price</span>
+                            </div>
+                            <div className="p-1.5 sm:p-2 bg-gradient-to-br from-teal-600 to-teal-800 rounded-lg text-white shadow-xs shrink-0">
+                                <Wallet className="h-4 w-4" />
+                            </div>
+                        </CardContent>
+                    </Card>
+                </motion.div>
+
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: 0.20 }}>
+                    <Card className="border-gold/20 shadow-xs hover:shadow-md transition-shadow bg-white">
+                        <CardContent className="p-3 flex items-center justify-between gap-1.5">
+                            <div className="space-y-0.5 min-w-0">
+                                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block truncate">Asset (Retail)</span>
+                                <span className="text-lg sm:text-xl font-bold font-mono text-emerald-600 block leading-tight truncate" title={`₹${inventoryStats.stockValue.toLocaleString()}`}>
+                                    ₹{inventoryStats.stockValue.toLocaleString()}
+                                </span>
+                                <span className="text-[9px] text-gray-400 block truncate">At selling price</span>
+                            </div>
+                            <div className="p-1.5 sm:p-2 bg-gradient-to-br from-emerald-500 to-emerald-700 rounded-lg text-white shadow-xs shrink-0">
+                                <IndianRupee className="h-4 w-4" />
                             </div>
                         </CardContent>
                     </Card>
@@ -478,15 +441,19 @@ export default function InventoryPage() {
                                 )}
                             </Button>
 
+
+
                             <Button
                                 variant="outline"
                                 size="sm"
                                 className="h-10 text-xs gap-1.5 border-gold/40 text-maroon font-semibold hover:bg-gold/10"
-                                onClick={handleSeedImages}
-                                disabled={isSeeding}
+                                onClick={() => {
+                                    setCategoryProductsTarget(selectedCategory !== 'All' ? selectedCategory : undefined);
+                                    setIsCategoryProductsOpen(true);
+                                }}
                             >
-                                {isSeeding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                                Seed Images
+                                <Layers className="h-4 w-4 text-maroon" />
+                                Category Products
                             </Button>
 
                             <Button
@@ -635,7 +602,7 @@ export default function InventoryPage() {
                             </span>
                         </span>
                         <span className="text-[10px] text-gray-500 normal-case font-normal hidden md:inline">
-                            Stock value: <span className="font-bold font-mono text-maroon">₹{inventoryStats.stockValue.toLocaleString()}</span>
+                            Asset value — Cost: <span className="font-bold font-mono text-teal-700">₹{inventoryStats.costValue.toLocaleString()}</span> | Retail: <span className="font-bold font-mono text-maroon">₹{inventoryStats.stockValue.toLocaleString()}</span>
                         </span>
                     </CardTitle>
                 </CardHeader>
@@ -985,6 +952,13 @@ export default function InventoryPage() {
                     </div>
                 </DialogContent>
             </Dialog>
+
+            {/* Category Product Manager Modal */}
+            <CategoryProductsModal
+                isOpen={isCategoryProductsOpen}
+                onClose={() => setIsCategoryProductsOpen(false)}
+                initialCategory={categoryProductsTarget}
+            />
         </div>
     );
 }

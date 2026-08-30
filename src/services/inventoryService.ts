@@ -566,6 +566,21 @@ export const inventoryService = {
 
         return { inserted: records.length, errors };
     },
+
+    assignCategoryToProducts: async (productIds: string[], categoryName: string, categoryId?: string): Promise<void> => {
+        if (!productIds || productIds.length === 0) return;
+        const userEmail = useAuthStore.getState().user?.email || 'system';
+        const { error } = await supabase
+            .from('inventory')
+            .update({
+                category: categoryName,
+                category_id: categoryId || null,
+                updated_by: userEmail,
+            })
+            .in('id', productIds);
+
+        if (error) throw error;
+    },
 };
 
 export interface Category {
