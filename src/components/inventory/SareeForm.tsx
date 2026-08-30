@@ -90,6 +90,10 @@ export function SareeForm({ initialData, onSubmit, onCancel }: SareeFormProps) {
 
     const [isManageCategoriesOpen, setIsManageCategoriesOpen] = React.useState(false);
 
+    // Searchable category dropdown state
+    const [catSearch, setCatSearch] = React.useState('');
+    const [isCatOpen, setIsCatOpen] = React.useState(false);
+
     const { data: categories } = useQuery({
         queryKey: ['categories'],
         queryFn: categoryService.getCategories
@@ -325,40 +329,82 @@ export function SareeForm({ initialData, onSubmit, onCancel }: SareeFormProps) {
                                                 <Plus className="h-3 w-3" /> Manage
                                             </button>
                                         </div>
-                                        <Select 
-                                            onValueChange={(val) => {
-                                                field.onChange(val);
-                                                const cat = categories?.find(c => c.name === val);
-                                                if (cat) {
-                                                    form.setValue('categoryId', cat.categoryId);
-                                                }
-                                            }} 
-                                            value={field.value || undefined}
-                                            defaultValue={field.value || undefined}
-                                        >
-                                            <FormControl>
-                                                <SelectTrigger>
-                                                    <SelectValue placeholder="Select Category" />
-                                                </SelectTrigger>
-                                            </FormControl>
-                                            <SelectContent>
-                                                {categories && categories.length > 0 ? (
-                                                    categories.filter(c => c.status === 'active').map(cat => (
-                                                        <SelectItem key={cat.id} value={cat.name}>
-                                                            {cat.name}
-                                                        </SelectItem>
-                                                    ))
+                                        <FormControl>
+                                            <div>
+                                                {/* Trigger button — shown when closed */}
+                                                {!isCatOpen ? (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => { setIsCatOpen(true); setCatSearch(''); }}
+                                                        className={`w-full h-10 px-3 text-sm text-left border rounded-md flex items-center justify-between gap-2 hover:border-maroon/40 transition-colors focus:outline-none focus:ring-2 focus:ring-maroon/20 ${
+                                                            field.value ? 'border-input text-gray-800' : 'border-input text-muted-foreground'
+                                                        }`}
+                                                    >
+                                                        <span className="truncate">{field.value || 'Select Category'}</span>
+                                                        <svg className="h-4 w-4 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                                                    </button>
                                                 ) : (
-                                                    <>
-                                                        <SelectItem value="Banarasi">Banarasi</SelectItem>
-                                                        <SelectItem value="Kanjivaram">Kanjivaram</SelectItem>
-                                                        <SelectItem value="Chiffon">Chiffon</SelectItem>
-                                                        <SelectItem value="Cotton">Cotton</SelectItem>
-                                                        <SelectItem value="Silk">Silk</SelectItem>
-                                                    </>
+                                                    /* Inline expanded picker */
+                                                    <div className="border border-maroon/30 rounded-md overflow-hidden bg-white shadow-sm">
+                                                        {/* Search row */}
+                                                        <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100 bg-gray-50">
+                                                            <svg className="h-3.5 w-3.5 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M16.65 16.65A7 7 0 1 0 2 9a7 7 0 0 0 14.65 7.65z" /></svg>
+                                                            <input
+                                                                autoFocus
+                                                                type="text"
+                                                                placeholder="Search category..."
+                                                                value={catSearch}
+                                                                onChange={e => setCatSearch(e.target.value)}
+                                                                className="flex-1 text-sm bg-transparent focus:outline-none placeholder:text-gray-400"
+                                                            />
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => { setIsCatOpen(false); setCatSearch(''); }}
+                                                                className="text-gray-400 hover:text-gray-600 transition-colors"
+                                                            >
+                                                                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                                                            </button>
+                                                        </div>
+                                                        {/* Scrollable list */}
+                                                        <div
+                                                            className="max-h-[180px] overflow-y-auto py-1"
+                                                            onWheel={e => e.stopPropagation()}
+                                                        >
+                                                            {categories && categories
+                                                                .filter(c => c.status === 'active' && c.name.toLowerCase().includes(catSearch.toLowerCase()))
+                                                                .length > 0 ? (
+                                                                categories
+                                                                    .filter(c => c.status === 'active' && c.name.toLowerCase().includes(catSearch.toLowerCase()))
+                                                                    .map(cat => (
+                                                                        <button
+                                                                            key={cat.id}
+                                                                            type="button"
+                                                                            onClick={() => {
+                                                                                field.onChange(cat.name);
+                                                                                form.setValue('categoryId', cat.categoryId);
+                                                                                setIsCatOpen(false);
+                                                                                setCatSearch('');
+                                                                            }}
+                                                                            className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-cream/40 transition-colors ${
+                                                                                field.value === cat.name ? 'bg-maroon/5 text-maroon font-semibold' : 'text-gray-700'
+                                                                            }`}
+                                                                        >
+                                                                            {field.value === cat.name ? (
+                                                                                <svg className="h-3.5 w-3.5 text-maroon shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                                                                            ) : <span className="w-3.5" />}
+                                                                            {cat.name}
+                                                                        </button>
+                                                                    ))
+                                                            ) : (
+                                                                <p className="text-xs text-gray-400 italic text-center py-4">
+                                                                    {catSearch ? 'No matching categories' : 'No categories found'}
+                                                                </p>
+                                                            )}
+                                                        </div>
+                                                    </div>
                                                 )}
-                                            </SelectContent>
-                                        </Select>
+                                            </div>
+                                        </FormControl>
                                         <FormMessage />
                                     </FormItem>
                                 )}
@@ -488,8 +534,17 @@ export function SareeForm({ initialData, onSubmit, onCancel }: SareeFormProps) {
                                 name="categoryId"
                                 render={({ field }) => (
                                     <FormItem>
-                                        <FormLabel className="text-maroon font-semibold">Category ID (Storefront)</FormLabel>
-                                        <Input placeholder="e.g. cat_123" {...field} value={field.value || ''} />
+                                        <FormLabel className="text-maroon font-semibold flex items-center gap-2">
+                                            Category ID (Storefront)
+                                            <span className="text-[9px] bg-maroon/10 text-maroon px-1.5 py-0.5 rounded font-bold uppercase tracking-wide">Auto-filled</span>
+                                        </FormLabel>
+                                        <Input
+                                            placeholder="Select a category above to auto-fill"
+                                            {...field}
+                                            value={field.value || ''}
+                                            readOnly
+                                            className="bg-gray-50 text-gray-500 cursor-default focus:ring-0 focus:border-gray-200"
+                                        />
                                         <FormMessage />
                                     </FormItem>
                                 )}
@@ -533,7 +588,18 @@ export function SareeForm({ initialData, onSubmit, onCancel }: SareeFormProps) {
                                     <FormItem>
                                         <FormLabel className="text-maroon font-semibold">Purchase Price (₹) <span className="text-red-500">*</span></FormLabel>
                                         <FormControl>
-                                            <Input type="number" placeholder="Cost price to business" {...field} />
+                                            <Input
+                                                type="text"
+                                                inputMode="numeric"
+                                                placeholder="Cost price to business"
+                                                onWheel={e => (e.target as HTMLInputElement).blur()}
+                                                {...field}
+                                                value={field.value === 0 ? '' : field.value}
+                                                onChange={e => {
+                                                    const raw = e.target.value;
+                                                    field.onChange(raw === '' ? 0 : parseFloat(raw) || 0);
+                                                }}
+                                            />
                                         </FormControl>
                                         <FormMessage />
                                     </FormItem>
@@ -546,7 +612,18 @@ export function SareeForm({ initialData, onSubmit, onCancel }: SareeFormProps) {
                                     <FormItem>
                                         <FormLabel className="text-maroon font-semibold">Initial Stock (Units) <span className="text-red-500">*</span></FormLabel>
                                         <FormControl>
-                                            <Input type="number" placeholder="Available units" {...field} />
+                                            <Input
+                                                type="text"
+                                                inputMode="numeric"
+                                                placeholder="Available units"
+                                                onWheel={e => (e.target as HTMLInputElement).blur()}
+                                                {...field}
+                                                value={field.value === 0 ? '' : field.value}
+                                                onChange={e => {
+                                                    const raw = e.target.value;
+                                                    field.onChange(raw === '' ? 0 : parseInt(raw) || 0);
+                                                }}
+                                            />
                                         </FormControl>
                                         <FormMessage />
                                     </FormItem>
@@ -572,12 +649,16 @@ export function SareeForm({ initialData, onSubmit, onCancel }: SareeFormProps) {
                                         <FormItem>
                                             <FormLabel className="text-maroon/90 font-semibold text-xs">MRP (₹)</FormLabel>
                                             <FormControl>
-                                                <Input 
-                                                    type="number" 
+                                                <Input
+                                                    type="text"
+                                                    inputMode="numeric"
                                                     placeholder="e.g. 10000"
+                                                    onWheel={e => (e.target as HTMLInputElement).blur()}
                                                     {...field}
+                                                    value={field.value === 0 ? '' : field.value}
                                                     onChange={(e) => {
-                                                        const val = parseFloat(e.target.value) || 0;
+                                                        const raw = e.target.value;
+                                                        const val = raw === '' ? 0 : parseFloat(raw) || 0;
                                                         field.onChange(val);
                                                         const discPercent = form.getValues('discountPercentage') || 0;
                                                         const discAmt = form.getValues('discountAmount') || 0;
@@ -609,12 +690,16 @@ export function SareeForm({ initialData, onSubmit, onCancel }: SareeFormProps) {
                                         <FormItem>
                                             <FormLabel className="text-maroon/90 font-semibold text-xs">Discount (%)</FormLabel>
                                             <FormControl>
-                                                <Input 
-                                                    type="number" 
+                                                <Input
+                                                    type="text"
+                                                    inputMode="numeric"
                                                     placeholder="e.g. 20"
-                                                    {...field} 
+                                                    onWheel={e => (e.target as HTMLInputElement).blur()}
+                                                    {...field}
+                                                    value={field.value === 0 ? '' : field.value}
                                                     onChange={(e) => {
-                                                        const percent = parseFloat(e.target.value) || 0;
+                                                        const raw = e.target.value;
+                                                        const percent = raw === '' ? 0 : parseFloat(raw) || 0;
                                                         field.onChange(percent);
                                                         const mrp = form.getValues('mrp') || 0;
                                                         if (mrp > 0) {
@@ -638,12 +723,16 @@ export function SareeForm({ initialData, onSubmit, onCancel }: SareeFormProps) {
                                         <FormItem>
                                             <FormLabel className="text-maroon/90 font-semibold text-xs">Discount Amount (₹)</FormLabel>
                                             <FormControl>
-                                                <Input 
-                                                    type="number" 
+                                                <Input
+                                                    type="text"
+                                                    inputMode="numeric"
                                                     placeholder="e.g. 2000"
-                                                    {...field} 
+                                                    onWheel={e => (e.target as HTMLInputElement).blur()}
+                                                    {...field}
+                                                    value={field.value === 0 ? '' : field.value}
                                                     onChange={(e) => {
-                                                        const amt = parseFloat(e.target.value) || 0;
+                                                        const raw = e.target.value;
+                                                        const amt = raw === '' ? 0 : parseFloat(raw) || 0;
                                                         field.onChange(amt);
                                                         const mrp = form.getValues('mrp') || 0;
                                                         if (mrp > 0) {
@@ -669,13 +758,17 @@ export function SareeForm({ initialData, onSubmit, onCancel }: SareeFormProps) {
                                                 Selling Price (₹) <span className="text-red-500">*</span>
                                             </FormLabel>
                                             <FormControl>
-                                                <Input 
-                                                    type="number" 
+                                                <Input
+                                                    type="text"
+                                                    inputMode="numeric"
                                                     placeholder="Final customer price"
                                                     className="font-bold border-maroon/40 text-maroon"
-                                                    {...field} 
+                                                    onWheel={e => (e.target as HTMLInputElement).blur()}
+                                                    {...field}
+                                                    value={field.value === 0 ? '' : field.value}
                                                     onChange={(e) => {
-                                                        const sell = parseFloat(e.target.value) || 0;
+                                                        const raw = e.target.value;
+                                                        const sell = raw === '' ? 0 : parseFloat(raw) || 0;
                                                         field.onChange(sell);
                                                         const mrp = form.getValues('mrp') || 0;
                                                         if (mrp > 0) {

@@ -76,6 +76,7 @@ export default function InventoryPage() {
     const [categoryProductsTarget, setCategoryProductsTarget] = React.useState<string | undefined>();
     const [galleryState, setGalleryState] = React.useState<{ images: { imageUrl: string }[], title: string } | null>(null);
     const [galleryActiveIndex, setGalleryActiveIndex] = React.useState<number>(0);
+    const [viewingSaree, setViewingSaree] = React.useState<Saree | null>(null);
 
     const queryClient = useQueryClient();
 
@@ -87,6 +88,26 @@ export default function InventoryPage() {
     const [statusFilter, setStatusFilter] = React.useState('All'); // 'All' | 'active' | 'inactive'
     const [minPrice, setMinPrice] = React.useState('');
     const [maxPrice, setMaxPrice] = React.useState('');
+
+    // Category searchable dropdown state
+    const [categorySearch, setCategorySearch] = React.useState('');
+    const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = React.useState(false);
+    const categoryBtnRef = React.useRef<HTMLButtonElement>(null);
+    const [categoryDropdownPos, setCategoryDropdownPos] = React.useState({ top: 0, left: 0, width: 0 });
+
+    // Close category dropdown on outside click or scroll
+    React.useEffect(() => {
+        const close = () => { setIsCategoryDropdownOpen(false); setCategorySearch(''); };
+        document.addEventListener('mousedown', (e: MouseEvent) => {
+            if (categoryBtnRef.current && !categoryBtnRef.current.closest('[data-cat-dropdown]')?.contains(e.target as Node)) {
+                close();
+            }
+        });
+        window.addEventListener('scroll', close, true);
+        return () => {
+            window.removeEventListener('scroll', close, true);
+        };
+    }, []);
 
     const { data: sarees, isLoading } = useQuery({
         queryKey: ['sarees'],
@@ -135,19 +156,12 @@ export default function InventoryPage() {
     });
 
     const categories = React.useMemo(() => {
-        const set = new Set<string>();
-        if (Array.isArray(dbCategories)) {
-            dbCategories.forEach(c => {
-                if (c.status === 'active') set.add(c.name);
-            });
-        }
-        if (Array.isArray(sarees)) {
-            sarees.forEach(s => {
-                if (s.category) set.add(s.category);
-            });
-        }
-        return Array.from(set).sort();
-    }, [dbCategories, sarees]);
+        if (!Array.isArray(dbCategories)) return [];
+        return dbCategories
+            .filter(c => c.status === 'active')
+            .map(c => c.name)
+            .sort();
+    }, [dbCategories]);
 
     const fabrics = React.useMemo(() => {
         if (!Array.isArray(sarees)) return [];
@@ -479,20 +493,86 @@ export default function InventoryPage() {
                         >
                             <div className="bg-cream/10 p-3.5 border border-gold/15 rounded-lg space-y-3">
                                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-                                    {/* Category */}
-                                    <div className="space-y-1.5">
+                                    {/* Category — searchable combobox (fixed-positioned to escape overflow-hidden) */}
+                                    <div className="space-y-1.5" data-cat-dropdown>
                                         <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Category</label>
-                                        <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                                            <SelectTrigger className="h-9 text-xs border-gold/30 bg-white">
-                                                <SelectValue placeholder="All Categories" />
-                                            </SelectTrigger>
-                                            <SelectContent className="border-gold/20 max-h-[250px]">
-                                                <SelectItem value="All" className="text-xs">All Categories</SelectItem>
-                                                {categories.map(cat => (
-                                                    <SelectItem key={cat} value={cat} className="text-xs">{cat}</SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
+                                        <div className="relative">
+                                            <button
+                                                ref={categoryBtnRef}
+                                                type="button"
+                                                onClick={() => {
+                                                    if (categoryBtnRef.current) {
+                                                        const rect = categoryBtnRef.current.getBoundingClientRect();
+                                                        setCategoryDropdownPos({
+                                                            top: rect.bottom + 4,
+                                                            left: rect.left,
+                                                            width: rect.width,
+                                                        });
+                                                    }
+                                                    setIsCategoryDropdownOpen(prev => !prev);
+                                                    setCategorySearch('');
+                                                }}
+                                                className="w-full h-9 px-3 text-xs text-left border border-gold/30 bg-white rounded-md flex items-center justify-between gap-1 hover:border-gold/60 transition-colors focus:outline-none focus:ring-1 focus:ring-maroon/30"
+                                            >
+                                                <span className={selectedCategory === 'All' ? 'text-gray-400' : 'text-gray-800 font-medium truncate'}>
+                                                    {selectedCategory === 'All' ? 'All Categories' : selectedCategory}
+                                                </span>
+                                                <svg className={`h-3.5 w-3.5 text-gray-400 shrink-0 transition-transform ${isCategoryDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                                            </button>
+
+                                            {isCategoryDropdownOpen && (
+                                                <div
+                                                    data-cat-dropdown
+                                                    style={{ position: 'fixed', top: categoryDropdownPos.top, left: categoryDropdownPos.left, width: categoryDropdownPos.width, zIndex: 9999 }}
+                                                    className="bg-white border border-gold/25 rounded-md shadow-xl overflow-hidden"
+                                                >
+                                                    {/* Search input */}
+                                                    <div className="p-1.5 border-b border-gold/15">
+                                                        <div className="relative">
+                                                            <svg className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M16.65 16.65A7 7 0 1 0 2 9a7 7 0 0 0 14.65 7.65z" /></svg>
+                                                            <input
+                                                                autoFocus
+                                                                type="text"
+                                                                placeholder="Search category..."
+                                                                value={categorySearch}
+                                                                onChange={e => setCategorySearch(e.target.value)}
+                                                                className="w-full pl-6 pr-2 py-1 text-xs bg-gray-50 border border-gray-200 rounded focus:outline-none focus:border-maroon/40"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    {/* Options list */}
+                                                    <div className="max-h-[200px] overflow-y-auto py-1">
+                                                        {[
+                                                            ...(('all categories'.includes(categorySearch.toLowerCase()) || categorySearch === '') ? [{ label: 'All Categories', value: 'All' }] : []),
+                                                            ...categories
+                                                                .filter(cat => cat.toLowerCase().includes(categorySearch.toLowerCase()))
+                                                                .map(cat => ({ label: cat, value: cat }))
+                                                        ].map(opt => (
+                                                            <button
+                                                                key={opt.value}
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setSelectedCategory(opt.value);
+                                                                    setIsCategoryDropdownOpen(false);
+                                                                    setCategorySearch('');
+                                                                }}
+                                                                className={`w-full text-left px-3 py-1.5 text-xs hover:bg-cream/40 transition-colors flex items-center gap-2 ${
+                                                                    selectedCategory === opt.value ? 'bg-maroon/5 text-maroon font-semibold' : 'text-gray-700'
+                                                                }`}
+                                                            >
+                                                                {selectedCategory === opt.value && (
+                                                                    <svg className="h-3 w-3 text-maroon shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                                                                )}
+                                                                <span className={selectedCategory === opt.value ? '' : 'ml-5'}>{opt.label}</span>
+                                                            </button>
+                                                        ))}
+                                                        {categories.filter(cat => cat.toLowerCase().includes(categorySearch.toLowerCase())).length === 0 && categorySearch !== '' && (
+                                                            <p className="text-[10px] text-gray-400 italic text-center py-3">No matching categories</p>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
 
                                     {/* Fabric */}
@@ -648,7 +728,11 @@ export default function InventoryPage() {
                                 </TableRow>
                             ) : (
                                 paginatedSarees?.map((saree) => (
-                                    <TableRow key={saree.id} className="hover:bg-cream/40 border-b border-gold/5 h-14 group transition-colors">
+                                    <TableRow
+                                        key={saree.id}
+                                        className="hover:bg-cream/40 border-b border-gold/5 h-14 group transition-colors cursor-pointer"
+                                        onClick={() => setViewingSaree(saree)}
+                                    >
                                         <TableCell className="sticky left-0 bg-white group-hover:bg-cream/40 transition-colors z-20 py-1 px-3 text-xs font-mono font-bold text-maroon border-r border-gold/10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] w-[64px] min-w-[64px]">{saree.id}</TableCell>
                                         <TableCell className="sticky left-[64px] bg-white group-hover:bg-cream/40 transition-colors z-20 py-1 px-3 text-xs font-semibold text-gray-800 border-r border-gold/10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] min-w-[220px] max-w-[220px]" title={saree.description || undefined}>
                                             <div className="flex items-center gap-2.5">
@@ -756,7 +840,7 @@ export default function InventoryPage() {
                                                 <div className="text-[9px] text-gray-400">U: {saree.updatedBy || 'system'}</div>
                                             </div>
                                         </TableCell>
-                                        <TableCell className="sticky right-0 bg-white group-hover:bg-cream/40 transition-colors z-20 py-1 px-3 text-right border-l border-gold/10 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)] w-[60px] min-w-[60px]">
+                                        <TableCell className="sticky right-0 bg-white group-hover:bg-cream/40 transition-colors z-20 py-1 px-3 text-right border-l border-gold/10 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)] w-[60px] min-w-[60px]" onClick={e => e.stopPropagation()}>
                                             <DropdownMenu>
                                                 <DropdownMenuTrigger asChild>
                                                     <Button variant="ghost" className="h-8 w-8 p-0 hover:bg-gold/10 rounded-full">
@@ -959,6 +1043,151 @@ export default function InventoryPage() {
                 onClose={() => setIsCategoryProductsOpen(false)}
                 initialCategory={categoryProductsTarget}
             />
+
+            {/* ─── Row Detail Modal ─── */}
+            <Dialog open={!!viewingSaree} onOpenChange={(open) => !open && setViewingSaree(null)}>
+                <DialogContent className="max-w-lg w-full border-gold/20 shadow-2xl p-0 overflow-hidden bg-white max-h-[92vh] flex flex-col">
+                    {viewingSaree && (() => {
+                        const s = viewingSaree;
+                        const primaryImg = s.images?.find(i => i.isPrimary) || s.images?.[0];
+                        const hasDiscount = (s.discountAmount || 0) > 0;
+                        const stockColor = s.stock === 0
+                            ? 'text-red-700 bg-red-50 border-red-200'
+                            : s.stock < 5
+                                ? 'text-amber-700 bg-amber-50 border-amber-200'
+                                : 'text-emerald-700 bg-emerald-50 border-emerald-200';
+                        return (
+                            <>
+                                {/* Header with image + name */}
+                                <div className="flex items-start gap-3 px-5 pt-4 pb-3 border-b border-gold/15 shrink-0">
+                                    {primaryImg ? (
+                                        <img
+                                            src={primaryImg.imageUrl}
+                                            alt={s.sareeName}
+                                            className="h-16 w-16 object-cover rounded-xl border border-gold/20 shadow-sm flex-shrink-0 cursor-pointer"
+                                            onClick={() => {
+                                                if (s.images?.length) {
+                                                    const idx = s.images.findIndex(i => i.isPrimary);
+                                                    setGalleryState({ images: s.images, title: s.sareeName });
+                                                    setGalleryActiveIndex(idx !== -1 ? idx : 0);
+                                                    setViewingSaree(null);
+                                                }
+                                            }}
+                                        />
+                                    ) : (
+                                        <div className="h-16 w-16 rounded-xl bg-cream/40 border border-gold/15 flex items-center justify-center text-[9px] text-gray-400 font-bold flex-shrink-0">No Img</div>
+                                    )}
+                                    <div className="min-w-0 flex-1">
+                                        <h2 className="font-bold text-maroon font-serif text-base leading-tight">{s.sareeName}</h2>
+                                        <div className="flex flex-wrap gap-1.5 mt-1.5">
+                                            {s.designCode && <span className="text-[10px] font-mono bg-purple-50 text-purple-800 border border-purple-200 px-1.5 py-0.5 rounded font-bold">{s.designCode}</span>}
+                                            {s.sku && <span className="text-[10px] font-mono bg-gray-50 text-gray-600 border border-gray-200 px-1.5 py-0.5 rounded">SKU: {s.sku}</span>}
+                                            <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded border', s.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-gray-50 text-gray-500 border-gray-200')}>
+                                                {s.status?.toUpperCase()}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <span className="text-[10px] font-mono text-gray-400 shrink-0">#{s.id}</span>
+                                </div>
+
+                                {/* Scrollable body */}
+                                <div className="overflow-y-auto flex-1 px-5 py-4 space-y-4">
+                                    {/* Product info grid */}
+                                    <div className="grid grid-cols-2 gap-2.5">
+                                        {[
+                                            { label: 'Category', value: s.category || '—' },
+                                            { label: 'Fabric', value: s.fabric || '—' },
+                                            { label: 'Color', value: s.color || '—' },
+                                            { label: 'Rack No', value: s.rackNo || '—' },
+                                            { label: 'HSN Code', value: s.hsnCode || '—' },
+                                            { label: 'Category ID', value: s.categoryId || '—' },
+                                        ].map(({ label, value }) => (
+                                            <div key={label} className="bg-gray-50 rounded-lg px-3 py-2">
+                                                <div className="text-[9px] font-bold uppercase tracking-wider text-gray-400">{label}</div>
+                                                <div className="text-xs font-semibold text-gray-800 truncate mt-0.5" title={value}>{value}</div>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {/* Pricing card */}
+                                    <div className="bg-gradient-to-br from-cream/30 to-transparent border border-gold/20 rounded-xl p-3">
+                                        <div className="text-[10px] font-bold uppercase tracking-wider text-maroon/70 mb-2">Pricing</div>
+                                        <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                                            <div>
+                                                <div className="text-[9px] text-gray-400 uppercase">Purchase Price</div>
+                                                <div className="text-sm font-bold text-gray-700 font-mono">₹{(s.purchasePrice || 0).toLocaleString()}</div>
+                                            </div>
+                                            <div>
+                                                <div className="text-[9px] text-gray-400 uppercase">MRP</div>
+                                                <div className={cn('text-sm font-mono', hasDiscount ? 'line-through text-gray-400' : 'font-bold text-gray-700')}>₹{(s.mrp || 0).toLocaleString()}</div>
+                                            </div>
+                                            {hasDiscount && (
+                                                <div>
+                                                    <div className="text-[9px] text-gray-400 uppercase">Discount</div>
+                                                    <div className="text-sm font-bold text-red-600 font-mono">
+                                                        −₹{(s.discountAmount || 0).toLocaleString()}
+                                                        {(s.discountPercentage || 0) > 0 && <span className="text-[9px] text-gray-400 ml-1">({s.discountPercentage}%)</span>}
+                                                    </div>
+                                                </div>
+                                            )}
+                                            <div>
+                                                <div className="text-[9px] text-gray-400 uppercase">Selling Price</div>
+                                                <div className="text-lg font-bold text-maroon font-mono">₹{s.sellingPrice.toLocaleString()}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Stock */}
+                                    <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2.5">
+                                        <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Stock Available</span>
+                                        <span className={cn('text-sm font-bold px-3 py-1 rounded-full border', stockColor)}>
+                                            {s.stock} {s.stock === 1 ? 'unit' : 'units'}
+                                        </span>
+                                    </div>
+
+                                    {/* Description */}
+                                    {s.description && (
+                                        <div className="bg-gray-50 rounded-lg px-3 py-2">
+                                            <div className="text-[9px] font-bold uppercase tracking-wider text-gray-400 mb-1">Description</div>
+                                            <p className="text-xs text-gray-600 leading-relaxed">{s.description}</p>
+                                        </div>
+                                    )}
+
+                                    {/* Meta */}
+                                    <div className="flex justify-between text-[10px] text-gray-400">
+                                        <span>Added: <span className="font-semibold text-gray-600">{s.addedDate ? new Date(s.addedDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</span></span>
+                                        <span>By: <span className="font-semibold text-gray-600">{s.createdBy || 'system'}</span></span>
+                                    </div>
+                                </div>
+
+                                {/* Footer actions */}
+                                <div className="flex items-center gap-2 px-5 py-3 border-t border-gold/15 shrink-0 bg-gray-50/80">
+                                    <Button
+                                        className="flex-1 bg-maroon text-gold hover:bg-maroon/90 gap-1.5 h-9 text-sm font-semibold"
+                                        onClick={() => { setEditingSaree(s); setIsFormOpen(true); setViewingSaree(null); }}
+                                    >
+                                        <Edit className="h-3.5 w-3.5" /> Edit
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        className="flex-1 border-maroon/30 text-maroon hover:bg-cream/40 gap-1.5 h-9 text-sm font-semibold"
+                                        onClick={() => { setBarcodeToShow(s); setViewingSaree(null); }}
+                                    >
+                                        <BarcodeIcon className="h-3.5 w-3.5" /> Barcode
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        className="border-red-200 text-red-600 hover:bg-red-50 gap-1.5 h-9 px-3"
+                                        onClick={() => { handleDelete(s.id); setViewingSaree(null); }}
+                                    >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                </div>
+                            </>
+                        );
+                    })()}
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

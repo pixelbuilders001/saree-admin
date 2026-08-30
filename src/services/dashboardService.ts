@@ -190,7 +190,7 @@ export const dashboardService = {
         // Category distribution
         const catMap: Record<string, { count: number; stock: number }> = {};
         (sarees || []).forEach(s => {
-            const cat = s.category || 'Uncategorized';
+            const cat = (s.category || 'Uncategorized').trim();
             if (!catMap[cat]) {
                 catMap[cat] = { count: 0, stock: 0 };
             }
