@@ -783,14 +783,18 @@ export default function InventoryPage() {
                                                 : `₹${(saree.mrp || 0).toLocaleString()}`}
                                         </TableCell>
                                         <TableCell className="py-1 text-xs text-right text-gray-500 whitespace-nowrap">
-                                            {saree.discountAmount ? (
-                                                <div>
-                                                    <span className="font-semibold text-red-600 font-mono">₹{saree.discountAmount.toLocaleString()}</span>
-                                                    {(saree.discountPercentage || 0) > 0 && (
-                                                        <span className="text-[9px] text-gray-400 block font-mono">({saree.discountPercentage}%)</span>
-                                                    )}
-                                                </div>
-                                            ) : '—'}
+                                            {((saree.discountAmount || 0) > 0 || (saree.discountPercentage || 0) > 0) ? (() => {
+                                                const pct = Number(saree.discountPercentage) || 0;
+                                                const amt = Number(saree.discountAmount) > 0
+                                                    ? Number(saree.discountAmount)
+                                                    : (pct > 0 && saree.mrp ? Math.round(saree.mrp * pct / 100) : 0);
+                                                return (
+                                                    <div>
+                                                        {amt > 0 && <span className="font-semibold text-red-600 font-mono block">₹{amt.toLocaleString()}</span>}
+                                                        {pct > 0 && <span className="text-[9px] text-gray-400 font-mono">({pct}%)</span>}
+                                                    </div>
+                                                );
+                                            })() : '—'}
                                         </TableCell>
                                         <TableCell className="py-1 text-xs text-right font-mono font-semibold text-gray-600 whitespace-nowrap">
                                             ₹{(saree.purchasePrice || 0).toLocaleString()}
@@ -1050,7 +1054,10 @@ export default function InventoryPage() {
                     {viewingSaree && (() => {
                         const s = viewingSaree;
                         const primaryImg = s.images?.find(i => i.isPrimary) || s.images?.[0];
-                        const hasDiscount = (s.discountAmount || 0) > 0;
+                        const hasDiscount = (s.discountAmount || 0) > 0 || (s.discountPercentage || 0) > 0;
+                        const effectiveDiscountAmt = Number(s.discountAmount) > 0
+                            ? Number(s.discountAmount)
+                            : ((s.discountPercentage || 0) > 0 && s.mrp ? Math.round(s.mrp * Number(s.discountPercentage) / 100) : 0);
                         const stockColor = s.stock === 0
                             ? 'text-red-700 bg-red-50 border-red-200'
                             : s.stock < 5
@@ -1125,7 +1132,7 @@ export default function InventoryPage() {
                                                 <div>
                                                     <div className="text-[9px] text-gray-400 uppercase">Discount</div>
                                                     <div className="text-sm font-bold text-red-600 font-mono">
-                                                        −₹{(s.discountAmount || 0).toLocaleString()}
+                                                        {effectiveDiscountAmt > 0 && `−₹${effectiveDiscountAmt.toLocaleString()}`}
                                                         {(s.discountPercentage || 0) > 0 && <span className="text-[9px] text-gray-400 ml-1">({s.discountPercentage}%)</span>}
                                                     </div>
                                                 </div>
