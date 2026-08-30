@@ -2,6 +2,7 @@ import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { campaignService, type Campaign, type HomepageSlot } from '@/services/campaignService';
 import { inventoryService, type Saree } from '@/services/inventoryService';
+import { compressImage } from '@/lib/imageCompressor';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
     Megaphone,
@@ -80,6 +81,8 @@ export default function CampaignsPage() {
     // Banner file upload (used for both desktop & mobile views)
     const [bannerFile, setBannerFile] = React.useState<File | null>(null);
     const [bannerPreviewUrl, setBannerPreviewUrl] = React.useState<string | null>(null);
+    const [compressing, setCompressing] = React.useState(false);
+    const [sizeInfo, setSizeInfo] = React.useState<{ originalKB: number; compressedKB: number } | null>(null);
 
     // Filters for inventory selector
     const [inventorySearch, setInventorySearch] = React.useState('');
@@ -204,6 +207,8 @@ export default function CampaignsPage() {
         setSelectedProductIds([]);
         setBannerFile(null);
         setBannerPreviewUrl(null);
+        setSizeInfo(null);
+        setCompressing(false);
         setIsFormOpen(true);
     };
 
@@ -221,16 +226,40 @@ export default function CampaignsPage() {
         setSelectedProductIds(campaign.productIds || []);
         setBannerFile(null);
         setBannerPreviewUrl(campaign.desktopBannerUrl);
+        setSizeInfo(null);
+        setCompressing(false);
         setIsFormOpen(true);
     };
 
     // Handle banner file selection
-    const handleBannerFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleBannerFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
-        if (file) {
+        if (!file) return;
+
+        const originalKB = Math.round(file.size / 1024);
+        setSizeInfo(null);
+        setCompressing(true);
+
+        const rawUrl = URL.createObjectURL(file);
+        setBannerPreviewUrl(rawUrl);
+
+        try {
+            // Compress: max 800 KB threshold, max 2400px
+            const compressed = await compressImage(file, 800, 2400);
+            const compressedKB = Math.round(compressed.size / 1024);
+
+            URL.revokeObjectURL(rawUrl);
+            setBannerPreviewUrl(URL.createObjectURL(compressed));
+            setBannerFile(compressed);
+            setSizeInfo({ originalKB, compressedKB });
+        } catch {
             setBannerFile(file);
-            setBannerPreviewUrl(URL.createObjectURL(file));
+            setSizeInfo({ originalKB, compressedKB: originalKB });
+        } finally {
+            setCompressing(false);
         }
+
+        e.target.value = '';
     };
 
     // Mutations
@@ -941,28 +970,63 @@ export default function CampaignsPage() {
                                                 alt="Banner preview" 
                                                 className="w-full h-32 object-cover"
                                             />
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    setBannerFile(null);
-                                                    setBannerPreviewUrl(null);
-                                                }}
-                                                className="absolute top-2 right-2 bg-red-600 hover:bg-red-700 text-white rounded-full p-1 shadow transition-colors"
-                                            >
-                                                <X className="h-3.5 w-3.5" />
-                                            </button>
+                                            {compressing && (
+                                                <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-black/40 backdrop-blur-[2px]">
+                                                    <Loader2 className="h-6 w-6 animate-spin text-white" />
+                                                    <span className="text-white text-xs font-bold tracking-wider">Compressing Banner…</span>
+                                                </div>
+                                            )}
+                                            {!compressing && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setBannerFile(null);
+                                                        setBannerPreviewUrl(null);
+                                                        setSizeInfo(null);
+                                                    }}
+                                                    className="absolute top-2 right-2 bg-red-600 hover:bg-red-700 text-white rounded-full p-1 shadow transition-colors"
+                                                >
+                                                    <X className="h-3.5 w-3.5" />
+                                                </button>
+                                            )}
                                         </div>
                                     ) : (
-                                        <div className="border border-dashed border-gold/20 rounded-lg p-6 text-center bg-white hover:bg-slate-50 transition-colors cursor-pointer relative">
+                                        <div className={`border border-dashed rounded-lg p-6 text-center bg-white transition-colors relative ${
+                                            compressing ? 'border-amber-300 cursor-wait' : 'border-gold/20 hover:bg-slate-50 cursor-pointer'
+                                        }`}>
                                             <input 
                                                 type="file" 
                                                 accept="image/*" 
                                                 onChange={handleBannerFileChange}
-                                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                                disabled={compressing}
+                                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-wait"
                                             />
-                                            <Upload className="h-6 w-6 text-gold/60 mx-auto mb-1.5" />
-                                            <p className="text-[10.5px] font-semibold text-gray-700">Click to upload campaign banner</p>
-                                            <p className="text-[9px] text-gray-400 mt-0.5">Supports PNG, JPG, JPEG, WebP. Used for both desktop & mobile storefront layouts.</p>
+                                            {compressing ? (
+                                                <div className="flex flex-col items-center justify-center py-2 gap-2">
+                                                    <Loader2 className="h-6 w-6 animate-spin text-maroon mx-auto" />
+                                                    <p className="text-xs font-bold text-maroon">Compressing banner image...</p>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <Upload className="h-6 w-6 text-gold/60 mx-auto mb-1.5" />
+                                                    <p className="text-[10.5px] font-semibold text-gray-700">Click to upload campaign banner</p>
+                                                    <p className="text-[9px] text-gray-400 mt-0.5">Supports PNG, JPG, JPEG, WebP. Auto-compressed before upload.</p>
+                                                </>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {sizeInfo && !compressing && (
+                                        <div className={`mt-2 inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full border ${
+                                            sizeInfo.compressedKB < sizeInfo.originalKB
+                                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                                : 'bg-blue-50 text-blue-700 border-blue-200'
+                                        }`}>
+                                            <Check className="h-3 w-3" />
+                                            {sizeInfo.compressedKB < sizeInfo.originalKB
+                                                ? `Compressed: ${sizeInfo.originalKB} KB → ${sizeInfo.compressedKB} KB (saved ${Math.round((1 - sizeInfo.compressedKB / sizeInfo.originalKB) * 100)}%)`
+                                                : `Image ready: ${sizeInfo.compressedKB} KB (already optimised)`
+                                            }
                                         </div>
                                     )}
                                 </div>
@@ -1123,13 +1187,18 @@ export default function CampaignsPage() {
                         <Button
                             type="button"
                             onClick={() => saveCampaignMutation.mutate()}
-                            disabled={saveCampaignMutation.isPending}
+                            disabled={saveCampaignMutation.isPending || compressing}
                             className="h-9 text-xs font-bold uppercase tracking-wider bg-maroon hover:bg-maroon-dark text-white px-5"
                         >
                             {saveCampaignMutation.isPending ? (
                                 <>
                                     <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
                                     Saving...
+                                </>
+                            ) : compressing ? (
+                                <>
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                                    Compressing...
                                 </>
                             ) : (
                                 'Save Campaign'
