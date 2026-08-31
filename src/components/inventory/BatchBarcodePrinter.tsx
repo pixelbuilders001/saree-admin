@@ -324,20 +324,10 @@ export function BatchBarcodePrinter({ sarees, isOpen, onClose }: BatchBarcodePri
                             width: 100%;
                         }
                         .brand-logo {
-                            height: 16px;
+                            height: 24px;
                             width: auto;
                             object-fit: contain;
-                            max-height: 16px;
-                        }
-                        .product-title {
-                            font-size: ${gridConfig.titleSize};
-                            font-weight: 700;
-                            color: #0f172a;
-                            line-height: 1.1;
-                            max-height: 22px;
-                            overflow: hidden;
-                            word-break: break-word;
-                            margin-bottom: 1px;
+                            max-height: 24px;
                         }
                         .sku-row {
                             font-size: 8px;
@@ -711,11 +701,8 @@ export function BatchBarcodePrinter({ sarees, isOpen, onClose }: BatchBarcodePri
                                                             key={`${saree.id}-${copyIndex}-${itemIdx}`}
                                                             className="border border-dashed border-slate-300 rounded p-1 flex flex-col items-center justify-between text-center bg-white overflow-hidden"
                                                         >
-                                                            <div className="mb-0.5 flex items-center justify-center w-full">
-                                                                <img src="/logo.png" alt="Logo" className="h-4 w-auto object-contain max-h-[16px]" />
-                                                            </div>
-                                                            <div className="text-[8px] font-semibold text-gray-900 leading-tight line-clamp-1 max-w-[120px]">
-                                                                {saree.sareeName}
+                                                            <div className="mb-1 flex items-center justify-center w-full">
+                                                                <img src="/logo.png" alt="Logo" className="h-6 w-auto object-contain max-h-[24px]" />
                                                             </div>
                                                             <div className="text-[7.5px] font-mono text-gray-500 font-medium leading-none my-0.5 truncate max-w-[120px]">
                                                                 SKU: {skuVal}
@@ -762,7 +749,6 @@ export function BatchBarcodePrinter({ sarees, isOpen, onClose }: BatchBarcodePri
                                         <div className="brand-header">
                                             <img src="/logo.png" alt="Logo" className="brand-logo" />
                                         </div>
-                                        <div className="product-title">{saree.sareeName}</div>
                                         <div className="sku-row">SKU: {skuVal}</div>
                                         <div className="price-row">
                                             <span className="mrp-text">MRP: ₹{formattedMrp}</span>

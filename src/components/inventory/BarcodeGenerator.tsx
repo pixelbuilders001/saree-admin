@@ -131,20 +131,10 @@ export function BarcodeGenerator({
                             width: 100%;
                         }
                         .brand-logo {
-                            height: 22px;
+                            height: 32px;
                             width: auto;
                             object-fit: contain;
-                            max-height: 22px;
-                        }
-                        .product-title {
-                            font-size: 9.5px;
-                            font-weight: 600;
-                            color: #1e293b;
-                            line-height: 1.15;
-                            max-height: 23px;
-                            overflow: hidden;
-                            margin-bottom: 2px;
-                            word-break: break-word;
+                            max-height: 32px;
                         }
                         .sku-text {
                             font-size: 8.5px;
@@ -229,13 +219,8 @@ export function BarcodeGenerator({
                         className="w-[220px] p-3 bg-white border border-dashed border-gray-300 rounded-lg shadow-sm flex flex-col items-center text-center select-none"
                     >
                         {/* Store Logo Header */}
-                        <div className="brand-header mb-1.5 flex items-center justify-center w-full">
-                            <img src="/logo.png" alt="Store Logo" className="brand-logo h-6 w-auto object-contain max-h-[24px]" />
-                        </div>
-
-                        {/* Saree Name */}
-                        <div className="product-title text-[10px] font-semibold text-gray-800 leading-tight mb-1 max-w-[200px] line-clamp-2">
-                            {nameToShow}
+                        <div className="brand-header mb-2 flex items-center justify-center w-full">
+                            <img src="/logo.png" alt="Store Logo" className="brand-logo h-9 w-auto object-contain max-h-[36px]" />
                         </div>
 
                         {/* SKU Code */}
