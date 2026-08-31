@@ -26,8 +26,9 @@ import {
     Layers,
     Tag,
     Grid,
-    Sparkles,
-    AlertCircle
+    AlertCircle,
+    Plus,
+    Minus
 } from 'lucide-react';
 import type { Saree } from '@/services/inventoryService';
 
@@ -39,8 +40,9 @@ interface BatchBarcodePrinterProps {
 
 export function BatchBarcodePrinter({ sarees, isOpen, onClose }: BatchBarcodePrinterProps) {
     const [searchTerm, setSearchTerm] = useState('');
-    const [quantityMode, setQuantityMode] = useState<'single' | 'stock'>('single');
+    const [quantityMode, setQuantityMode] = useState<'single' | 'stock' | 'custom'>('single');
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [customCounts, setCustomCounts] = useState<Record<string, number>>({});
     const [gridPreset, setGridPreset] = useState<'24' | '21' | '30' | '12'>('24');
     const [excludeOutOfStock, setExcludeOutOfStock] = useState(true);
 
@@ -50,12 +52,15 @@ export function BatchBarcodePrinter({ sarees, isOpen, onClose }: BatchBarcodePri
     React.useEffect(() => {
         if (isOpen && sarees) {
             const initialSet = new Set<string>();
+            const initialCounts: Record<string, number> = {};
             sarees.forEach(s => {
                 if (!excludeOutOfStock || s.stock > 0) {
                     initialSet.add(s.id);
+                    initialCounts[s.id] = quantityMode === 'stock' ? Math.max(1, s.stock) : 1;
                 }
             });
             setSelectedIds(initialSet);
+            setCustomCounts(initialCounts);
         }
     }, [isOpen, sarees, excludeOutOfStock]);
 
@@ -81,7 +86,7 @@ export function BatchBarcodePrinter({ sarees, isOpen, onClose }: BatchBarcodePri
                 saree.sareeName.toLowerCase().includes(term) ||
                 saree.id.toLowerCase().includes(term) ||
                 (saree.barcode && saree.barcode.toLowerCase().includes(term)) ||
-                saree.category.toLowerCase().includes(term) ||
+                (saree.category && saree.category.toLowerCase().includes(term)) ||
                 (saree.rackNo && saree.rackNo.toLowerCase().includes(term))
             );
         });
@@ -94,14 +99,16 @@ export function BatchBarcodePrinter({ sarees, isOpen, onClose }: BatchBarcodePri
 
         sarees.forEach(saree => {
             if (selectedIds.has(saree.id)) {
-                const count = quantityMode === 'stock' ? Math.max(1, saree.stock) : 1;
+                const count = customCounts[saree.id] !== undefined
+                    ? customCounts[saree.id]
+                    : (quantityMode === 'stock' ? Math.max(1, saree.stock) : 1);
                 for (let i = 0; i < count; i++) {
                     list.push({ saree, copyIndex: i + 1 });
                 }
             }
         });
         return list;
-    }, [sarees, selectedIds, quantityMode]);
+    }, [sarees, selectedIds, customCounts, quantityMode]);
 
     // Calculate total pages
     const totalPages = Math.ceil(printStickersList.length / gridConfig.perPage);
@@ -115,24 +122,105 @@ export function BatchBarcodePrinter({ sarees, isOpen, onClose }: BatchBarcodePri
         return pages;
     }, [printStickersList, gridConfig.perPage]);
 
-    const handleToggleSelectAll = () => {
-        if (selectedIds.size === filteredSarees.length) {
-            setSelectedIds(new Set());
-        } else {
-            const next = new Set<string>();
-            filteredSarees.forEach(s => next.add(s.id));
-            setSelectedIds(next);
+    const handleQuantityModeChange = (mode: 'single' | 'stock' | 'custom') => {
+        setQuantityMode(mode);
+        if (mode === 'single') {
+            const nextCounts: Record<string, number> = { ...customCounts };
+            selectedIds.forEach(id => {
+                nextCounts[id] = 1;
+            });
+            setCustomCounts(nextCounts);
+        } else if (mode === 'stock') {
+            const nextCounts: Record<string, number> = { ...customCounts };
+            sarees.forEach(s => {
+                if (selectedIds.has(s.id)) {
+                    nextCounts[s.id] = Math.max(1, s.stock);
+                }
+            });
+            setCustomCounts(nextCounts);
         }
     };
 
-    const handleToggleSaree = (id: string) => {
-        const next = new Set(selectedIds);
-        if (next.has(id)) {
-            next.delete(id);
+    const handleToggleSelectAll = () => {
+        if (selectedIds.size === filteredSarees.length) {
+            setSelectedIds(new Set());
+            const nextCounts = { ...customCounts };
+            filteredSarees.forEach(s => {
+                nextCounts[s.id] = 0;
+            });
+            setCustomCounts(nextCounts);
         } else {
-            next.add(id);
+            const nextIds = new Set<string>();
+            const nextCounts = { ...customCounts };
+            filteredSarees.forEach(s => {
+                nextIds.add(s.id);
+                if (!nextCounts[s.id] || nextCounts[s.id] <= 0) {
+                    nextCounts[s.id] = quantityMode === 'stock' ? Math.max(1, s.stock) : 1;
+                }
+            });
+            setSelectedIds(nextIds);
+            setCustomCounts(nextCounts);
         }
-        setSelectedIds(next);
+    };
+
+    const handleToggleSaree = (saree: Saree) => {
+        const nextIds = new Set(selectedIds);
+        const nextCounts = { ...customCounts };
+        if (nextIds.has(saree.id)) {
+            nextIds.delete(saree.id);
+            nextCounts[saree.id] = 0;
+        } else {
+            nextIds.add(saree.id);
+            nextCounts[saree.id] = (customCounts[saree.id] && customCounts[saree.id] > 0)
+                ? customCounts[saree.id]
+                : (quantityMode === 'stock' ? Math.max(1, saree.stock) : 1);
+        }
+        setSelectedIds(nextIds);
+        setCustomCounts(nextCounts);
+    };
+
+    const handleUpdateCount = (sareeId: string, newCount: number) => {
+        const val = Math.max(0, isNaN(newCount) ? 0 : newCount);
+        setCustomCounts(prev => ({ ...prev, [sareeId]: val }));
+        setSelectedIds(prev => {
+            const next = new Set(prev);
+            if (val > 0) {
+                next.add(sareeId);
+            } else {
+                next.delete(sareeId);
+            }
+            return next;
+        });
+        if (quantityMode !== 'custom') {
+            setQuantityMode('custom');
+        }
+    };
+
+    const handleIncrementCount = (sareeId: string, delta: number) => {
+        const current = customCounts[sareeId] !== undefined
+            ? customCounts[sareeId]
+            : (selectedIds.has(sareeId) ? 1 : 0);
+        handleUpdateCount(sareeId, current + delta);
+    };
+
+    const handleApplyBulkCount = (count: number) => {
+        const nextCounts = { ...customCounts };
+        selectedIds.forEach(id => {
+            nextCounts[id] = count;
+        });
+        setCustomCounts(nextCounts);
+        setQuantityMode('custom');
+    };
+
+    const handleApplyBulkStockCount = () => {
+        const nextCounts = { ...customCounts };
+        sarees.forEach(s => {
+            if (selectedIds.has(s.id)) {
+                nextCounts[s.id] = Math.max(1, s.stock);
+            }
+        });
+        setCustomCounts(nextCounts);
+        setQuantityMode('stock');
     };
 
     const handlePrint = () => {
@@ -328,7 +416,7 @@ export function BatchBarcodePrinter({ sarees, isOpen, onClose }: BatchBarcodePri
                                 </span>
                             </DialogTitle>
                             <p className="text-xs text-gray-500 font-sans">
-                                Print full A4 grid sheets of saree barcode tags formatted for scissors cutting & packaging
+                                Select or search items and customize print quantities per item for A4 grid sheets
                             </p>
                         </div>
                     </div>
@@ -337,23 +425,24 @@ export function BatchBarcodePrinter({ sarees, isOpen, onClose }: BatchBarcodePri
                 {/* Main Content Area */}
                 <div className="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-12 bg-slate-50/50">
                     {/* Left Controls & Selection Panel (5 Cols) */}
-                    <div className="lg:col-span-5 p-4 border-r border-gold/15 flex flex-col gap-4 overflow-y-auto bg-white">
+                    <div className="lg:col-span-5 p-4 border-r border-gold/15 flex flex-col gap-3.5 overflow-y-auto bg-white">
                         {/* Print Options */}
-                        <div className="space-y-3 p-3 bg-cream/15 border border-gold/20 rounded-xl">
+                        <div className="space-y-2.5 p-3 bg-cream/15 border border-gold/20 rounded-xl">
                             <h3 className="text-xs font-bold text-maroon uppercase tracking-wider flex items-center gap-1.5">
                                 <Grid className="h-3.5 w-3.5 text-maroon" /> Print Settings
                             </h3>
 
                             {/* Quantity Mode */}
                             <div className="space-y-1">
-                                <label className="text-[11px] font-semibold text-gray-600 block">Stickers Per Product</label>
-                                <Select value={quantityMode} onValueChange={(v: 'single' | 'stock') => setQuantityMode(v)}>
+                                <label className="text-[11px] font-semibold text-gray-600 block">Default Quantity Mode</label>
+                                <Select value={quantityMode} onValueChange={(v: 'single' | 'stock' | 'custom') => handleQuantityModeChange(v)}>
                                     <SelectTrigger className="h-8 text-xs border-gold/30 bg-white">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="single" className="text-xs">1 Sticker Per Saree Product</SelectItem>
+                                        <SelectItem value="single" className="text-xs">1 Sticker Per Selected Product</SelectItem>
                                         <SelectItem value="stock" className="text-xs">Stickers Equal to Available Stock</SelectItem>
+                                        <SelectItem value="custom" className="text-xs">Custom / Individual Item Counts</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -375,7 +464,7 @@ export function BatchBarcodePrinter({ sarees, isOpen, onClose }: BatchBarcodePri
                             </div>
 
                             {/* Exclude Out of Stock Toggle */}
-                            <label className="flex items-center gap-2 pt-1 cursor-pointer select-none text-xs text-gray-700 font-medium">
+                            <label className="flex items-center gap-2 pt-0.5 cursor-pointer select-none text-xs text-gray-700 font-medium">
                                 <input
                                     type="checkbox"
                                     checked={excludeOutOfStock}
@@ -387,7 +476,7 @@ export function BatchBarcodePrinter({ sarees, isOpen, onClose }: BatchBarcodePri
                         </div>
 
                         {/* Search & Select Inventory Items */}
-                        <div className="flex-1 flex flex-col min-h-[240px] space-y-2">
+                        <div className="flex-1 flex flex-col min-h-[260px] space-y-2">
                             <div className="flex items-center justify-between">
                                 <span className="text-xs font-bold text-gray-700 uppercase tracking-wide flex items-center gap-1.5">
                                     <Tag className="h-3.5 w-3.5 text-maroon" /> Select Sarees ({selectedIds.size}/{filteredSarees.length})
@@ -409,15 +498,45 @@ export function BatchBarcodePrinter({ sarees, isOpen, onClose }: BatchBarcodePri
                             <div className="relative">
                                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
                                 <Input
-                                    placeholder="Search by name, ID, category..."
+                                    placeholder="Search by name, ID, category, rack..."
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                     className="pl-8 h-8 text-xs border-gold/30 bg-white"
                                 />
                             </div>
 
-                            {/* List of Sarees with checkboxes */}
-                            <div className="flex-1 overflow-y-auto border border-gold/20 rounded-lg divide-y divide-gray-100 bg-white max-h-[280px]">
+                            {/* Quick Bulk Count Setters */}
+                            {selectedIds.size > 0 && (
+                                <div className="flex items-center justify-between px-1 text-[11px] bg-slate-50 p-1.5 rounded-lg border border-slate-200">
+                                    <span className="font-semibold text-gray-600 text-[10px]">Set Selected Counts:</span>
+                                    <div className="flex items-center gap-1">
+                                        <button
+                                            type="button"
+                                            onClick={() => handleApplyBulkCount(1)}
+                                            className="px-1.5 py-0.5 text-[10px] font-bold font-mono text-gray-700 bg-white hover:bg-cream/40 border border-gray-300 rounded transition-colors"
+                                        >
+                                            All=1
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleApplyBulkCount(2)}
+                                            className="px-1.5 py-0.5 text-[10px] font-bold font-mono text-gray-700 bg-white hover:bg-cream/40 border border-gray-300 rounded transition-colors"
+                                        >
+                                            All=2
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleApplyBulkStockCount()}
+                                            className="px-1.5 py-0.5 text-[10px] font-bold font-mono text-maroon bg-gold/20 hover:bg-gold/40 border border-gold/40 rounded transition-colors"
+                                        >
+                                            All=Stock
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* List of Sarees with checkboxes and counter inputs */}
+                            <div className="flex-1 overflow-y-auto border border-gold/20 rounded-lg divide-y divide-gray-100 bg-white max-h-[260px]">
                                 {filteredSarees.length === 0 ? (
                                     <div className="p-4 text-center text-xs text-gray-400 italic">
                                         No sarees found matching criteria
@@ -425,35 +544,99 @@ export function BatchBarcodePrinter({ sarees, isOpen, onClose }: BatchBarcodePri
                                 ) : (
                                     filteredSarees.map(saree => {
                                         const isSelected = selectedIds.has(saree.id);
+                                        const count = customCounts[saree.id] !== undefined
+                                            ? customCounts[saree.id]
+                                            : (isSelected ? (quantityMode === 'stock' ? Math.max(1, saree.stock) : 1) : 0);
+
                                         return (
                                             <div
                                                 key={saree.id}
-                                                onClick={() => handleToggleSaree(saree.id)}
-                                                className={`p-2 flex items-center justify-between text-xs cursor-pointer transition-colors ${
-                                                    isSelected ? 'bg-cream/30 hover:bg-cream/50' : 'hover:bg-gray-50'
+                                                className={`p-2 flex items-center justify-between gap-2 text-xs transition-colors ${
+                                                    isSelected ? 'bg-cream/30 hover:bg-cream/40' : 'hover:bg-gray-50'
                                                 }`}
                                             >
-                                                <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                                                {/* Left: Checkbox & Product Info */}
+                                                <div
+                                                    className="flex items-center gap-2 min-w-0 flex-1 cursor-pointer"
+                                                    onClick={() => handleToggleSaree(saree)}
+                                                >
                                                     <input
                                                         type="checkbox"
                                                         checked={isSelected}
                                                         onChange={() => {}} // handled by parent div onClick
-                                                        className="rounded border-gray-300 text-maroon focus:ring-maroon h-3.5 w-3.5 cursor-pointer"
+                                                        className="rounded border-gray-300 text-maroon focus:ring-maroon h-3.5 w-3.5 cursor-pointer shrink-0"
                                                     />
-                                                    <div className="min-w-0">
-                                                        <p className="font-semibold text-gray-800 truncate max-w-[170px]">{saree.sareeName}</p>
-                                                        <div className="flex items-center gap-2 text-[10px] text-gray-400 font-mono">
+                                                    <div className="min-w-0 flex-1">
+                                                        <p className="font-semibold text-gray-800 truncate text-xs" title={saree.sareeName}>
+                                                            {saree.sareeName}
+                                                        </p>
+                                                        <div className="flex items-center gap-1.5 text-[10px] text-gray-400 font-mono">
                                                             <span>ID: {saree.id}</span>
                                                             <span>•</span>
                                                             <span className="text-maroon font-bold">₹{saree.sellingPrice.toLocaleString()}</span>
+                                                            <span>•</span>
+                                                            <span className={`font-bold ${saree.stock > 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                                                                Stk: {saree.stock}
+                                                            </span>
                                                         </div>
                                                     </div>
                                                 </div>
-                                                <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
-                                                    saree.stock > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'
-                                                }`}>
-                                                    Stock: {saree.stock}
-                                                </span>
+
+                                                {/* Right: Quantity Stepper & Quick Add Buttons */}
+                                                <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+                                                    <div className="flex items-center border border-gold/30 rounded bg-white overflow-hidden shadow-2xs">
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-6 w-5 rounded-none text-gray-600 hover:bg-gold/10 hover:text-maroon p-0"
+                                                            onClick={() => handleIncrementCount(saree.id, -1)}
+                                                            disabled={count <= 0}
+                                                            title="Decrease barcode count"
+                                                        >
+                                                            <Minus className="h-3 w-3" />
+                                                        </Button>
+                                                        <input
+                                                            type="text"
+                                                            inputMode="numeric"
+                                                            pattern="[0-9]*"
+                                                            value={count}
+                                                            onChange={(e) => {
+                                                                const val = parseInt(e.target.value, 10);
+                                                                handleUpdateCount(saree.id, isNaN(val) ? 0 : val);
+                                                            }}
+                                                            className="w-7 h-6 text-center text-xs font-mono font-bold text-maroon bg-white focus:outline-none border-x border-gold/20"
+                                                        />
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-6 w-5 rounded-none text-gray-600 hover:bg-gold/10 hover:text-maroon p-0"
+                                                            onClick={() => handleIncrementCount(saree.id, 1)}
+                                                            title="Increase barcode count (+1)"
+                                                        >
+                                                            <Plus className="h-3 w-3" />
+                                                        </Button>
+                                                    </div>
+                                                    <div className="flex items-center gap-0.5">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleIncrementCount(saree.id, 1)}
+                                                            className="px-1 py-0.5 text-[9px] font-bold font-mono text-maroon bg-gold/15 hover:bg-gold/30 rounded border border-gold/30 transition-colors"
+                                                            title="Add +1 copy"
+                                                        >
+                                                            +1
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleIncrementCount(saree.id, 2)}
+                                                            className="px-1 py-0.5 text-[9px] font-bold font-mono text-maroon bg-gold/15 hover:bg-gold/30 rounded border border-gold/30 transition-colors"
+                                                            title="Add +2 copies"
+                                                        >
+                                                            +2
+                                                        </button>
+                                                    </div>
+                                                </div>
                                             </div>
                                         );
                                     })
@@ -496,7 +679,7 @@ export function BatchBarcodePrinter({ sarees, isOpen, onClose }: BatchBarcodePri
                                 <AlertCircle className="h-10 w-10 text-gray-300 mb-2" />
                                 <p className="text-sm font-semibold text-gray-600">No Sarees Selected</p>
                                 <p className="text-xs text-gray-400 mt-1 max-w-xs">
-                                    Select sarees from the left panel to generate A4 barcode sheets ready for printing and cutting.
+                                    Select sarees or increase count from the left panel to generate A4 barcode sheets ready for printing.
                                 </p>
                             </div>
                         ) : (
@@ -631,3 +814,4 @@ export function BatchBarcodePrinter({ sarees, isOpen, onClose }: BatchBarcodePri
         </Dialog>
     );
 }
+
