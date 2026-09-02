@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { FileText, MessageSquare, Link2, Check, X, Receipt } from "lucide-react";
 import { toast } from 'sonner';
 import type { Sale } from '@/services/salesService';
+import { generateReceiptUrl } from '@/utils/receiptUtils';
 
 interface ReceiptModalProps {
     isOpen: boolean;
@@ -16,7 +17,7 @@ export function ReceiptModal({ isOpen, onClose, sale }: ReceiptModalProps) {
 
     if (!sale) return null;
 
-    const receiptUrl = `https://shreebanarasisarees.in/receipt/${sale.invoiceNumber}`;
+    const receiptUrl = generateReceiptUrl(sale);
 
     const handleCopyLink = async () => {
         try {

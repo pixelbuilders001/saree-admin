@@ -70,6 +70,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
+import { generateReceiptUrl } from '@/utils/receiptUtils';
 
 // Fulfillment pipeline in order of progress
 const FULFILLMENT_STEPS = [
@@ -1377,7 +1378,7 @@ export default function OrdersPage() {
                                                     size="sm"
                                                     variant="outline"
                                                     className="w-full border-gold/30 hover:bg-gold/10 text-maroon text-xs font-semibold flex items-center justify-center gap-1.5 h-9"
-                                                    onClick={() => window.open(`/receipt/${selectedOrder.orderNumber}?print=true`, '_blank')}
+                                                    onClick={() => window.open(generateReceiptUrl(selectedOrder), '_blank')}
                                                 >
                                                     <Printer className="h-3.5 w-3.5" />
                                                     Print / Save Receipt
