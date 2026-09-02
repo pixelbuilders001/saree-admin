@@ -260,10 +260,59 @@ export default function ReceiptView() {
                 }
                 @page { margin: 10mm; size: A4; }
                 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+                @media (max-width: 640px) {
+                    .receipt-outer-wrapper {
+                        padding: 16px 10px !important;
+                    }
+                    .invoice-page {
+                        padding: 24px 16px !important;
+                        border-radius: 8px !important;
+                    }
+                    .invoice-header {
+                        flex-direction: column !important;
+                        gap: 14px !important;
+                    }
+                    .invoice-header-right {
+                        text-align: left !important;
+                        padding-left: 0 !important;
+                    }
+                    .invoice-meta-row {
+                        flex-direction: column !important;
+                        gap: 14px !important;
+                    }
+                    .receipt-table-wrapper {
+                        overflow-x: auto;
+                        -webkit-overflow-scrolling: touch;
+                        margin: 0 -4px;
+                    }
+                    .receipt-table {
+                        font-size: 11.5px !important;
+                        min-width: 440px;
+                    }
+                    .receipt-table th, .receipt-table td {
+                        padding: 8px 4px !important;
+                    }
+                    .totals-container {
+                        max-width: 100% !important;
+                    }
+                    .totals-row {
+                        gap: 12px !important;
+                        font-size: 11.5px !important;
+                    }
+                    .invoice-footer-row {
+                        flex-direction: column !important;
+                        align-items: flex-start !important;
+                        gap: 20px !important;
+                    }
+                    .invoice-footer-right {
+                        text-align: left !important;
+                    }
+                }
             `}</style>
 
             {/* ── Outer Screen Wrapper — gray background, invoice centered inside ── */}
-            <div style={{ minHeight: '100vh', background: '#f3f4f6', padding: '32px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <div className="receipt-outer-wrapper" style={{ minHeight: '100vh', background: '#f3f4f6', padding: '32px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
 
                 {/* Print button — top, hidden during print */}
                 <div className="no-print" style={{ marginBottom: '20px' }}>
@@ -292,7 +341,7 @@ export default function ReceiptView() {
                     }}
                 >
                     {/* ── HEADER ─────────────────────────────────────────── */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '28px' }}>
+                    <div className="invoice-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '28px' }}>
                         <div>
                             <div style={{ fontWeight: 'bold', fontSize: '20px', letterSpacing: '0.5px', marginBottom: '6px' }}>
                                 {SHOP.name}
@@ -303,9 +352,9 @@ export default function ReceiptView() {
                                 <div>{SHOP.phone}</div>
                             </div>
                         </div>
-                        <div style={{ textAlign: 'right', flexShrink: 0, paddingLeft: '24px' }}>
+                        <div className="invoice-header-right" style={{ textAlign: 'right', flexShrink: 0, paddingLeft: '24px' }}>
                             {receipt.isGstApplied && (
-                                <div style={{ fontWeight: 'bold', fontSize: '13px', color: '#800000', marginBottom: '4px' }}>
+                                <div style={{ fontWeight: 'bold', fontSize: '13px', color: '#800000', marginBottom: '4px', wordBreak: 'break-all' }}>
                                     GSTIN: {SHOP.gstin}
                                 </div>
                             )}
@@ -319,12 +368,12 @@ export default function ReceiptView() {
                     </div>
 
                     {/* ── INVOICE META + BILL TO ───────────────────────── */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '24px', gap: '32px' }}>
+                    <div className="invoice-meta-row" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '24px', gap: '32px' }}>
                         <div style={{ lineHeight: '2', fontSize: '12.5px' }}>
                             <div>
                                 <span style={{ fontWeight: 'bold' }}>Invoice #</span>
                                 {'  '}
-                                <span style={{ fontStyle: 'italic' }}>{receipt.invoiceNumber}</span>
+                                <span style={{ fontStyle: 'italic', wordBreak: 'break-all' }}>{receipt.invoiceNumber}</span>
                             </div>
                             <div>
                                 <span style={{ fontWeight: 'bold' }}>Date</span>
@@ -340,7 +389,7 @@ export default function ReceiptView() {
                         {(receipt.customerName || receipt.customerMobile) && (
                             <div style={{ lineHeight: '1.85', fontSize: '12.5px' }}>
                                 <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>Bill To</div>
-                                {receipt.customerName && <div>{receipt.customerName}</div>}
+                                {receipt.customerName && <div style={{ wordBreak: 'break-word' }}>{receipt.customerName}</div>}
                                 {receipt.customerMobile && <div>{receipt.customerMobile}</div>}
                             </div>
                         )}
@@ -350,127 +399,131 @@ export default function ReceiptView() {
                     <div style={{ borderTop: '1.5px dashed #bbb', marginBottom: '28px' }} />
 
                     {/* ── ITEMS TABLE ──────────────────────────────────── */}
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
-                        <thead>
-                            <tr style={{ borderTop: '2px solid #111', borderBottom: '2px solid #111' }}>
-                                <th style={{ textAlign: 'left', padding: '10px 8px 10px 0', fontWeight: 'bold', letterSpacing: '0.5px', width: '38%' }}>DESCRIPTION</th>
-                                <th style={{ textAlign: 'center', padding: '10px 6px', fontWeight: 'bold', letterSpacing: '0.5px', width: '8%' }}>QTY</th>
-                                <th style={{ textAlign: 'right', padding: '10px 6px', fontWeight: 'bold', letterSpacing: '0.5px', width: '18%' }}>MRP</th>
-                                <th style={{ textAlign: 'right', padding: '10px 6px', fontWeight: 'bold', letterSpacing: '0.5px', width: '18%' }}>DISCOUNT</th>
-                                <th style={{ textAlign: 'right', padding: '10px 0 10px 6px', fontWeight: 'bold', letterSpacing: '0.5px', width: '18%' }}>AMOUNT</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {receipt.items.map((item, idx) => {
-                                const itemMrp = item.mrp || item.sellingPrice;
-                                const itemMrpTotal = item.quantity * itemMrp;
-                                const itemSellingTotal = item.quantity * item.sellingPrice;
-                                const itemDisc = itemMrpTotal - itemSellingTotal;
-                                const itemDiscPct = itemMrpTotal > 0 ? (itemDisc / itemMrpTotal) * 100 : 0;
-
-                                return (
-                                    <tr key={idx} style={{ borderBottom: '1px dashed #ccc' }}>
-                                        <td style={{ padding: '11px 8px 11px 0' }}>{item.sareeName}</td>
-                                        <td style={{ padding: '11px 6px', textAlign: 'center' }}>{item.quantity}</td>
-                                        <td style={{ padding: '11px 6px', textAlign: 'right' }}>{fmtCurrency(itemMrp)}</td>
-                                        <td style={{ padding: '11px 6px', textAlign: 'right', color: itemDisc > 0 ? '#b91c1c' : '#777' }}>
-                                            {itemDisc > 0 ? `− ${fmtCurrency(itemDisc)}${itemDiscPct > 0 ? ` (${parseFloat(itemDiscPct.toFixed(1))}%)` : ''}` : '—'}
-                                        </td>
-                                        <td style={{ padding: '11px 0 11px 6px', textAlign: 'right', fontWeight: '500' }}>{fmtCurrency(itemSellingTotal)}</td>
-                                    </tr>
-                                );
-                            })}
-                            {/* Spacer rows */}
-                            {Array.from({ length: Math.max(0, 3 - receipt.items.length) }).map((_, i) => (
-                                <tr key={`blank-${i}`} style={{ borderBottom: '1px dashed #ddd' }}>
-                                    <td style={{ padding: '11px 0' }} colSpan={5}>&nbsp;</td>
+                    <div className="receipt-table-wrapper">
+                        <table className="receipt-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
+                            <thead>
+                                <tr style={{ borderTop: '2px solid #111', borderBottom: '2px solid #111' }}>
+                                    <th style={{ textAlign: 'left', padding: '10px 8px 10px 0', fontWeight: 'bold', letterSpacing: '0.5px', width: '38%' }}>DESCRIPTION</th>
+                                    <th style={{ textAlign: 'center', padding: '10px 6px', fontWeight: 'bold', letterSpacing: '0.5px', width: '8%' }}>QTY</th>
+                                    <th style={{ textAlign: 'right', padding: '10px 6px', fontWeight: 'bold', letterSpacing: '0.5px', width: '18%' }}>MRP</th>
+                                    <th style={{ textAlign: 'right', padding: '10px 6px', fontWeight: 'bold', letterSpacing: '0.5px', width: '18%' }}>DISCOUNT</th>
+                                    <th style={{ textAlign: 'right', padding: '10px 0 10px 6px', fontWeight: 'bold', letterSpacing: '0.5px', width: '18%' }}>AMOUNT</th>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                {receipt.items.map((item, idx) => {
+                                    const itemMrp = item.mrp || item.sellingPrice;
+                                    const itemMrpTotal = item.quantity * itemMrp;
+                                    const itemSellingTotal = item.quantity * item.sellingPrice;
+                                    const itemDisc = itemMrpTotal - itemSellingTotal;
+                                    const itemDiscPct = itemMrpTotal > 0 ? (itemDisc / itemMrpTotal) * 100 : 0;
+
+                                    return (
+                                        <tr key={idx} style={{ borderBottom: '1px dashed #ccc' }}>
+                                            <td style={{ padding: '11px 8px 11px 0', wordBreak: 'break-word' }}>{item.sareeName}</td>
+                                            <td style={{ padding: '11px 6px', textAlign: 'center' }}>{item.quantity}</td>
+                                            <td style={{ padding: '11px 6px', textAlign: 'right', whiteSpace: 'nowrap' }}>{fmtCurrency(itemMrp)}</td>
+                                            <td style={{ padding: '11px 6px', textAlign: 'right', color: itemDisc > 0 ? '#b91c1c' : '#777', whiteSpace: 'nowrap' }}>
+                                                {itemDisc > 0 ? `− ${fmtCurrency(itemDisc)}${itemDiscPct > 0 ? ` (${parseFloat(itemDiscPct.toFixed(1))}%)` : ''}` : '—'}
+                                            </td>
+                                            <td style={{ padding: '11px 0 11px 6px', textAlign: 'right', fontWeight: '500', whiteSpace: 'nowrap' }}>{fmtCurrency(itemSellingTotal)}</td>
+                                        </tr>
+                                    );
+                                })}
+                                {/* Spacer rows */}
+                                {Array.from({ length: Math.max(0, 3 - receipt.items.length) }).map((_, i) => (
+                                    <tr key={`blank-${i}`} style={{ borderBottom: '1px dashed #ddd' }}>
+                                        <td style={{ padding: '11px 0' }} colSpan={5}>&nbsp;</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
 
                     {/* ── TOTALS ──────────────────────────────────────── */}
                     <div style={{ borderTop: '2px solid #111', paddingTop: '12px', marginTop: '4px' }}>
-                        {totalItemDiscount > 0 && (
-                            <>
-                                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '48px', padding: '4px 0', borderBottom: '1px dashed #eee', fontSize: '12.5px' }}>
-                                    <span style={{ color: '#555' }}>TOTAL MRP</span>
-                                    <span style={{ minWidth: '90px', textAlign: 'right' }}>{fmtCurrency(totalMrp)}</span>
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '48px', padding: '4px 0', borderBottom: '1px dashed #eee', fontSize: '12.5px', color: '#b91c1c' }}>
-                                    <span>TOTAL ITEM DISCOUNT{totalItemDiscountPercentText}</span>
-                                    <span style={{ minWidth: '90px', textAlign: 'right' }}>− {fmtCurrency(totalItemDiscount)}</span>
-                                </div>
-                            </>
-                        )}
-
-                        {(totalItemDiscount > 0 || billDiscount > 0 || (receipt.shippingFee && receipt.shippingFee > 0)) && (
-                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '48px', padding: '5px 0', borderBottom: '1px dashed #ccc', fontSize: '12.5px' }}>
-                                <span style={{ fontWeight: 'bold', letterSpacing: '0.5px' }}>SUBTOTAL</span>
-                                <span style={{ minWidth: '90px', textAlign: 'right' }}>{fmtCurrency(subtotal)}</span>
-                            </div>
-                        )}
-
-                        {billDiscount > 0 && (
-                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '48px', padding: '5px 0', borderBottom: '1px dashed #ccc', fontSize: '12.5px', color: '#b91c1c' }}>
-                                <span style={{ fontWeight: 'bold', letterSpacing: '0.5px' }}>
-                                    {totalItemDiscount > 0 ? 'EXTRA DISCOUNT' : 'DISCOUNT'}{billDiscountPercentText}
-                                </span>
-                                <span style={{ minWidth: '90px', textAlign: 'right' }}>− {fmtCurrency(billDiscount)}</span>
-                            </div>
-                        )}
-
-                        {receipt.isGstApplied ? (
-                            <>
-                                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '48px', padding: '5px 0', borderBottom: '1px dashed #ccc', fontSize: '12.5px' }}>
-                                    <span style={{ fontWeight: 'bold', letterSpacing: '0.5px' }}>TAXABLE AMOUNT</span>
-                                    <span style={{ minWidth: '90px', textAlign: 'right' }}>{fmtCurrency(receipt.taxableAmount || (subtotal - billDiscount))}</span>
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '48px', padding: '4px 0', borderBottom: '1px dashed #eee', fontSize: '12px', color: '#444' }}>
-                                    <span>CGST @ {receipt.cgstRate || 2.5}%</span>
-                                    <span style={{ minWidth: '90px', textAlign: 'right' }}>{fmtCurrency(receipt.cgstAmount || 0)}</span>
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '48px', padding: '4px 0', borderBottom: '1px dashed #eee', fontSize: '12px', color: '#444' }}>
-                                    <span>SGST @ {receipt.sgstRate || 2.5}%</span>
-                                    <span style={{ minWidth: '90px', textAlign: 'right' }}>{fmtCurrency(receipt.sgstAmount || 0)}</span>
-                                </div>
-                                {(receipt.igstAmount || 0) > 0 && (
-                                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '48px', padding: '4px 0', borderBottom: '1px dashed #eee', fontSize: '12px', color: '#444' }}>
-                                        <span>IGST @ {receipt.igstRate}%</span>
-                                        <span style={{ minWidth: '90px', textAlign: 'right' }}>{fmtCurrency(receipt.igstAmount || 0)}</span>
+                        <div className="totals-container" style={{ maxWidth: '380px', marginLeft: 'auto', width: '100%' }}>
+                            {totalItemDiscount > 0 && (
+                                <>
+                                    <div className="totals-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', padding: '4px 0', borderBottom: '1px dashed #eee', fontSize: '12.5px' }}>
+                                        <span style={{ color: '#555' }}>TOTAL MRP</span>
+                                        <span style={{ textAlign: 'right', fontWeight: '500', whiteSpace: 'nowrap' }}>{fmtCurrency(totalMrp)}</span>
                                     </div>
-                                )}
-                                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '48px', padding: '5px 0', borderBottom: '1px dashed #ccc', fontSize: '12.5px', color: '#047857' }}>
-                                    <span style={{ fontWeight: 'bold', letterSpacing: '0.5px' }}>TOTAL GST</span>
-                                    <span style={{ minWidth: '90px', textAlign: 'right', fontWeight: 'bold' }}>{fmtCurrency(receipt.totalGst || 0)}</span>
+                                    <div className="totals-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', padding: '4px 0', borderBottom: '1px dashed #eee', fontSize: '12.5px', color: '#b91c1c' }}>
+                                        <span>TOTAL ITEM DISCOUNT{totalItemDiscountPercentText}</span>
+                                        <span style={{ textAlign: 'right', fontWeight: '500', whiteSpace: 'nowrap' }}>− {fmtCurrency(totalItemDiscount)}</span>
+                                    </div>
+                                </>
+                            )}
+
+                            {(totalItemDiscount > 0 || billDiscount > 0 || (receipt.shippingFee && receipt.shippingFee > 0)) && (
+                                <div className="totals-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', padding: '5px 0', borderBottom: '1px dashed #ccc', fontSize: '12.5px' }}>
+                                    <span style={{ fontWeight: 'bold', letterSpacing: '0.5px' }}>SUBTOTAL</span>
+                                    <span style={{ textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap' }}>{fmtCurrency(subtotal)}</span>
                                 </div>
-                            </>
-                        ) : null}
+                            )}
 
-                        {receipt.shippingFee && receipt.shippingFee > 0 && (
-                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '48px', padding: '5px 0', borderBottom: '1px dashed #ccc', fontSize: '12.5px' }}>
-                                <span style={{ fontWeight: 'bold', letterSpacing: '0.5px' }}>SHIPPING FEE</span>
-                                <span style={{ minWidth: '90px', textAlign: 'right' }}>+ {fmtCurrency(receipt.shippingFee)}</span>
+                            {billDiscount > 0 && (
+                                <div className="totals-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', padding: '5px 0', borderBottom: '1px dashed #ccc', fontSize: '12.5px', color: '#b91c1c' }}>
+                                    <span style={{ fontWeight: 'bold', letterSpacing: '0.5px' }}>
+                                        {totalItemDiscount > 0 ? 'EXTRA DISCOUNT' : 'DISCOUNT'}{billDiscountPercentText}
+                                    </span>
+                                    <span style={{ textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap' }}>− {fmtCurrency(billDiscount)}</span>
+                                </div>
+                            )}
+
+                            {receipt.isGstApplied ? (
+                                <>
+                                    <div className="totals-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', padding: '5px 0', borderBottom: '1px dashed #ccc', fontSize: '12.5px' }}>
+                                        <span style={{ fontWeight: 'bold', letterSpacing: '0.5px' }}>TAXABLE AMOUNT</span>
+                                        <span style={{ textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap' }}>{fmtCurrency(receipt.taxableAmount || (subtotal - billDiscount))}</span>
+                                    </div>
+                                    <div className="totals-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', padding: '4px 0', borderBottom: '1px dashed #eee', fontSize: '12px', color: '#444' }}>
+                                        <span>CGST @ {receipt.cgstRate || 2.5}%</span>
+                                        <span style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>{fmtCurrency(receipt.cgstAmount || 0)}</span>
+                                    </div>
+                                    <div className="totals-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', padding: '4px 0', borderBottom: '1px dashed #eee', fontSize: '12px', color: '#444' }}>
+                                        <span>SGST @ {receipt.sgstRate || 2.5}%</span>
+                                        <span style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>{fmtCurrency(receipt.sgstAmount || 0)}</span>
+                                    </div>
+                                    {(receipt.igstAmount || 0) > 0 && (
+                                        <div className="totals-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', padding: '4px 0', borderBottom: '1px dashed #eee', fontSize: '12px', color: '#444' }}>
+                                            <span>IGST @ {receipt.igstRate}%</span>
+                                            <span style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>{fmtCurrency(receipt.igstAmount || 0)}</span>
+                                        </div>
+                                    )}
+                                    <div className="totals-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', padding: '5px 0', borderBottom: '1px dashed #ccc', fontSize: '12.5px', color: '#047857' }}>
+                                        <span style={{ fontWeight: 'bold', letterSpacing: '0.5px' }}>TOTAL GST</span>
+                                        <span style={{ textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap' }}>{fmtCurrency(receipt.totalGst || 0)}</span>
+                                    </div>
+                                </>
+                            ) : null}
+
+                            {receipt.shippingFee && receipt.shippingFee > 0 && (
+                                <div className="totals-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', padding: '5px 0', borderBottom: '1px dashed #ccc', fontSize: '12.5px' }}>
+                                    <span style={{ fontWeight: 'bold', letterSpacing: '0.5px' }}>SHIPPING FEE</span>
+                                    <span style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>+ {fmtCurrency(receipt.shippingFee)}</span>
+                                </div>
+                            )}
+
+                            {receipt.appliedVoucherCode && (
+                                <div className="totals-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', padding: '5px 0', borderBottom: '1px dashed #ccc', fontSize: '12.5px' }}>
+                                    <span style={{ fontWeight: 'bold', letterSpacing: '0.5px' }}>VOUCHER APPLIED ({receipt.appliedVoucherCode})</span>
+                                    <span style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>− {fmtCurrency(receipt.appliedVoucherAmount || 0)}</span>
+                                </div>
+                            )}
+
+                            {receipt.issuedVoucherCode && (
+                                <div className="totals-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', padding: '5px 0', borderBottom: '1px dashed #ccc', fontSize: '12.5px', color: '#16a34a' }}>
+                                    <span style={{ fontWeight: 'bold', letterSpacing: '0.5px' }}>CREDIT NOTE ISSUED ({receipt.issuedVoucherCode})</span>
+                                    <span style={{ textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap' }}>{fmtCurrency(receipt.issuedVoucherAmount || 0)}</span>
+                                </div>
+                            )}
+
+                            <div className="totals-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', padding: '8px 0', borderBottom: '2px solid #111', fontSize: '13.5px' }}>
+                                <span style={{ fontWeight: 'bold', letterSpacing: '0.5px' }}>TOTAL PAYABLE</span>
+                                <span style={{ fontWeight: 'bold', textAlign: 'right', whiteSpace: 'nowrap' }}>{fmtCurrency(receipt.totalAmount)}</span>
                             </div>
-                        )}
-
-                        {receipt.appliedVoucherCode && (
-                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '48px', padding: '5px 0', borderBottom: '1px dashed #ccc', fontSize: '12.5px' }}>
-                                <span style={{ fontWeight: 'bold', letterSpacing: '0.5px' }}>VOUCHER APPLIED ({receipt.appliedVoucherCode})</span>
-                                <span style={{ minWidth: '90px', textAlign: 'right' }}>− {fmtCurrency(receipt.appliedVoucherAmount || 0)}</span>
-                            </div>
-                        )}
-
-                        {receipt.issuedVoucherCode && (
-                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '48px', padding: '5px 0', borderBottom: '1px dashed #ccc', fontSize: '12.5px', color: '#16a34a' }}>
-                                <span style={{ fontWeight: 'bold', letterSpacing: '0.5px' }}>CREDIT NOTE ISSUED ({receipt.issuedVoucherCode})</span>
-                                <span style={{ minWidth: '90px', textAlign: 'right', fontWeight: 'bold' }}>{fmtCurrency(receipt.issuedVoucherAmount || 0)}</span>
-                            </div>
-                        )}
-
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '48px', padding: '8px 0', borderBottom: '2px solid #111', fontSize: '13.5px' }}>
-                            <span style={{ fontWeight: 'bold', letterSpacing: '0.5px' }}>TOTAL PAYABLE</span>
-                            <span style={{ fontWeight: 'bold', minWidth: '90px', textAlign: 'right' }}>{fmtCurrency(receipt.totalAmount)}</span>
                         </div>
                     </div>
 
@@ -487,13 +540,13 @@ export default function ReceiptView() {
                     </div>
 
                     {/* ── AUTHORISATION ─────────────────────────────────── */}
-                    <div style={{ marginTop: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: '24px' }}>
+                    <div className="invoice-footer-row" style={{ marginTop: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: '24px' }}>
                         {/* Left: Thank you */}
                         <div style={{ fontSize: '11.5px', color: '#444', maxWidth: '320px', lineHeight: '1.7' }}>
                             <em>Thank you for supporting authentic Indian weavers &amp; handlooms!</em>
                         </div>
                         {/* Right: Auth block */}
-                        <div style={{ textAlign: 'right', fontSize: '11.5px', color: '#333', flexShrink: 0 }}>
+                        <div className="invoice-footer-right" style={{ textAlign: 'right', fontSize: '11.5px', color: '#333', flexShrink: 0 }}>
                             <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>AUTHORISATION</div>
                             <div style={{ color: '#555', marginBottom: '2px' }}>For Shree Banarasi Sarees</div>
                             <div style={{ color: '#555', fontStyle: 'italic', marginBottom: '10px' }}>
