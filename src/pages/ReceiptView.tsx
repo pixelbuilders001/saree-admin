@@ -164,7 +164,7 @@ export default function ReceiptView() {
                         id,
                         order_number, created_at, payment_method, total_amount, discount, shipping_fee,
                         customer_name, customer_phone,
-                        order_items ( quantity, unit_price, product_name, mrp )
+                        order_items ( quantity, unit_price, product_name )
                     `)
                     .eq('order_number', invoiceNumber)
                     .maybeSingle();
