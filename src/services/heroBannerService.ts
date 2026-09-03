@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { compressImage } from '@/lib/imageCompressor';
+import { uploadToImageKit } from '@/services/imagekitService';
 
 export interface HeroBanner {
     id: string;
@@ -48,28 +49,23 @@ export const heroBannerService = {
     },
 
     uploadImage: async (file: File): Promise<string> => {
-        const compressed = await compressImage(file, 800, 2400);
-        const ext = compressed.name.split('.').pop() || 'jpg';
-        const fileName = `banner_${Date.now()}_${Math.random().toString(36).substring(2, 10)}.${ext}`;
+        const compressed = await compressImage(file, 800, 2400, 'image/webp');
+        const fileName = `banner_${Date.now()}_${Math.random().toString(36).substring(2, 10)}.webp`;
 
-        const { error: uploadError } = await supabase.storage
-            .from(BUCKET)
-            .upload(fileName, compressed, { cacheControl: '3600', upsert: false });
-
-        if (uploadError) throw uploadError;
-
-        const { data: { publicUrl } } = supabase.storage.from(BUCKET).getPublicUrl(fileName);
-        return publicUrl;
+        const result = await uploadToImageKit(compressed, fileName, '/hero-banners');
+        return result.url;
     },
 
     deleteImageByUrl: async (url: string): Promise<void> => {
         if (!url) return;
         try {
-            const prefix = `/${BUCKET}/`;
-            const idx = url.indexOf(prefix);
-            if (idx !== -1) {
-                const filePath = decodeURIComponent(url.substring(idx + prefix.length));
-                await supabase.storage.from(BUCKET).remove([filePath]);
+            if (url.includes('supabase') || url.includes(`/${BUCKET}/`)) {
+                const prefix = `/${BUCKET}/`;
+                const idx = url.indexOf(prefix);
+                if (idx !== -1) {
+                    const filePath = decodeURIComponent(url.substring(idx + prefix.length));
+                    await supabase.storage.from(BUCKET).remove([filePath]);
+                }
             }
         } catch (err) {
             console.error('Failed to delete hero banner image from storage:', err);

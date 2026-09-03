@@ -80,8 +80,8 @@ function BannerModal({
         setPreview(rawUrl);
 
         try {
-            // Compress: max 800 KB threshold, max 2400px (matches service settings)
-            const compressed = await compressImage(file, 800, 2400);
+            // Compress: max 800 KB threshold, max 2400px, converted to WebP
+            const compressed = await compressImage(file, 800, 2400, 'image/webp');
             const compressedKB = Math.round(compressed.size / 1024);
 
             // Replace preview with compressed blob URL for accuracy
