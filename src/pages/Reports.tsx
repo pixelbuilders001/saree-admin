@@ -381,21 +381,24 @@ export default function ReportsPage() {
                                             <TableHead className="h-9 text-[10px] font-bold text-maroon text-right py-1">Margin (₹)</TableHead>
                                             <TableHead className="h-9 text-[10px] font-bold text-maroon py-1">Cashier</TableHead>
                                             <TableHead className="h-9 text-[10px] font-bold text-maroon py-1 px-3">Customer / Agent</TableHead>
+                                            <TableHead className="h-9 text-[10px] font-bold text-maroon text-center py-1 px-3">Receipt</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                         {isLoadingSales ? (
                                             <TableRow>
-                                                <TableCell colSpan={9} className="h-24 text-center text-maroon/50 text-xs italic">
+                                                <TableCell colSpan={10} className="h-24 text-center text-maroon/50 text-xs italic">
                                                     <Loader2 className="h-4 w-4 animate-spin mx-auto mr-1 inline text-maroon" /> Loading logs...
                                                 </TableCell>
                                             </TableRow>
                                         ) : paginatedSales.length === 0 ? (
                                             <TableRow>
-                                                <TableCell colSpan={9} className="h-24 text-center text-gray-400 italic">No records match the filter criteria</TableCell>
+                                                <TableCell colSpan={10} className="h-24 text-center text-gray-400 italic">No records match the filter criteria</TableCell>
                                             </TableRow>
                                         ) : (
-                                            paginatedSales.map((sale) => (
+                                            paginatedSales.map((sale, rowIdx) => {
+                                                const showReceipt = Boolean(sale.invoiceNumber) && (rowIdx === 0 || paginatedSales[rowIdx - 1]?.saleId !== sale.saleId);
+                                                return (
                                                 <TableRow key={`${sale.saleId}-${sale.sareeId}`} className="hover:bg-cream/10 border-b border-gold/5 transition-colors">
                                                     <TableCell className="py-2 text-[11px] font-mono text-gray-500 px-3">
                                                         {new Date(sale.date).toLocaleDateString()}
@@ -449,8 +452,21 @@ export default function ReportsPage() {
                                                             )}
                                                         </div>
                                                     </TableCell>
+                                                    <TableCell className="py-2 text-[11px] text-center px-3">
+                                                        {showReceipt && (
+                                                            <button
+                                                                onClick={() => window.open(`/receipt/${sale.invoiceNumber}?print=true`, '_blank')}
+                                                                className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-md bg-maroon/5 text-maroon border border-gold/25 hover:bg-maroon hover:text-gold transition-all cursor-pointer whitespace-nowrap"
+                                                                title="Download / Print Receipt"
+                                                            >
+                                                                <Download className="h-3 w-3" />
+                                                                Receipt
+                                                            </button>
+                                                        )}
+                                                    </TableCell>
                                                 </TableRow>
-                                            ))
+                                                );
+                                            })
                                         )}
                                     </TableBody>
                                 </Table>

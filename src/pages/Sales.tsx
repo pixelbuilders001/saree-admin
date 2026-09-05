@@ -525,7 +525,7 @@ export default function SalesPage() {
             return;
         }
 
-        const staffMember = activeStaff.find(s => s.id === selectedStaffId);
+        const staffMember = selectedStaffId === 'self' ? null : activeStaff.find(s => s.id === selectedStaffId);
         const commissionEarned = staffMember
             ? parseFloat(((cartTotal * staffMember.commission_rate) / 100).toFixed(2))
             : 0;
@@ -538,7 +538,7 @@ export default function SalesPage() {
             items: cart.map(({ purchasePrice: _, ...item }) => item),
             customerName,
             customerMobile,
-            salespersonId: selectedStaffId,
+            salespersonId: selectedStaffId === 'self' ? undefined : selectedStaffId,
             commissionEarned,
             paymentMode,
             discountAmount: manualBillDiscountAmount,
@@ -917,6 +917,7 @@ export default function SalesPage() {
                             )}
                         >
                             <option value="">— Assign Salesperson * —</option>
+                            <option value="self">Self (0%)</option>
                             {activeStaff.map((staff) => (
                                 <option key={staff.id} value={staff.id}>
                                     {staff.name} ({staff.commission_rate}%)

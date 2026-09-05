@@ -92,7 +92,7 @@ export default function ReceiptView() {
                     invoice_number, created_at, payment_mode, total_amount, discount_amount,
                     is_gst_applied, gst_rate, taxable_amount, cgst_rate, cgst_amount, sgst_rate, sgst_amount, igst_rate, igst_amount, total_gst,
                     customers ( name, mobile ),
-                    sale_items ( quantity, selling_price, storefront_products ( saree_name, mrp, selling_price ) )
+                    sale_items ( quantity, selling_price, inventory ( saree_name, mrp, selling_price ) )
                 `)
                 .eq('invoice_number', invoiceNumber)
                 .maybeSingle();
