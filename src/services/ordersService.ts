@@ -22,6 +22,7 @@ export interface OrderItem {
     unitPrice: number;
     totalPrice: number;
     productSnapshot?: any;
+    itemStatus?: string;
     createdAt: string;
 }
 
@@ -106,6 +107,7 @@ export const ordersService = {
                 unitPrice: Number(item.unit_price),
                 totalPrice: Number(item.total_price),
                 productSnapshot: item.product_snapshot,
+                itemStatus: item.item_status || 'active',
                 createdAt: item.created_at,
             })),
             statusHistory: (order.order_status_history || []).map((h: any) => ({
@@ -166,6 +168,7 @@ export const ordersService = {
                 unitPrice: Number(item.unit_price),
                 totalPrice: Number(item.total_price),
                 productSnapshot: item.product_snapshot,
+                itemStatus: item.item_status || 'active',
                 createdAt: item.created_at,
             })),
             statusHistory: (data.order_status_history || []).map((h: any) => ({
@@ -263,69 +266,202 @@ export const ordersService = {
         return ordersService.getOrderById(insertedOrder.id);
     },
 
-    updateOrderStatus: async (orderId: string, status: string, note?: string): Promise<void> => {
-        // Update order status and set updated_at
-        const { error: orderError } = await supabase
-            .from('orders')
-            .update({
-                order_status: status,
-                updated_at: new Date().toISOString()
-            })
-            .eq('id', orderId);
+    updateOrderStatus: async (orderId: string, status: string, note?: string, orderItemId?: string): Promise<any> => {
+        const defaultNote = orderItemId
+            ? 'Item cancelled by admin'
+            : (status === 'cancelled' ? 'Order cancelled by admin' : `Order ${status}`);
 
-        if (orderError) throw orderError;
-
-        // Insert into history log
-        const { error: historyError } = await supabase
-            .from('order_status_history')
-            .insert([{
-                order_id: orderId,
-                status,
-                note: note || `Status updated to ${status}`
-            }]);
-
-        if (historyError) throw historyError;
-
-        // Trigger rich push notification to customer
-        try {
-            const { data: orderRow } = await supabase
-                .from('orders')
-                .select('*, order_items(*)')
-                .eq('id', orderId)
-                .single();
-
-            if (orderRow && orderRow.user_id) {
-                const statusLower = (status || '').toLowerCase();
-                let stageKey: any = 'placed';
-                if (statusLower.includes('confirm')) stageKey = 'confirmed';
-                else if (statusLower.includes('pack')) stageKey = 'packed';
-                else if (statusLower.includes('ship') || statusLower.includes('dispatch')) stageKey = 'shipped';
-                else if (statusLower.includes('out_for_delivery') || statusLower.includes('out for delivery')) stageKey = 'out_for_delivery';
-                else if (statusLower.includes('deliver')) stageKey = 'delivered';
-                else if (statusLower.includes('cancel')) stageKey = 'cancelled';
-
-                const firstItemSnapshot = orderRow.order_items?.[0]?.product_snapshot;
-                const firstItemImage = firstItemSnapshot?.images?.[0] || null;
-
-                const targetUrl = `/account?orderId=${encodeURIComponent(orderRow.order_number)}`;
-
-                await supabase.functions.invoke('send-push', {
-                    body: {
-                        audience: 'user',
-                        target_user_id: orderRow.user_id,
-                        order_status: stageKey,
-                        order_number: orderRow.order_number,
-                        customer_name: orderRow.customer_name || orderRow.shipping_address?.name,
-                        total_amount: Number(orderRow.total_amount),
-                        image_url: firstItemImage,
-                        notification_type: 'order',
-                        url: targetUrl,
-                    },
-                });
-            }
-        } catch (err) {
-            console.error('Failed to send push notification from admin update:', err);
+        const payload: any = {
+            order_id: orderId,
+            status,
+            note: note || defaultNote
+        };
+        if (orderItemId) {
+            payload.order_item_id = orderItemId;
         }
+
+        try {
+            const { data, error } = await supabase.functions.invoke('update-order-status', {
+                body: payload
+            });
+
+            if (error) {
+                console.warn('Edge function update-order-status error, using fallback:', error);
+                throw error;
+            }
+
+            return data;
+        } catch (edgeErr) {
+            console.warn('Fallback to direct database operations:', edgeErr);
+
+            if (orderItemId) {
+                // Cancel / update single item
+                const { error: itemErr } = await supabase
+                    .from('order_items')
+                    .update({ item_status: status })
+                    .eq('id', orderItemId);
+
+                if (itemErr) throw itemErr;
+
+                if (status === 'cancelled') {
+                    // Fetch order and item details to recalculate totals
+                    const { data: order } = await supabase
+                        .from('orders')
+                        .select('subtotal, total_amount, order_status')
+                        .eq('id', orderId)
+                        .single();
+
+                    const { data: allItems } = await supabase
+                        .from('order_items')
+                        .select('id, inventory_id, sku, item_status, total_price, unit_price, quantity, product_snapshot')
+                        .eq('order_id', orderId);
+
+                    const cancelledItem = allItems?.find((it: any) => it.id === orderItemId);
+                    const remainingActive = allItems?.filter((it: any) => it.id !== orderItemId && (it.item_status || '').toLowerCase() !== 'cancelled') || [];
+                    const isEntireOrderCancelled = remainingActive.length === 0;
+
+                    // Restore inventory for cancelled item
+                    if (cancelledItem) {
+                        try {
+                            const invId = cancelledItem.inventory_id || (typeof cancelledItem.product_snapshot === 'object' ? cancelledItem.product_snapshot?.id : null);
+                            let invRecord: any = null;
+                            if (invId) {
+                                const { data: inv } = await supabase.from('inventory').select('id, stock, status').eq('id', invId).maybeSingle();
+                                invRecord = inv;
+                            }
+                            if (!invRecord && cancelledItem.sku) {
+                                const { data: invBySku } = await supabase.from('inventory').select('id, stock, status').eq('sku', cancelledItem.sku).maybeSingle();
+                                invRecord = invBySku;
+                            }
+                            if (invRecord) {
+                                const newStock = Number(invRecord.stock || 0) + Number(cancelledItem.quantity || 1);
+                                const updates: any = { stock: newStock };
+                                if (invRecord.status === 'inactive' && newStock > 0) updates.status = 'active';
+                                await supabase.from('inventory').update(updates).eq('id', invRecord.id);
+                            }
+                        } catch (invErr) {
+                            console.error('Failed to restore inventory in fallback:', invErr);
+                        }
+                    }
+
+                    if (order && cancelledItem) {
+                        const itemPrice = Number(cancelledItem.total_price || (Number(cancelledItem.unit_price || 0) * Number(cancelledItem.quantity || 1)));
+                        const newSubtotal = Math.max(0, Number(order.subtotal || 0) - itemPrice);
+                        const newTotal = Math.max(0, Number(order.total_amount || 0) - itemPrice);
+
+                        await supabase
+                            .from('orders')
+                            .update({
+                                subtotal: newSubtotal,
+                                total_amount: newTotal,
+                                order_status: isEntireOrderCancelled ? 'cancelled' : order.order_status,
+                                updated_at: new Date().toISOString()
+                            })
+                            .eq('id', orderId);
+                    }
+                }
+            } else {
+                // Entire order update
+                const { error: orderError } = await supabase
+                    .from('orders')
+                    .update({
+                        order_status: status,
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('id', orderId);
+
+                if (orderError) throw orderError;
+
+                if (status === 'cancelled') {
+                    const { data: allItems } = await supabase
+                        .from('order_items')
+                        .select('id, inventory_id, sku, item_status, quantity, product_snapshot')
+                        .eq('order_id', orderId);
+
+                    const activeItems = (allItems || []).filter((it: any) => (it.item_status || '').toLowerCase() !== 'cancelled');
+                    for (const it of activeItems) {
+                        try {
+                            const invId = it.inventory_id || (typeof it.product_snapshot === 'object' ? it.product_snapshot?.id : null);
+                            let invRecord: any = null;
+                            if (invId) {
+                                const { data: inv } = await supabase.from('inventory').select('id, stock, status').eq('id', invId).maybeSingle();
+                                invRecord = inv;
+                            }
+                            if (!invRecord && it.sku) {
+                                const { data: invBySku } = await supabase.from('inventory').select('id, stock, status').eq('sku', it.sku).maybeSingle();
+                                invRecord = invBySku;
+                            }
+                            if (invRecord) {
+                                const newStock = Number(invRecord.stock || 0) + Number(it.quantity || 1);
+                                const updates: any = { stock: newStock };
+                                if (invRecord.status === 'inactive' && newStock > 0) updates.status = 'active';
+                                await supabase.from('inventory').update(updates).eq('id', invRecord.id);
+                            }
+                        } catch (invErr) {
+                            console.error('Failed to restore inventory in fallback:', invErr);
+                        }
+                    }
+
+                    await supabase
+                        .from('order_items')
+                        .update({ item_status: 'cancelled' })
+                        .eq('order_id', orderId);
+                }
+            }
+
+            // Insert into history log
+            await supabase
+                .from('order_status_history')
+                .insert([{
+                    order_id: orderId,
+                    status,
+                    note: payload.note
+                }]);
+
+            // Trigger push notification if available
+            try {
+                const { data: orderRow } = await supabase
+                    .from('orders')
+                    .select('*, order_items(*)')
+                    .eq('id', orderId)
+                    .single();
+
+                if (orderRow && orderRow.user_id) {
+                    const statusLower = (status || '').toLowerCase();
+                    let stageKey: any = 'placed';
+                    if (statusLower.includes('confirm')) stageKey = 'confirmed';
+                    else if (statusLower.includes('pack')) stageKey = 'packed';
+                    else if (statusLower.includes('ship') || statusLower.includes('dispatch')) stageKey = 'shipped';
+                    else if (statusLower.includes('out_for_delivery') || statusLower.includes('out for delivery')) stageKey = 'out_for_delivery';
+                    else if (statusLower.includes('deliver')) stageKey = 'delivered';
+                    else if (statusLower.includes('cancel')) stageKey = 'cancelled';
+
+                    const firstItemSnapshot = orderRow.order_items?.[0]?.product_snapshot;
+                    const firstItemImage = firstItemSnapshot?.images?.[0] || null;
+                    const targetUrl = `/account?orderId=${encodeURIComponent(orderRow.order_number)}`;
+
+                    await supabase.functions.invoke('send-push', {
+                        body: {
+                            audience: 'user',
+                            target_user_id: orderRow.user_id,
+                            order_status: stageKey,
+                            order_number: orderRow.order_number,
+                            customer_name: orderRow.customer_name || orderRow.shipping_address?.name,
+                            total_amount: Number(orderRow.total_amount),
+                            image_url: firstItemImage,
+                            notification_type: 'order',
+                            url: targetUrl,
+                        },
+                    });
+                }
+            } catch (err) {
+                console.error('Failed to send push notification from admin update:', err);
+            }
+        }
+    },
+
+    cancelOrderItem: async (orderId: string, orderItemId: string, note = 'Item cancelled by admin'): Promise<any> => {
+        return ordersService.updateOrderStatus(orderId, 'cancelled', note, orderItemId);
     },
 
     processPendingReviewReminders: async (delayHours = 24): Promise<number> => {

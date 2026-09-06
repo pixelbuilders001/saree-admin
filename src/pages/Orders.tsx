@@ -119,6 +119,10 @@ export default function OrdersPage() {
     const [tempOrderStatus, setTempOrderStatus] = React.useState<string>('');
     const [tempPaymentStatus, setTempPaymentStatus] = React.useState<string>('');
 
+    // Single item cancellation state
+    const [cancellingItem, setCancellingItem] = React.useState<{ orderId: string; itemId: string; name: string } | null>(null);
+    const [itemCancelReason, setItemCancelReason] = React.useState('Item cancelled by admin');
+
     // Manual Order Form State
     const [isCreateModalOpen, setIsCreateModalOpen] = React.useState(false);
     const [formCustomerName, setFormCustomerName] = React.useState('');
@@ -156,11 +160,15 @@ export default function OrdersPage() {
 
     // Mutations
     const updateStatusMutation = useMutation({
-        mutationFn: ({ orderId, status, note }: { orderId: string; status: string; note?: string }) =>
-            ordersService.updateOrderStatus(orderId, status, note),
-        onSuccess: () => {
+        mutationFn: ({ orderId, status, note, orderItemId }: { orderId: string; status: string; note?: string; orderItemId?: string }) =>
+            ordersService.updateOrderStatus(orderId, status, note, orderItemId),
+        onSuccess: (res: any) => {
             queryClient.invalidateQueries({ queryKey: ['orders'] });
-            toast.success('Order status updated successfully');
+            if (res?.cancelledEntireOrder) {
+                toast.success('All items cancelled; entire order marked as cancelled');
+            } else {
+                toast.success('Order status updated successfully');
+            }
             setStatusNote('');
         },
         onError: (err: any) => {
@@ -1086,9 +1094,18 @@ export default function OrdersPage() {
                                                     </div>
                                                 </TableCell>
                                                 <TableCell className="py-1 text-center">
-                                                    <span className="inline-flex items-center justify-center h-6 min-w-6 px-1.5 rounded-md bg-gray-100 text-gray-700 text-[10px] font-bold font-mono">
-                                                        {order.items?.length || 0}
-                                                    </span>
+                                                    {order.items?.some(i => (i.itemStatus || '').toLowerCase() === 'cancelled') ? (
+                                                        <div className="inline-flex flex-col items-center">
+                                                            <span className="inline-flex items-center justify-center h-6 min-w-6 px-1.5 rounded-md bg-rose-50 text-rose-700 text-[10px] font-bold font-mono border border-rose-200">
+                                                                {order.items.filter(i => (i.itemStatus || '').toLowerCase() !== 'cancelled').length}/{order.items.length}
+                                                            </span>
+                                                            <span className="text-[8px] text-rose-600 font-semibold">active</span>
+                                                        </div>
+                                                    ) : (
+                                                        <span className="inline-flex items-center justify-center h-6 min-w-6 px-1.5 rounded-md bg-gray-100 text-gray-700 text-[10px] font-bold font-mono">
+                                                            {order.items?.length || 0}
+                                                        </span>
+                                                    )}
                                                 </TableCell>
                                                 <TableCell className="py-1 text-xs font-bold font-mono text-gray-800 text-right">
                                                     <span className="inline-flex items-center gap-0.5 text-maroon">
@@ -1326,8 +1343,13 @@ export default function OrdersPage() {
                                         <div className="border border-gold/10 rounded-lg overflow-hidden">
                                             <div className="bg-cream/15 p-2 border-b border-gold/10 text-[10px] font-bold text-maroon uppercase tracking-wider flex items-center gap-1.5">
                                                 <PackageOpen className="h-3.5 w-3.5" /> Items Registry
-                                                <span className="ml-auto text-[9px] font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded-full font-mono">
-                                                    {selectedOrder.items?.length || 0}
+                                                <span className="ml-auto text-[9px] font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded-full font-mono flex items-center gap-1">
+                                                    <span>{selectedOrder.items?.length || 0} items</span>
+                                                    {selectedOrder.items?.some(i => (i.itemStatus || '').toLowerCase() === 'cancelled') && (
+                                                        <span className="text-rose-600 font-sans font-semibold">
+                                                            ({selectedOrder.items.filter(i => (i.itemStatus || '').toLowerCase() !== 'cancelled').length} active)
+                                                        </span>
+                                                    )}
                                                 </span>
                                             </div>
                                             <Table>
@@ -1337,25 +1359,76 @@ export default function OrdersPage() {
                                                         <TableHead className="h-7 py-0.5 text-[9px] font-bold text-gray-500 text-center">Qty</TableHead>
                                                         <TableHead className="h-7 py-0.5 text-[9px] font-bold text-gray-500 text-right">Price</TableHead>
                                                         <TableHead className="h-7 py-0.5 text-[9px] font-bold text-gray-500 text-right">Total</TableHead>
+                                                        <TableHead className="h-7 py-0.5 text-[9px] font-bold text-gray-500 text-center w-16">Action</TableHead>
                                                     </TableRow>
                                                 </TableHeader>
                                                 <TableBody>
-                                                    {selectedOrder.items?.map((item) => (
-                                                        <TableRow key={item.id} className="border-b border-gold/5 h-9">
-                                                            <TableCell className="py-1 text-xs">
-                                                                <div className="font-semibold text-gray-800 truncate max-w-[140px]">{item.productName}</div>
-                                                                {item.sku && <div className="text-[9px] text-gray-400 font-mono">SKU: {item.sku}</div>}
-                                                            </TableCell>
-                                                            <TableCell className="py-1 text-xs text-center font-mono">{item.quantity}</TableCell>
-                                                            <TableCell className="py-1 text-xs text-right font-mono">₹{item.unitPrice.toLocaleString()}</TableCell>
-                                                            <TableCell className="py-1 text-xs text-right font-mono">₹{item.totalPrice.toLocaleString()}</TableCell>
-                                                        </TableRow>
-                                                    ))}
+                                                    {selectedOrder.items?.map((item) => {
+                                                        const isItemCancelled = (item.itemStatus || '').toLowerCase() === 'cancelled';
+                                                        const canCancelItem = !isItemCancelled && !['delivered', 'cancelled', 'returned'].includes(selectedOrder.orderStatus);
+
+                                                        return (
+                                                            <TableRow key={item.id} className={cn("border-b border-gold/5 h-9", isItemCancelled && "bg-rose-50/40 opacity-75")}>
+                                                                <TableCell className="py-1 text-xs">
+                                                                    <div className="flex items-center gap-1.5">
+                                                                        <div className={cn("font-semibold text-gray-800 truncate max-w-[140px]", isItemCancelled && "line-through text-gray-500")}>
+                                                                            {item.productName}
+                                                                        </div>
+                                                                        {isItemCancelled && (
+                                                                            <span className="px-1.5 py-0.2 rounded text-[9px] font-semibold bg-rose-50 text-rose-700 border border-rose-200 shrink-0">
+                                                                                Cancelled
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                    {item.sku && <div className="text-[9px] text-gray-400 font-mono">SKU: {item.sku}</div>}
+                                                                </TableCell>
+                                                                <TableCell className={cn("py-1 text-xs text-center font-mono", isItemCancelled && "line-through text-gray-400")}>
+                                                                    {item.quantity}
+                                                                </TableCell>
+                                                                <TableCell className={cn("py-1 text-xs text-right font-mono", isItemCancelled && "line-through text-gray-400")}>
+                                                                    ₹{item.unitPrice.toLocaleString()}
+                                                                </TableCell>
+                                                                <TableCell className={cn("py-1 text-xs text-right font-mono", isItemCancelled && "line-through text-gray-400")}>
+                                                                    ₹{item.totalPrice.toLocaleString()}
+                                                                </TableCell>
+                                                                <TableCell className="py-1 text-center">
+                                                                    {canCancelItem ? (
+                                                                        <Button
+                                                                            size="sm"
+                                                                            variant="ghost"
+                                                                            className="h-6 px-2 text-[10px] font-semibold text-rose-700 hover:text-rose-800 hover:bg-rose-100 rounded cursor-pointer"
+                                                                            onClick={() => {
+                                                                                setCancellingItem({
+                                                                                    orderId: selectedOrder.id,
+                                                                                    itemId: item.id,
+                                                                                    name: item.productName
+                                                                                });
+                                                                                setItemCancelReason('Item cancelled by admin');
+                                                                            }}
+                                                                            disabled={updateStatusMutation.isPending}
+                                                                        >
+                                                                            Cancel
+                                                                        </Button>
+                                                                    ) : isItemCancelled ? (
+                                                                        <span className="text-[9px] text-rose-600 font-medium">Cancelled</span>
+                                                                    ) : (
+                                                                        <span className="text-[9px] text-gray-400">-</span>
+                                                                    )}
+                                                                </TableCell>
+                                                            </TableRow>
+                                                        );
+                                                    })}
                                                 </TableBody>
                                             </Table>
 
                                             {/* Financial Summary */}
                                             <div className="p-3.5 bg-slate-50 border-t border-gold/10 space-y-2 text-xs text-gray-600 font-sans">
+                                                {selectedOrder.items?.some(i => (i.itemStatus || '').toLowerCase() === 'cancelled') && (
+                                                    <div className="text-[10px] text-rose-700 bg-rose-50/70 border border-rose-200/80 px-2.5 py-1.5 rounded flex items-center gap-1.5 font-medium">
+                                                        <Ban className="h-3 w-3 shrink-0" />
+                                                        <span>Totals reflect active items only. Cancelled items have been deducted.</span>
+                                                    </div>
+                                                )}
                                                 <div className="flex justify-between">
                                                     <span className="text-gray-500">Subtotal</span>
                                                     <span className="font-mono">₹{selectedOrder.subtotal.toLocaleString()}</span>
@@ -1518,6 +1591,62 @@ export default function OrdersPage() {
                     </div>
                 )}
             </div>
+
+            {/* Single Item Cancellation Modal */}
+            <Dialog open={!!cancellingItem} onOpenChange={(open) => !open && setCancellingItem(null)}>
+                <DialogContent className="sm:max-w-[420px]">
+                    <DialogHeader>
+                        <DialogTitle className="text-maroon flex items-center gap-2 text-sm font-bold">
+                            <AlertTriangle className="h-4 w-4 text-rose-600" /> Cancel Order Item
+                        </DialogTitle>
+                        <DialogDescription className="text-xs text-gray-600">
+                            Are you sure you want to cancel <strong className="text-gray-900">{cancellingItem?.name}</strong> from this order?
+                            The order subtotal and total will be automatically recalculated, and this item will be marked as cancelled.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-2 py-2">
+                        <label className="text-[10px] font-bold text-gray-500 uppercase">Reason / Note</label>
+                        <Input
+                            value={itemCancelReason}
+                            onChange={(e) => setItemCancelReason(e.target.value)}
+                            placeholder="Item cancelled by admin"
+                            className="text-xs"
+                        />
+                    </div>
+                    <DialogFooter className="gap-2 sm:gap-0">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setCancellingItem(null)}
+                            disabled={updateStatusMutation.isPending}
+                            className="text-xs"
+                        >
+                            Keep Item
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="destructive"
+                            size="sm"
+                            className="text-xs bg-rose-700 hover:bg-rose-800"
+                            disabled={updateStatusMutation.isPending}
+                            onClick={() => {
+                                if (!cancellingItem) return;
+                                updateStatusMutation.mutate({
+                                    orderId: cancellingItem.orderId,
+                                    status: 'cancelled',
+                                    orderItemId: cancellingItem.itemId,
+                                    note: itemCancelReason || 'Item cancelled by admin'
+                                });
+                                setCancellingItem(null);
+                            }}
+                        >
+                            {updateStatusMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                            Confirm Cancellation
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
