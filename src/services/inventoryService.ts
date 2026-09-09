@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/useAuthStore';
 import { compressImage } from '@/lib/imageCompressor';
+import { uploadToImageKit } from '@/services/imagekitService';
 
 export interface SareeImage {
     id: string;
@@ -36,6 +37,53 @@ export interface Saree {
     mrp?: number;
     discountAmount?: number;
     discountPercentage?: number;
+    occasion?: string;
+    gstRate?: number;
+    priceIncludesGst?: boolean;
+}
+
+export interface BulkImportItemResult {
+    rowNumber: number;
+    sku?: string;
+    sareeName: string;
+    action: 'created' | 'updated' | 'failed';
+    imageStatus: 'uploaded' | 'pending';
+    error?: string;
+}
+
+export interface BulkImportSummary {
+    totalRows: number;
+    created: number;
+    updated: number;
+    failed: number;
+    imagesUploaded: number;
+    imagesPending: number;
+    errors: string[];
+    itemResults: BulkImportItemResult[];
+}
+
+export interface BulkImportRowInput {
+    sareeName: string;
+    category: string;
+    categoryId?: string;
+    designCode?: string;
+    hsnCode?: string;
+    sku?: string;
+    description?: string;
+    fabric: string;
+    color: string;
+    purchasePrice: number;
+    sellingPrice: number;
+    stock: number;
+    rackNo?: string;
+    barcode?: string;
+    status?: 'active' | 'inactive';
+    mrp?: number;
+    discountAmount?: number;
+    discountPercentage?: number;
+    occasion?: string;
+    gstRate?: number;
+    priceIncludesGst?: boolean;
 }
 
 export const inventoryService = {
@@ -70,6 +118,9 @@ export const inventoryService = {
             mrp: item.mrp ? Number(item.mrp) : 0,
             discountAmount: item.discount_amount ? Number(item.discount_amount) : 0,
             discountPercentage: item.discount_percentage ? Number(item.discount_percentage) : 0,
+            occasion: item.occasion || '',
+            gstRate: item.gst_rate !== null && item.gst_rate !== undefined ? Number(item.gst_rate) : undefined,
+            priceIncludesGst: item.price_includes_gst ?? false,
             images: (item.inventory_images || []).map((img: any) => ({
                 id: img.id,
                 inventoryId: img.inventory_id,
@@ -115,6 +166,9 @@ export const inventoryService = {
             mrp: data.mrp ? Number(data.mrp) : 0,
             discountAmount: data.discount_amount ? Number(data.discount_amount) : 0,
             discountPercentage: data.discount_percentage ? Number(data.discount_percentage) : 0,
+            occasion: data.occasion || '',
+            gstRate: data.gst_rate !== null && data.gst_rate !== undefined ? Number(data.gst_rate) : undefined,
+            priceIncludesGst: data.price_includes_gst ?? false,
             images: (data.inventory_images || []).map((img: any) => ({
                 id: img.id,
                 inventoryId: img.inventory_id,
@@ -156,6 +210,9 @@ export const inventoryService = {
             mrp: saree.mrp || 0,
             discount_amount: saree.discountAmount || 0,
             discount_percentage: saree.discountPercentage || 0,
+            occasion: saree.occasion ? saree.occasion.trim() : null,
+            gst_rate: saree.gstRate !== undefined ? saree.gstRate : null,
+            price_includes_gst: saree.priceIncludesGst ?? false,
         };
 
         const { data, error } = await supabase
@@ -242,6 +299,9 @@ export const inventoryService = {
             mrp: data.mrp ? Number(data.mrp) : 0,
             discountAmount: data.discount_amount ? Number(data.discount_amount) : 0,
             discountPercentage: data.discount_percentage ? Number(data.discount_percentage) : 0,
+            occasion: data.occasion || '',
+            gstRate: data.gst_rate !== null && data.gst_rate !== undefined ? Number(data.gst_rate) : undefined,
+            priceIncludesGst: data.price_includes_gst ?? false,
             images: uploadedImages
         };
     },
@@ -272,6 +332,9 @@ export const inventoryService = {
         if (saree.mrp !== undefined) updateData.mrp = saree.mrp;
         if (saree.discountAmount !== undefined) updateData.discount_amount = saree.discountAmount;
         if (saree.discountPercentage !== undefined) updateData.discount_percentage = saree.discountPercentage;
+        if (saree.occasion !== undefined) updateData.occasion = saree.occasion ? saree.occasion.trim() : null;
+        if (saree.gstRate !== undefined) updateData.gst_rate = saree.gstRate !== null ? saree.gstRate : null;
+        if (saree.priceIncludesGst !== undefined) updateData.price_includes_gst = saree.priceIncludesGst;
 
         const userEmail = useAuthStore.getState().user?.email || 'system';
         updateData.updated_by = userEmail;
@@ -402,6 +465,9 @@ export const inventoryService = {
             mrp: data.mrp ? Number(data.mrp) : 0,
             discountAmount: data.discount_amount ? Number(data.discount_amount) : 0,
             discountPercentage: data.discount_percentage ? Number(data.discount_percentage) : 0,
+            occasion: data.occasion || '',
+            gstRate: data.gst_rate !== null && data.gst_rate !== undefined ? Number(data.gst_rate) : undefined,
+            priceIncludesGst: data.price_includes_gst ?? false,
             images: mappedImages
         };
     },
@@ -517,54 +583,433 @@ export const inventoryService = {
         }
     },
 
-    bulkCreateSarees: async (rows: Omit<Saree, 'id' | 'addedDate'>[]): Promise<{ inserted: number; errors: string[] }> => {
-        const userEmail = useAuthStore.getState().user?.email || 'system';
-        const errors: string[] = [];
-        const records: any[] = [];
+    resolveSkuToInventoryId: async (sku: string): Promise<{ id: string; sareeName: string; sku: string } | null> => {
+        if (!sku || !sku.trim()) return null;
+        const { data, error } = await supabase
+            .from('inventory')
+            .select('id, saree_name, sku')
+            .ilike('sku', sku.trim())
+            .maybeSingle();
 
-        rows.forEach((row, idx) => {
-            if (!row.sareeName || !row.category || !row.fabric || !row.color) {
-                errors.push(`Row ${idx + 2}: Missing required field (name/category/fabric/color)`);
-                return;
-            }
-            if (isNaN(Number(row.purchasePrice)) || isNaN(Number(row.sellingPrice))) {
-                errors.push(`Row ${idx + 2}: Invalid price value`);
-                return;
-            }
-            const randId = 'S' + Math.floor(1000 + Math.random() * 9000) + Math.floor(Math.random() * 9);
-            records.push({
-                id: randId,
-                saree_name: String(row.sareeName).trim(),
-                category: String(row.category).trim(),
-                category_id: row.categoryId ? String(row.categoryId).trim() : null,
-                design_code: row.designCode ? String(row.designCode).trim().toUpperCase() : null,
-                hsn_code: row.hsnCode ? String(row.hsnCode).trim() : null,
-                sku: row.sku ? String(row.sku).trim() : null,
-                description: row.description ? String(row.description).trim() : null,
-                fabric: String(row.fabric).trim(),
-                color: String(row.color).trim(),
-                purchase_price: Number(row.purchasePrice),
-                selling_price: Number(row.sellingPrice),
-                stock: Number(row.stock) || 0,
-                rack_no: row.rackNo ? String(row.rackNo).trim() : null,
-                barcode: row.barcode ? String(row.barcode).trim() : randId,
-                status: row.status === 'inactive' ? 'inactive' : 'active',
-                created_by: userEmail,
-                updated_by: userEmail,
-                mrp: row.mrp || Number(row.sellingPrice) || 0,
-                discount_amount: row.discountAmount || 0,
-                discount_percentage: row.discountPercentage || 0,
-            });
-        });
+        if (error || !data) return null;
+        return {
+            id: data.id,
+            sareeName: data.saree_name,
+            sku: data.sku,
+        };
+    },
 
-        if (records.length === 0) {
-            return { inserted: 0, errors };
+    batchResolveSkus: async (skus: string[]): Promise<Map<string, { id: string; sareeName: string; sku: string }>> => {
+        const resultMap = new Map<string, { id: string; sareeName: string; sku: string }>();
+        const cleanSkus = Array.from(new Set(skus.map(s => s.trim()).filter(Boolean)));
+        if (cleanSkus.length === 0) return resultMap;
+
+        // Query by SKUs in chunks of 100
+        const chunkSize = 100;
+        for (let i = 0; i < cleanSkus.length; i += chunkSize) {
+            const chunk = cleanSkus.slice(i, i + chunkSize);
+            const { data, error } = await supabase
+                .from('inventory')
+                .select('id, saree_name, sku')
+                .in('sku', chunk);
+
+            if (data && !error) {
+                data.forEach((row: any) => {
+                    if (row.sku) {
+                        resultMap.set(row.sku.toLowerCase(), {
+                            id: row.id,
+                            sareeName: row.saree_name,
+                            sku: row.sku,
+                        });
+                    }
+                });
+            }
+        }
+        return resultMap;
+    },
+
+    uploadProductImageToImageKit: async (
+        file: File,
+        inventoryId: string,
+        fileName: string,
+        isPrimary: boolean,
+        sortOrder: number
+    ): Promise<SareeImage> => {
+        const folder = `/products/${inventoryId}`;
+        // Upload to ImageKit preserving filename
+        const result = await uploadToImageKit(file, fileName, folder, false);
+
+        // If this image is designated primary, set any existing primary images for this saree to false
+        if (isPrimary) {
+            await supabase
+                .from('inventory_images')
+                .update({ is_primary: false })
+                .eq('inventory_id', inventoryId);
         }
 
-        const { error } = await supabase.from('inventory').insert(records);
-        if (error) throw error;
+        // Insert into inventory_images
+        const { data: imgData, error: dbError } = await supabase
+            .from('inventory_images')
+            .insert([{
+                inventory_id: inventoryId,
+                image_url: result.url,
+                storage_key: result.fileId || result.filePath,
+                is_primary: isPrimary,
+                sort_order: sortOrder,
+            }])
+            .select()
+            .single();
 
-        return { inserted: records.length, errors };
+        if (dbError) throw dbError;
+
+        return {
+            id: imgData.id,
+            inventoryId: imgData.inventory_id,
+            imageUrl: imgData.image_url,
+            storageKey: imgData.storage_key,
+            isPrimary: imgData.is_primary,
+            sortOrder: imgData.sort_order,
+            createdAt: imgData.created_at,
+        };
+    },
+
+    bulkImportProducts: async (rows: BulkImportRowInput[]): Promise<BulkImportSummary> => {
+        const userEmail = useAuthStore.getState().user?.email || 'system';
+        const summary: BulkImportSummary = {
+            totalRows: rows.length,
+            created: 0,
+            updated: 0,
+            failed: 0,
+            imagesUploaded: 0,
+            imagesPending: 0,
+            errors: [],
+            itemResults: [],
+        };
+
+        if (!rows || rows.length === 0) {
+            return summary;
+        }
+
+        // 1. Identify distinct non-empty SKUs in input
+        const seenFileSkus = new Set<string>();
+
+        rows.forEach((r) => {
+            const rawSku = r.sku ? String(r.sku).trim().toUpperCase() : '';
+            if (rawSku) {
+                seenFileSkus.add(rawSku);
+            }
+        });
+
+        // 2. Query database for existing products matching these SKUs
+        const existingMap = new Map<string, { id: string; imageCount: number; sareeName: string }>();
+        const skuList = Array.from(seenFileSkus);
+
+        for (let i = 0; i < skuList.length; i += 100) {
+            const chunk = skuList.slice(i, i + 100);
+            const { data: found, error: searchErr } = await supabase
+                .from('inventory')
+                .select('id, sku, saree_name, inventory_images(id)')
+                .in('sku', chunk);
+
+            if (searchErr) {
+                console.error('Error querying existing SKUs in inventory:', searchErr);
+                throw searchErr;
+            }
+
+            (found || []).forEach((item: any) => {
+                if (item.sku) {
+                    existingMap.set(item.sku.trim().toUpperCase(), {
+                        id: item.id,
+                        imageCount: Array.isArray(item.inventory_images) ? item.inventory_images.length : 0,
+                        sareeName: item.saree_name,
+                    });
+                }
+            });
+        }
+
+        // Track file SKUs we process to flag duplicates in the same file
+        const processedFileSkus = new Set<string>();
+
+        // 3. Process each row independently
+        for (let idx = 0; idx < rows.length; idx++) {
+            const row = rows[idx];
+            const rowNum = idx + 2; // Excel 1-based row with header
+            const skuVal = row.sku ? String(row.sku).trim() : '';
+            const skuKey = skuVal.toUpperCase();
+
+            // Field validations
+            if (!row.sareeName || !String(row.sareeName).trim()) {
+                const err = `Row ${rowNum}${skuVal ? ` (SKU: ${skuVal})` : ''}: Missing Saree Name`;
+                summary.failed++;
+                summary.errors.push(err);
+                summary.itemResults.push({
+                    rowNumber: rowNum,
+                    sku: skuVal || undefined,
+                    sareeName: 'Unknown',
+                    action: 'failed',
+                    imageStatus: 'pending',
+                    error: err,
+                });
+                continue;
+            }
+
+            if (!row.category || !String(row.category).trim()) {
+                const err = `Row ${rowNum}${skuVal ? ` (SKU: ${skuVal})` : ''}: Missing Category`;
+                summary.failed++;
+                summary.errors.push(err);
+                summary.itemResults.push({
+                    rowNumber: rowNum,
+                    sku: skuVal || undefined,
+                    sareeName: String(row.sareeName).trim(),
+                    action: 'failed',
+                    imageStatus: 'pending',
+                    error: err,
+                });
+                continue;
+            }
+
+            if (!row.fabric || !String(row.fabric).trim()) {
+                const err = `Row ${rowNum}${skuVal ? ` (SKU: ${skuVal})` : ''}: Missing Fabric`;
+                summary.failed++;
+                summary.errors.push(err);
+                summary.itemResults.push({
+                    rowNumber: rowNum,
+                    sku: skuVal || undefined,
+                    sareeName: String(row.sareeName).trim(),
+                    action: 'failed',
+                    imageStatus: 'pending',
+                    error: err,
+                });
+                continue;
+            }
+
+            if (!row.color || !String(row.color).trim()) {
+                const err = `Row ${rowNum}${skuVal ? ` (SKU: ${skuVal})` : ''}: Missing Color`;
+                summary.failed++;
+                summary.errors.push(err);
+                summary.itemResults.push({
+                    rowNumber: rowNum,
+                    sku: skuVal || undefined,
+                    sareeName: String(row.sareeName).trim(),
+                    action: 'failed',
+                    imageStatus: 'pending',
+                    error: err,
+                });
+                continue;
+            }
+
+            const sellingPrice = Number(row.sellingPrice);
+            if (isNaN(sellingPrice) || sellingPrice < 0) {
+                const err = `Row ${rowNum}${skuVal ? ` (SKU: ${skuVal})` : ''}: Invalid selling price`;
+                summary.failed++;
+                summary.errors.push(err);
+                summary.itemResults.push({
+                    rowNumber: rowNum,
+                    sku: skuVal || undefined,
+                    sareeName: String(row.sareeName).trim(),
+                    action: 'failed',
+                    imageStatus: 'pending',
+                    error: err,
+                });
+                continue;
+            }
+
+            const purchasePrice = Number(row.purchasePrice);
+            if (isNaN(purchasePrice) || purchasePrice < 0) {
+                const err = `Row ${rowNum}${skuVal ? ` (SKU: ${skuVal})` : ''}: Invalid purchase price`;
+                summary.failed++;
+                summary.errors.push(err);
+                summary.itemResults.push({
+                    rowNumber: rowNum,
+                    sku: skuVal || undefined,
+                    sareeName: String(row.sareeName).trim(),
+                    action: 'failed',
+                    imageStatus: 'pending',
+                    error: err,
+                });
+                continue;
+            }
+
+            const stock = Number(row.stock);
+            if (isNaN(stock) || stock < 0) {
+                const err = `Row ${rowNum}${skuVal ? ` (SKU: ${skuVal})` : ''}: Invalid stock quantity`;
+                summary.failed++;
+                summary.errors.push(err);
+                summary.itemResults.push({
+                    rowNumber: rowNum,
+                    sku: skuVal || undefined,
+                    sareeName: String(row.sareeName).trim(),
+                    action: 'failed',
+                    imageStatus: 'pending',
+                    error: err,
+                });
+                continue;
+            }
+
+            // Check duplicate SKU in file
+            if (skuKey && processedFileSkus.has(skuKey)) {
+                const err = `Row ${rowNum}: Duplicate SKU "${skuVal}" found in file`;
+                summary.failed++;
+                summary.errors.push(err);
+                summary.itemResults.push({
+                    rowNumber: rowNum,
+                    sku: skuVal,
+                    sareeName: String(row.sareeName).trim(),
+                    action: 'failed',
+                    imageStatus: 'pending',
+                    error: err,
+                });
+                continue;
+            }
+            if (skuKey) {
+                processedFileSkus.add(skuKey);
+            }
+
+            const existing = skuKey ? existingMap.get(skuKey) : undefined;
+
+            if (existing) {
+                // UPDATE existing product - preserve images!
+                try {
+                    const updatePayload: any = {
+                        saree_name: String(row.sareeName).trim(),
+                        category: String(row.category).trim(),
+                        category_id: row.categoryId ? String(row.categoryId).trim() : null,
+                        design_code: row.designCode ? String(row.designCode).trim().toUpperCase() : null,
+                        hsn_code: row.hsnCode ? String(row.hsnCode).trim() : null,
+                        description: row.description ? String(row.description).trim() : null,
+                        fabric: String(row.fabric).trim(),
+                        color: String(row.color).trim(),
+                        purchase_price: purchasePrice,
+                        selling_price: sellingPrice,
+                        stock: stock,
+                        rack_no: row.rackNo ? String(row.rackNo).trim() : null,
+                        status: row.status === 'inactive' ? 'inactive' : 'active',
+                        mrp: row.mrp ? Number(row.mrp) : sellingPrice,
+                        discount_amount: row.discountAmount ? Number(row.discountAmount) : 0,
+                        discount_percentage: row.discountPercentage ? Number(row.discountPercentage) : 0,
+                        occasion: row.occasion ? String(row.occasion).trim() : null,
+                        gst_rate: row.gstRate !== undefined && row.gstRate !== null ? Number(row.gstRate) : null,
+                        price_includes_gst: row.priceIncludesGst ?? false,
+                        updated_by: userEmail,
+                    };
+                    if (row.barcode) updatePayload.barcode = String(row.barcode).trim();
+
+                    const { error: updError } = await supabase
+                        .from('inventory')
+                        .update(updatePayload)
+                        .eq('id', existing.id);
+
+                    if (updError) throw updError;
+
+                    summary.updated++;
+                    const hasImages = existing.imageCount > 0;
+                    if (hasImages) {
+                        summary.imagesUploaded++;
+                    } else {
+                        summary.imagesPending++;
+                    }
+
+                    summary.itemResults.push({
+                        rowNumber: rowNum,
+                        sku: skuVal || undefined,
+                        sareeName: String(row.sareeName).trim(),
+                        action: 'updated',
+                        imageStatus: hasImages ? 'uploaded' : 'pending',
+                    });
+                } catch (e: any) {
+                    const err = `Row ${rowNum}${skuVal ? ` (SKU: ${skuVal})` : ''}: Update failed: ${e?.message || 'Database error'}`;
+                    summary.failed++;
+                    summary.errors.push(err);
+                    summary.itemResults.push({
+                        rowNumber: rowNum,
+                        sku: skuVal || undefined,
+                        sareeName: String(row.sareeName).trim(),
+                        action: 'failed',
+                        imageStatus: 'pending',
+                        error: err,
+                    });
+                }
+            } else {
+                // INSERT new product - ZERO images created, valid without images
+                try {
+                    const randId = 'S' + Math.floor(1000 + Math.random() * 9000) + Math.floor(Math.random() * 9);
+                    const insertPayload: any = {
+                        id: randId,
+                        sku: skuVal || null,
+                        saree_name: String(row.sareeName).trim(),
+                        category: String(row.category).trim(),
+                        category_id: row.categoryId ? String(row.categoryId).trim() : null,
+                        design_code: row.designCode ? String(row.designCode).trim().toUpperCase() : null,
+                        hsn_code: row.hsnCode ? String(row.hsnCode).trim() : null,
+                        description: row.description ? String(row.description).trim() : null,
+                        fabric: String(row.fabric).trim(),
+                        color: String(row.color).trim(),
+                        purchase_price: purchasePrice,
+                        selling_price: sellingPrice,
+                        stock: stock,
+                        rack_no: row.rackNo ? String(row.rackNo).trim() : null,
+                        barcode: row.barcode ? String(row.barcode).trim() : randId,
+                        status: row.status === 'inactive' ? 'inactive' : 'active',
+                        mrp: row.mrp ? Number(row.mrp) : sellingPrice,
+                        discount_amount: row.discountAmount ? Number(row.discountAmount) : 0,
+                        discount_percentage: row.discountPercentage ? Number(row.discountPercentage) : 0,
+                        occasion: row.occasion ? String(row.occasion).trim() : null,
+                        gst_rate: row.gstRate !== undefined && row.gstRate !== null ? Number(row.gstRate) : null,
+                        price_includes_gst: row.priceIncludesGst ?? false,
+                        created_by: userEmail,
+                        updated_by: userEmail,
+                    };
+
+                    const { error: insError } = await supabase
+                        .from('inventory')
+                        .insert([insertPayload]);
+
+                    if (insError) throw insError;
+
+                    summary.created++;
+                    summary.imagesPending++; // New product starts with ZERO images
+
+                    summary.itemResults.push({
+                        rowNumber: rowNum,
+                        sku: skuVal || undefined,
+                        sareeName: String(row.sareeName).trim(),
+                        action: 'created',
+                        imageStatus: 'pending',
+                    });
+
+                    // Track newly inserted in existingMap
+                    if (skuKey) {
+                        existingMap.set(skuKey, {
+                            id: randId,
+                            imageCount: 0,
+                            sareeName: String(row.sareeName).trim(),
+                        });
+                    }
+                } catch (e: any) {
+                    const err = `Row ${rowNum}${skuVal ? ` (SKU: ${skuVal})` : ''}: Insert failed: ${e?.message || 'Database error'}`;
+                    summary.failed++;
+                    summary.errors.push(err);
+                    summary.itemResults.push({
+                        rowNumber: rowNum,
+                        sku: skuVal || undefined,
+                        sareeName: String(row.sareeName).trim(),
+                        action: 'failed',
+                        imageStatus: 'pending',
+                        error: err,
+                    });
+                }
+            }
+        }
+
+        return summary;
+    },
+
+    bulkCreateSarees: async (rows: any[]): Promise<{ inserted: number; errors: string[] }> => {
+        const summary = await inventoryService.bulkImportProducts(rows);
+        return {
+            inserted: summary.created + summary.updated,
+            errors: summary.errors,
+        };
     },
 
     assignCategoryToProducts: async (productIds: string[], categoryName: string, categoryId?: string): Promise<void> => {

@@ -17,7 +17,8 @@ export interface ImageKitUploadResponse {
 export async function uploadToImageKit(
     file: File | Blob,
     fileName: string,
-    folder: string = '/hero-banners'
+    folder: string = '/hero-banners',
+    useUniqueFileName: boolean = true
 ): Promise<ImageKitUploadResponse> {
     const publicKey = import.meta.env.VITE_IMAGEKIT_PUBLIC_KEY;
     const privateKey = import.meta.env.VITE_IMAGEKIT_PRIVATE_KEY;
@@ -32,7 +33,7 @@ export async function uploadToImageKit(
     formData.append('file', file);
     formData.append('fileName', fileName);
     formData.append('folder', folder);
-    formData.append('useUniqueFileName', 'true');
+    formData.append('useUniqueFileName', useUniqueFileName ? 'true' : 'false');
     if (publicKey && !publicKey.includes('your_')) {
         formData.append('publicKey', publicKey);
     }

@@ -21,6 +21,9 @@ import {
     Printer,
     Layers,
     Wallet,
+    CheckCircle2,
+    Clock,
+    ImageIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -58,6 +61,7 @@ import { SareeForm } from '@/components/inventory/SareeForm';
 import { BarcodeGenerator } from '@/components/inventory/BarcodeGenerator';
 import { BatchBarcodePrinter } from '@/components/inventory/BatchBarcodePrinter';
 import { CsvImportModal } from '@/components/inventory/CsvImportModal';
+import { BulkImageUploadModal } from '@/components/inventory/BulkImageUploadModal';
 import { CategoryProductsModal } from '@/components/inventory/CategoryProductsModal';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
@@ -72,6 +76,7 @@ export default function InventoryPage() {
     const [barcodeToShow, setBarcodeToShow] = React.useState<Saree | null>(null);
     const [isBatchBarcodeOpen, setIsBatchBarcodeOpen] = React.useState(false);
     const [isImportOpen, setIsImportOpen] = React.useState(false);
+    const [isBulkImageUploadOpen, setIsBulkImageUploadOpen] = React.useState(false);
     const [isCategoryProductsOpen, setIsCategoryProductsOpen] = React.useState(false);
     const [categoryProductsTarget, setCategoryProductsTarget] = React.useState<string | undefined>();
     const [galleryState, setGalleryState] = React.useState<{ images: { imageUrl: string }[], title: string } | null>(null);
@@ -86,6 +91,7 @@ export default function InventoryPage() {
     const [selectedFabric, setSelectedFabric] = React.useState('All');
     const [stockFilter, setStockFilter] = React.useState('All'); // 'All' | 'in_stock' | 'low_stock' | 'out_of_stock'
     const [statusFilter, setStatusFilter] = React.useState('All'); // 'All' | 'active' | 'inactive'
+    const [imageStatusFilter, setImageStatusFilter] = React.useState<'All' | 'uploaded' | 'pending'>('All');
     const [minPrice, setMinPrice] = React.useState('');
     const [maxPrice, setMaxPrice] = React.useState('');
 
@@ -117,7 +123,7 @@ export default function InventoryPage() {
     // Reset pagination when search or filters change
     React.useEffect(() => {
         setCurrentPage(1);
-    }, [searchTerm, selectedCategory, selectedFabric, stockFilter, statusFilter, minPrice, maxPrice]);
+    }, [searchTerm, selectedCategory, selectedFabric, stockFilter, statusFilter, minPrice, maxPrice, imageStatusFilter]);
 
     const createMutation = useMutation({
         mutationFn: ({ saree, images }: { saree: any; images: any[] }) =>
@@ -174,16 +180,18 @@ export default function InventoryPage() {
         if (selectedFabric !== 'All') count++;
         if (stockFilter !== 'All') count++;
         if (statusFilter !== 'All') count++;
+        if (imageStatusFilter !== 'All') count++;
         if (minPrice !== '') count++;
         if (maxPrice !== '') count++;
         return count;
-    }, [selectedCategory, selectedFabric, stockFilter, statusFilter, minPrice, maxPrice]);
+    }, [selectedCategory, selectedFabric, stockFilter, statusFilter, imageStatusFilter, minPrice, maxPrice]);
 
     const handleResetFilters = () => {
         setSelectedCategory('All');
         setSelectedFabric('All');
         setStockFilter('All');
         setStatusFilter('All');
+        setImageStatusFilter('All');
         setMinPrice('');
         setMaxPrice('');
     };
@@ -192,16 +200,21 @@ export default function InventoryPage() {
 
     // Pure UI — inventory summary stats
     const inventoryStats = React.useMemo(() => {
-        if (!Array.isArray(sarees)) return { total: 0, units: 0, lowStock: 0, outOfStock: 0, stockValue: 0, costValue: 0 };
-        let units = 0, lowStock = 0, outOfStock = 0, stockValue = 0, costValue = 0;
+        if (!Array.isArray(sarees)) return { total: 0, units: 0, lowStock: 0, outOfStock: 0, stockValue: 0, costValue: 0, imagesUploaded: 0, imagesPending: 0 };
+        let units = 0, lowStock = 0, outOfStock = 0, stockValue = 0, costValue = 0, imagesUploaded = 0, imagesPending = 0;
         sarees.forEach(s => {
             units += s.stock;
             if (s.stock === 0) outOfStock++;
             else if (s.stock < 5) lowStock++;
             stockValue += s.stock * s.sellingPrice;
             costValue += s.stock * (s.purchasePrice || 0);
+            if (s.images && s.images.length > 0) {
+                imagesUploaded++;
+            } else {
+                imagesPending++;
+            }
         });
-        return { total: sarees.length, units, lowStock, outOfStock, stockValue, costValue };
+        return { total: sarees.length, units, lowStock, outOfStock, stockValue, costValue, imagesUploaded, imagesPending };
     }, [sarees]);
 
     const filteredSarees = Array.isArray(sarees) ? sarees.filter(saree => {
@@ -234,11 +247,19 @@ export default function InventoryPage() {
         // Status check
         const matchesStatus = statusFilter === 'All' || saree.status === statusFilter;
 
+        // Image status check
+        let matchesImageStatus = true;
+        if (imageStatusFilter === 'uploaded') {
+            matchesImageStatus = !!(saree.images && saree.images.length > 0);
+        } else if (imageStatusFilter === 'pending') {
+            matchesImageStatus = !saree.images || saree.images.length === 0;
+        }
+
         // Price range check
         const matchesMinPrice = minPrice === '' || saree.sellingPrice >= Number(minPrice);
         const matchesMaxPrice = maxPrice === '' || saree.sellingPrice <= Number(maxPrice);
 
-        return matchesSearch && matchesCategory && matchesFabric && matchesStock && matchesStatus && matchesMinPrice && matchesMaxPrice;
+        return matchesSearch && matchesCategory && matchesFabric && matchesStock && matchesStatus && matchesImageStatus && matchesMinPrice && matchesMaxPrice;
     }) : [];
 
     const totalPages = Math.ceil(filteredSarees.length / itemsPerPage);
@@ -479,6 +500,16 @@ export default function InventoryPage() {
                                 <FileUp className="h-4 w-4" />
                                 Import CSV / Excel
                             </Button>
+
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-10 text-xs gap-1.5 border-gold/40 text-maroon font-semibold hover:bg-gold/10 shadow-xs"
+                                onClick={() => setIsBulkImageUploadOpen(true)}
+                            >
+                                <ImageIcon className="h-4 w-4 text-purple-700" />
+                                Bulk Upload Images
+                            </Button>
                         </div>
                     </div>
 
@@ -622,6 +653,21 @@ export default function InventoryPage() {
                                         </Select>
                                     </div>
 
+                                    {/* Image Status */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Images</label>
+                                        <Select value={imageStatusFilter} onValueChange={(val: any) => setImageStatusFilter(val)}>
+                                            <SelectTrigger className="h-9 text-xs border-gold/30 bg-white">
+                                                <SelectValue placeholder="All Images" />
+                                            </SelectTrigger>
+                                            <SelectContent className="border-gold/20">
+                                                <SelectItem value="All" className="text-xs">All Images</SelectItem>
+                                                <SelectItem value="uploaded" className="text-xs">Images Uploaded</SelectItem>
+                                                <SelectItem value="pending" className="text-xs">Images Pending</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+
                                     {/* Min Price */}
                                     <div className="space-y-1.5">
                                         <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Min Price (₹)</label>
@@ -701,6 +747,7 @@ export default function InventoryPage() {
                                 <TableHead className="h-10 text-[10px] font-bold text-maroon py-1 text-right whitespace-nowrap">Selling (₹)</TableHead>
                                 <TableHead className="h-10 text-[10px] font-bold text-maroon py-1 text-center whitespace-nowrap">Stock</TableHead>
                                 <TableHead className="h-10 text-[10px] font-bold text-maroon py-1 whitespace-nowrap">Added Date</TableHead>
+                                <TableHead className="h-10 text-[10px] font-bold text-maroon py-1 whitespace-nowrap">Images</TableHead>
                                 <TableHead className="h-10 text-[10px] font-bold text-maroon py-1 whitespace-nowrap">Status</TableHead>
                                 <TableHead className="h-10 text-[10px] font-bold text-maroon py-1 whitespace-nowrap">Audit</TableHead>
                                 <TableHead className="sticky right-0 bg-cream/20 z-30 h-10 text-[10px] font-bold text-maroon py-1 text-right px-3 border-l border-gold/10 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)] w-[60px] min-w-[60px]">Actions</TableHead>
@@ -709,14 +756,14 @@ export default function InventoryPage() {
                         <TableBody>
                             {isLoading ? (
                                 <TableRow>
-                                    <TableCell colSpan={14} className="h-48 text-center text-maroon/50 text-xs italic">
+                                    <TableCell colSpan={15} className="h-48 text-center text-maroon/50 text-xs italic">
                                         <Loader2 className="h-6 w-6 animate-spin mx-auto mb-1" />
                                         Loading inventory database...
                                     </TableCell>
                                 </TableRow>
                             ) : paginatedSarees?.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={14} className="h-32 text-center">
+                                    <TableCell colSpan={15} className="h-32 text-center">
                                         <div className="flex flex-col items-center gap-2 py-4">
                                             <div className="p-3 bg-gray-100 rounded-full">
                                                 <Search className="h-5 w-5 text-gray-400" />
@@ -748,7 +795,8 @@ export default function InventoryPage() {
                                                         }}
                                                     />
                                                 ) : (
-                                                    <div className="h-10 w-10 bg-cream/35 border border-gold/15 rounded-lg flex items-center justify-center text-[8px] text-gray-400 font-bold flex-shrink-0 uppercase">
+                                                    <div className="h-10 w-10 bg-amber-50/70 border border-dashed border-amber-300 rounded-lg flex flex-col items-center justify-center text-[7px] text-amber-700 font-bold flex-shrink-0 uppercase" title="Images pending upload">
+                                                        <Clock className="h-3 w-3 mb-0.5 text-amber-600/80" />
                                                         No Img
                                                     </div>
                                                 )}
@@ -826,6 +874,19 @@ export default function InventoryPage() {
                                                 month: 'short',
                                                 year: 'numeric'
                                             }) : '—'}
+                                        </TableCell>
+                                        <TableCell className="py-1 text-xs whitespace-nowrap">
+                                            {saree.images && saree.images.length > 0 ? (
+                                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full" title={`${saree.images.length} image(s) uploaded`}>
+                                                    <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                                                    Uploaded ({saree.images.length})
+                                                </span>
+                                            ) : (
+                                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full" title="No images uploaded yet. Pending image upload.">
+                                                    <Clock className="h-3 w-3 text-amber-600" />
+                                                    Pending
+                                                </span>
+                                            )}
                                         </TableCell>
                                         <TableCell className="py-1 text-xs whitespace-nowrap">
                                             <span className={cn(
@@ -980,6 +1041,11 @@ export default function InventoryPage() {
                 onClose={() => setIsImportOpen(false)}
             />
 
+            <BulkImageUploadModal
+                isOpen={isBulkImageUploadOpen}
+                onClose={() => setIsBulkImageUploadOpen(false)}
+            />
+
             <Dialog open={!!galleryState} onOpenChange={(open) => !open && setGalleryState(null)}>
                 <DialogContent className="max-w-lg border-gold/20 shadow-2xl p-0 overflow-hidden bg-white">
                     <DialogHeader className="border-b border-gold/15 px-5 py-3 shrink-0">
@@ -1082,7 +1148,10 @@ export default function InventoryPage() {
                                             }}
                                         />
                                     ) : (
-                                        <div className="h-16 w-16 rounded-xl bg-cream/40 border border-gold/15 flex items-center justify-center text-[9px] text-gray-400 font-bold flex-shrink-0">No Img</div>
+                                        <div className="h-16 w-16 rounded-xl bg-amber-50/70 border border-dashed border-amber-300 flex flex-col items-center justify-center text-[9px] text-amber-700 font-bold flex-shrink-0">
+                                            <Clock className="h-4 w-4 mb-0.5 text-amber-600/70" />
+                                            No Img
+                                        </div>
                                     )}
                                     <div className="min-w-0 flex-1">
                                         <h2 className="font-bold text-maroon font-serif text-base leading-tight">{s.sareeName}</h2>
@@ -1097,6 +1166,28 @@ export default function InventoryPage() {
                                     <span className="text-[10px] font-mono text-gray-400 shrink-0">#{s.id}</span>
                                 </div>
 
+                                {/* Import & Image Status Bar */}
+                                <div className="bg-cream/30 border-b border-gold/15 px-5 py-2 flex items-center justify-between text-xs shrink-0">
+                                    <div className="flex items-center gap-1.5">
+                                        <span className="text-gray-500 font-medium text-[11px]">Product Data:</span>
+                                        <span className="inline-flex items-center gap-1 font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full text-[10px]">
+                                            <CheckCircle2 className="h-3 w-3" /> Imported
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                        <span className="text-gray-500 font-medium text-[11px]">Images:</span>
+                                        {s.images && s.images.length > 0 ? (
+                                            <span className="inline-flex items-center gap-1 font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full text-[10px]">
+                                                <CheckCircle2 className="h-3 w-3" /> Uploaded ({s.images.length})
+                                            </span>
+                                        ) : (
+                                            <span className="inline-flex items-center gap-1 font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full text-[10px]">
+                                                <Clock className="h-3 w-3" /> Pending Upload
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+
                                 {/* Scrollable body */}
                                 <div className="overflow-y-auto flex-1 px-5 py-4 space-y-4">
                                     {/* Product info grid */}
@@ -1108,6 +1199,8 @@ export default function InventoryPage() {
                                             { label: 'Rack No', value: s.rackNo || '—' },
                                             { label: 'HSN Code', value: s.hsnCode || '—' },
                                             { label: 'Category ID', value: s.categoryId || '—' },
+                                            { label: 'Occasion', value: s.occasion || '—' },
+                                            { label: 'GST Rate', value: s.gstRate !== undefined && s.gstRate !== null ? `${s.gstRate}%` : '—' },
                                         ].map(({ label, value }) => (
                                             <div key={label} className="bg-gray-50 rounded-lg px-3 py-2">
                                                 <div className="text-[9px] font-bold uppercase tracking-wider text-gray-400">{label}</div>
@@ -1140,6 +1233,11 @@ export default function InventoryPage() {
                                             <div>
                                                 <div className="text-[9px] text-gray-400 uppercase">Selling Price</div>
                                                 <div className="text-lg font-bold text-maroon font-mono">₹{s.sellingPrice.toLocaleString()}</div>
+                                                {s.priceIncludesGst !== undefined && (
+                                                    <div className="text-[9px] text-gray-500 font-medium">
+                                                        {s.priceIncludesGst ? '✓ Price includes GST' : 'Price excludes GST'}
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
