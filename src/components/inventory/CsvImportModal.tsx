@@ -108,6 +108,426 @@ interface ParsedRow {
     priceIncludesGst?: boolean;
 }
 
+/**
+ * Strips currency symbols (₹, $, €, £), commas, and whitespace, returning a clean float.
+ */
+export function parseCleanNumber(val: any): number {
+    if (val === undefined || val === null || val === '') return 0;
+    if (typeof val === 'number') return isNaN(val) ? 0 : val;
+    const clean = String(val).replace(/[₹$€£,\s]/g, '').trim();
+    const num = parseFloat(clean);
+    return isNaN(num) ? 0 : num;
+}
+
+/**
+ * Handles discount percentage formatting (e.g. "10.00%", "10%", 0.1 -> 10).
+ */
+export function parseCleanDiscountPercentage(val: any): number {
+    if (val === undefined || val === null || val === '') return 0;
+    if (typeof val === 'number') {
+        if (isNaN(val)) return 0;
+        return (val > 0 && val <= 1) ? Math.round(val * 100 * 100) / 100 : val;
+    }
+    const str = String(val).trim();
+    const hasPercent = str.includes('%');
+    const num = parseCleanNumber(str.replace('%', ''));
+    if (hasPercent) return num;
+    if (num > 0 && num <= 1) return Math.round(num * 100 * 100) / 100;
+    return num;
+}
+
+function parseCellAddress(addr: string): { sheet?: string; col: string; row: number } | null {
+    if (!addr) return null;
+    let s = String(addr).trim();
+    let sheetName: string | undefined;
+    const sheetMatch = s.match(/^(?:'([^']+)'|([A-Za-z0-9_]+))!(.*)$/);
+    if (sheetMatch) {
+        sheetName = sheetMatch[1] || sheetMatch[2];
+        s = sheetMatch[3];
+    }
+    const cleanAddr = s.replace(/\$/g, '').trim().toUpperCase();
+    const m = cleanAddr.match(/^([A-Z]{1,3})([0-9]+)$/);
+    if (!m) return null;
+    return { sheet: sheetName, col: m[1], row: parseInt(m[2], 10) };
+}
+
+function formatExcelText(val: any, fmt: string): string {
+    if (!fmt) return String(val ?? '');
+    let cleanFmt = fmt.trim();
+    if (cleanFmt.startsWith('"') && cleanFmt.endsWith('"')) cleanFmt = cleanFmt.slice(1, -1);
+    if (cleanFmt.startsWith("'") && cleanFmt.endsWith("'")) cleanFmt = cleanFmt.slice(1, -1);
+
+    // Pattern like "000", "0000", "00"
+    if (/^0+$/.test(cleanFmt)) {
+        const num = Math.round(Number(val));
+        if (isNaN(num)) return String(val ?? '');
+        return String(num).padStart(cleanFmt.length, '0');
+    }
+
+    // Pattern like "0.00"
+    if (/^0+\.0+$/.test(cleanFmt)) {
+        const decimals = cleanFmt.split('.')[1].length;
+        const num = Number(val);
+        if (isNaN(num)) return String(val ?? '');
+        return num.toFixed(decimals);
+    }
+
+    return String(val ?? '');
+}
+
+function extractFunctionArgs(expr: string, funcName: string): string[] | null {
+    const trimmed = expr.trim();
+    const prefix = funcName.toUpperCase() + '(';
+    if (!trimmed.toUpperCase().startsWith(prefix)) return null;
+    if (!trimmed.endsWith(')')) return null;
+
+    let depth = 0;
+    let inQuotes = false;
+    for (let i = prefix.length - 1; i < trimmed.length; i++) {
+        const ch = trimmed[i];
+        if (ch === '"') inQuotes = !inQuotes;
+        else if (ch === '(' && !inQuotes) depth++;
+        else if (ch === ')' && !inQuotes) {
+            depth--;
+            if (depth === 0) {
+                if (i !== trimmed.length - 1) return null;
+                const inside = trimmed.substring(prefix.length, trimmed.length - 1);
+                return splitFormulaArgs(inside);
+            }
+        }
+    }
+    return null;
+}
+
+function splitFormulaArgs(str: string): string[] {
+    const args: string[] = [];
+    let cur = '';
+    let inQuotes = false;
+    let parenDepth = 0;
+    for (let i = 0; i < str.length; i++) {
+        const ch = str[i];
+        if (ch === '"') inQuotes = !inQuotes;
+        else if (ch === '(' && !inQuotes) parenDepth++;
+        else if (ch === ')' && !inQuotes) parenDepth--;
+        else if (ch === ',' && !inQuotes && parenDepth === 0) {
+            args.push(cur.trim());
+            cur = '';
+            continue;
+        }
+        cur += ch;
+    }
+    if (cur.trim()) args.push(cur.trim());
+    return args;
+}
+
+function splitFormulaByAmpersand(str: string): string[] {
+    const parts: string[] = [];
+    let cur = '';
+    let inQuotes = false;
+    let parenDepth = 0;
+    for (let i = 0; i < str.length; i++) {
+        const ch = str[i];
+        if (ch === '"') inQuotes = !inQuotes;
+        else if (ch === '(' && !inQuotes) parenDepth++;
+        else if (ch === ')' && !inQuotes) parenDepth--;
+        else if (ch === '&' && !inQuotes && parenDepth === 0) {
+            parts.push(cur.trim());
+            cur = '';
+            continue;
+        }
+        cur += ch;
+    }
+    if (cur.trim()) parts.push(cur.trim());
+    return parts;
+}
+
+function evalFormulaExpr(formula: string, getCellValue: (cellAddress: string) => any, currentRow?: number): any {
+    if (!formula) return '';
+    let expr = String(formula).trim();
+    if (expr.startsWith('=')) expr = expr.substring(1).trim();
+
+    try {
+        return customEvalFormula(expr, getCellValue, currentRow);
+    } catch {
+        return '';
+    }
+}
+
+function customEvalFormula(expr: string, getCellValue: (cellAddress: string) => any, currentRow?: number): any {
+    expr = expr.trim();
+    if (expr.startsWith('=')) expr = expr.substring(1).trim();
+    if (!expr) return '';
+
+    // 1. String literal: "hello"
+    if ((expr.startsWith('"') && expr.endsWith('"')) || (expr.startsWith("'") && expr.endsWith("'"))) {
+        return expr.slice(1, -1);
+    }
+
+    // 2. Number literal: 123, -45.67
+    if (/^-?\d+(\.\d+)?$/.test(expr)) {
+        return Number(expr);
+    }
+
+    // 3. String concatenation & (evaluated at parenDepth 0)
+    if (expr.includes('&')) {
+        const parts = splitFormulaByAmpersand(expr);
+        if (parts.length > 1) {
+            return parts.map(p => customEvalFormula(p, getCellValue, currentRow)).join('');
+        }
+    }
+
+    // 4. Excel functions:
+    const upperArgs = extractFunctionArgs(expr, 'UPPER');
+    if (upperArgs !== null && upperArgs.length >= 1) {
+        return String(customEvalFormula(upperArgs[0], getCellValue, currentRow) || '').toUpperCase();
+    }
+
+    const lowerArgs = extractFunctionArgs(expr, 'LOWER');
+    if (lowerArgs !== null && lowerArgs.length >= 1) {
+        return String(customEvalFormula(lowerArgs[0], getCellValue, currentRow) || '').toLowerCase();
+    }
+
+    const trimArgs = extractFunctionArgs(expr, 'TRIM');
+    if (trimArgs !== null && trimArgs.length >= 1) {
+        return String(customEvalFormula(trimArgs[0], getCellValue, currentRow) || '').trim();
+    }
+
+    const properArgs = extractFunctionArgs(expr, 'PROPER');
+    if (properArgs !== null && properArgs.length >= 1) {
+        const str = String(customEvalFormula(properArgs[0], getCellValue, currentRow) || '');
+        return str.replace(/\b\w/g, l => l.toUpperCase()).replace(/\B\w/g, l => l.toLowerCase());
+    }
+
+    const leftArgs = extractFunctionArgs(expr, 'LEFT');
+    if (leftArgs !== null && leftArgs.length >= 1) {
+        const text = String(customEvalFormula(leftArgs[0], getCellValue, currentRow) || '');
+        const n = leftArgs[1] !== undefined ? parseInt(customEvalFormula(leftArgs[1], getCellValue, currentRow), 10) : 1;
+        return text.substring(0, isNaN(n) ? 1 : n);
+    }
+
+    const rightArgs = extractFunctionArgs(expr, 'RIGHT');
+    if (rightArgs !== null && rightArgs.length >= 1) {
+        const text = String(customEvalFormula(rightArgs[0], getCellValue, currentRow) || '');
+        const n = rightArgs[1] !== undefined ? parseInt(customEvalFormula(rightArgs[1], getCellValue, currentRow), 10) : 1;
+        return text.substring(text.length - (isNaN(n) ? 1 : n));
+    }
+
+    const midArgs = extractFunctionArgs(expr, 'MID');
+    if (midArgs !== null && midArgs.length >= 2) {
+        const text = String(customEvalFormula(midArgs[0], getCellValue, currentRow) || '');
+        const start = Math.max(0, parseInt(customEvalFormula(midArgs[1], getCellValue, currentRow), 10) - 1);
+        const len = midArgs[2] !== undefined ? parseInt(customEvalFormula(midArgs[2], getCellValue, currentRow), 10) : text.length;
+        return text.substring(start, start + (isNaN(len) ? text.length : len));
+    }
+
+    const lenArgs = extractFunctionArgs(expr, 'LEN');
+    if (lenArgs !== null && lenArgs.length >= 1) {
+        const text = String(customEvalFormula(lenArgs[0], getCellValue, currentRow) || '');
+        return text.length;
+    }
+
+    const subArgs = extractFunctionArgs(expr, 'SUBSTITUTE');
+    if (subArgs !== null && subArgs.length >= 3) {
+        const src = String(customEvalFormula(subArgs[0], getCellValue, currentRow) || '');
+        const oldT = String(customEvalFormula(subArgs[1], getCellValue, currentRow) || '');
+        const newT = String(customEvalFormula(subArgs[2], getCellValue, currentRow) || '');
+        return src.split(oldT).join(newT);
+    }
+
+    const repArgs = extractFunctionArgs(expr, 'REPLACE');
+    if (repArgs !== null && repArgs.length >= 4) {
+        const src = String(customEvalFormula(repArgs[0], getCellValue, currentRow) || '');
+        const start = Math.max(0, parseInt(customEvalFormula(repArgs[1], getCellValue, currentRow), 10) - 1);
+        const len = parseInt(customEvalFormula(repArgs[2], getCellValue, currentRow), 10) || 0;
+        const newT = String(customEvalFormula(repArgs[3], getCellValue, currentRow) || '');
+        return src.substring(0, start) + newT + src.substring(start + len);
+    }
+
+    const reptArgs = extractFunctionArgs(expr, 'REPT');
+    if (reptArgs !== null && reptArgs.length >= 2) {
+        const str = String(customEvalFormula(reptArgs[0], getCellValue, currentRow) || '');
+        const count = parseInt(customEvalFormula(reptArgs[1], getCellValue, currentRow), 10) || 0;
+        return str.repeat(Math.max(0, count));
+    }
+
+    const concatArgs = extractFunctionArgs(expr, 'CONCATENATE') || extractFunctionArgs(expr, 'CONCAT');
+    if (concatArgs !== null) {
+        return concatArgs.map(a => customEvalFormula(a, getCellValue, currentRow)).join('');
+    }
+
+    const tjArgs = extractFunctionArgs(expr, 'TEXTJOIN');
+    if (tjArgs !== null && tjArgs.length >= 3) {
+        const delim = String(customEvalFormula(tjArgs[0], getCellValue, currentRow) || '');
+        const ignoreEmpty = String(customEvalFormula(tjArgs[1], getCellValue, currentRow)).toLowerCase() !== 'false';
+        const parts = tjArgs.slice(2).map(a => String(customEvalFormula(a, getCellValue, currentRow) || ''));
+        const filtered = ignoreEmpty ? parts.filter(Boolean) : parts;
+        return filtered.join(delim);
+    }
+
+    const textArgs = extractFunctionArgs(expr, 'TEXT');
+    if (textArgs !== null && textArgs.length >= 2) {
+        const val = customEvalFormula(textArgs[0], getCellValue, currentRow);
+        const fmt = String(customEvalFormula(textArgs[1], getCellValue, currentRow) || '');
+        return formatExcelText(val, fmt);
+    }
+
+    const rowArgs = extractFunctionArgs(expr, 'ROW');
+    if (rowArgs !== null) {
+        if (rowArgs.length === 0 || !rowArgs[0]) {
+            return currentRow || 1;
+        }
+        const cInfo = parseCellAddress(rowArgs[0]);
+        return cInfo ? cInfo.row : (currentRow || 1);
+    }
+
+    const colArgs = extractFunctionArgs(expr, 'COLUMN');
+    if (colArgs !== null) {
+        if (colArgs.length === 0 || !colArgs[0]) return 1;
+        const cInfo = parseCellAddress(colArgs[0]);
+        if (cInfo) {
+            let colNum = 0;
+            for (let i = 0; i < cInfo.col.length; i++) {
+                colNum = colNum * 26 + (cInfo.col.charCodeAt(i) - 64);
+            }
+            return colNum;
+        }
+        return 1;
+    }
+
+    const ifArgs = extractFunctionArgs(expr, 'IF');
+    if (ifArgs !== null && ifArgs.length >= 2) {
+        const cond = evalFormulaCondition(ifArgs[0], getCellValue, currentRow);
+        return cond
+            ? (ifArgs[1] !== undefined ? customEvalFormula(ifArgs[1], getCellValue, currentRow) : '')
+            : (ifArgs[2] !== undefined ? customEvalFormula(ifArgs[2], getCellValue, currentRow) : '');
+    }
+
+    // 5. Basic arithmetic: e.g. G2 - H2 or (G2 - H2) / G2 or ROW() - 1
+    if (/^[A-Za-z0-9_().\s+\-*/$]+$/.test(expr) && /[+\-*/]/.test(expr)) {
+        try {
+            const arithmeticExpr = expr.replace(/\b\$?([A-Za-z]{1,3})\$?([0-9]+)\b/g, (match) => {
+                const val = getCellValue(match);
+                const num = parseCleanNumber(val);
+                return String(num);
+            }).replace(/\bROW\(\)/gi, String(currentRow || 1));
+
+            if (/^[0-9().\s+\-*/]+$/.test(arithmeticExpr)) {
+                const mathResult = Function(`"use strict"; return (${arithmeticExpr});`)();
+                if (typeof mathResult === 'number' && !isNaN(mathResult)) {
+                    return mathResult;
+                }
+            }
+        } catch {}
+    }
+
+    // 6. Cell reference: e.g. A2, $A$2, 'Sheet'!B4
+    const cellInfo = parseCellAddress(expr);
+    if (cellInfo) {
+        const standardAddr = `${cellInfo.col}${cellInfo.row}`;
+        return getCellValue(standardAddr);
+    }
+
+    return expr;
+}
+
+function evalFormulaCondition(condStr: string, getCellValue: (cellAddress: string) => any, currentRow?: number): boolean {
+    condStr = condStr.trim();
+    
+    const orArgs = extractFunctionArgs(condStr, 'OR');
+    if (orArgs !== null) {
+        return orArgs.some(a => evalFormulaCondition(a, getCellValue, currentRow));
+    }
+
+    const andArgs = extractFunctionArgs(condStr, 'AND');
+    if (andArgs !== null) {
+        return andArgs.every(a => evalFormulaCondition(a, getCellValue, currentRow));
+    }
+
+    const notArgs = extractFunctionArgs(condStr, 'NOT');
+    if (notArgs !== null && notArgs.length >= 1) {
+        return !evalFormulaCondition(notArgs[0], getCellValue, currentRow);
+    }
+
+    const eqMatch = condStr.match(/^(.+?)\s*=\s*(.*)$/);
+    if (eqMatch) {
+        const left = customEvalFormula(eqMatch[1], getCellValue, currentRow);
+        const right = customEvalFormula(eqMatch[2], getCellValue, currentRow);
+        return String(left).trim() === String(right).trim();
+    }
+
+    const neMatch = condStr.match(/^(.+?)\s*<>\s*(.*)$/);
+    if (neMatch) {
+        const left = customEvalFormula(neMatch[1], getCellValue, currentRow);
+        const right = customEvalFormula(neMatch[2], getCellValue, currentRow);
+        return String(left).trim() !== String(right).trim();
+    }
+
+    const val = customEvalFormula(condStr, getCellValue, currentRow);
+    return Boolean(val);
+}
+
+function preProcessWorksheet(sheet: XLSX.WorkSheet): void {
+    if (!sheet || !sheet['!ref']) return;
+    const range = XLSX.utils.decode_range(sheet['!ref']);
+
+    const evaluating = new Set<string>();
+
+    function getVal(cellAddress: string, rowHint?: number): any {
+        const cInfo = parseCellAddress(cellAddress);
+        const cleanAddr = cInfo ? `${cInfo.col}${cInfo.row}` : cellAddress.replace(/\$/g, '').trim().toUpperCase();
+        const c = sheet[cleanAddr];
+        if (!c) return '';
+
+        if (c.f && !evaluating.has(cleanAddr)) {
+            evaluating.add(cleanAddr);
+            try {
+                const rNum = cInfo ? cInfo.row : (rowHint || 1);
+                const evaluated = evalFormulaExpr(c.f, getVal, rNum);
+                evaluating.delete(cleanAddr);
+                if (evaluated !== null && evaluated !== undefined && evaluated !== '') {
+                    c.v = evaluated;
+                    c.w = String(evaluated);
+                    c.t = typeof evaluated === 'number' ? 'n' : 's';
+                    return evaluated;
+                }
+            } catch {
+                evaluating.delete(cleanAddr);
+            }
+        }
+
+        if (c.v !== undefined && c.v !== null && c.v !== '' && c.t !== 'e') return c.v;
+        if (c.w !== undefined && c.w !== null && c.w !== '') return c.w;
+        return '';
+    }
+
+    for (let R = range.s.r; R <= range.e.r; ++R) {
+        for (let C = range.s.c; C <= range.e.c; ++C) {
+            const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+            const cell = sheet[cellAddress];
+            if (!cell) continue;
+
+            if (cell.f) {
+                const computed = evalFormulaExpr(cell.f, getVal, R + 1);
+                if (computed !== null && computed !== undefined && computed !== '') {
+                    cell.v = computed;
+                    cell.w = String(computed);
+                    cell.t = typeof computed === 'number' ? 'n' : 's';
+                }
+            } else if (cell.v === undefined && cell.w) {
+                cell.v = cell.w;
+            }
+
+            if (typeof cell.v === 'string' && cell.v.startsWith('=')) {
+                let s = cell.v.substring(1).trim();
+                if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
+                    s = s.slice(1, -1);
+                }
+                cell.v = s;
+            }
+        }
+    }
+}
+
 interface CsvImportModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -141,17 +561,7 @@ export function CsvImportModal({ isOpen, onClose }: CsvImportModalProps) {
         document.body.removeChild(link);
     };
 
-    const downloadCsvTemplate = () => {
-        const content = TEMPLATE_HEADERS + '\n' + TEMPLATE_EXAMPLE;
-        const blob = new Blob([content], { type: 'text/csv' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'saree_import_template.csv';
-        a.click();
-        URL.revokeObjectURL(url);
-    };
-
+    const downloadCsvTemplate = downloadExcelTemplate;
     const downloadTemplate = downloadExcelTemplate;
 
     const processRawData = (data: Record<string, any>[], initialErrors: string[]) => {
@@ -161,24 +571,68 @@ export function CsvImportModal({ isOpen, onClose }: CsvImportModalProps) {
 
         data.forEach((rawRow, idx) => {
             // Normalize headers (cleaning UTF-8 BOM & leading/trailing spaces)
-            const row: Record<string, string> = {};
+            const row: Record<string, any> = {};
             Object.entries(rawRow).forEach(([k, v]) => {
-                const cleanKey = k.replace(/^\uFEFF/, '').trim().toLowerCase();
-                const mapped = COL_MAP[cleanKey];
-                if (mapped) row[mapped] = v !== undefined && v !== null ? String(v).trim() : '';
+                const rawKey = k.replace(/^\uFEFF/, '').trim();
+                const cleanKey = rawKey.toLowerCase();
+
+                let mapped = COL_MAP[cleanKey];
+                if (!mapped) {
+                    const alphaKey = cleanKey.replace(/[^a-z0-9]/g, '');
+                    mapped = COL_MAP[alphaKey];
+                }
+
+                if (!mapped) {
+                    if (cleanKey.includes('sku')) mapped = 'sku';
+                    else if (cleanKey.includes('saree') || cleanKey.includes('title')) mapped = 'sareeName';
+                    else if (cleanKey.includes('fabric') || cleanKey.includes('material')) mapped = 'fabric';
+                    else if (cleanKey.includes('color') || cleanKey.includes('colour') || cleanKey.includes('shade')) mapped = 'color';
+                    else if (cleanKey.includes('selling') || cleanKey === 'price') mapped = 'sellingPrice';
+                    else if (cleanKey.includes('purchase') || cleanKey.includes('cost') || cleanKey.includes('buy')) mapped = 'purchasePrice';
+                    else if (cleanKey.includes('stock') || cleanKey.includes('qty') || cleanKey.includes('units')) mapped = 'stock';
+                    else if (cleanKey.includes('mrp')) mapped = 'mrp';
+                    else if (cleanKey.includes('hsn')) mapped = 'hsnCode';
+                    else if (cleanKey.includes('design') || cleanKey.includes('style')) mapped = 'designCode';
+                    else if (cleanKey.includes('barcode')) mapped = 'barcode';
+                    else if (cleanKey.includes('rack')) mapped = 'rackNo';
+                    else if (cleanKey.includes('category_id') || cleanKey.includes('cat_id')) mapped = 'categoryId';
+                    else if (cleanKey.includes('category') || cleanKey.includes('type')) mapped = 'category';
+                    else if (cleanKey.includes('occasion')) mapped = 'occasion';
+                    else if (cleanKey.includes('status')) mapped = 'status';
+                    else if (cleanKey.includes('desc')) mapped = 'description';
+                }
+
+                if (mapped) row[mapped] = v !== undefined && v !== null ? v : '';
             });
 
+            // Extra fallback for SKU: if row.sku is empty, search rawRow for any key containing "sku"
+            if (!row.sku) {
+                const skuEntry = Object.entries(rawRow).find(([k]) => k.toLowerCase().includes('sku'));
+                if (skuEntry && skuEntry[1] !== undefined && skuEntry[1] !== null && String(skuEntry[1]).trim() !== '') {
+                    row.sku = String(skuEntry[1]).trim();
+                }
+            }
+
+            // Saree Name & Core Specs
+            const name = String(row.sareeName || '').trim();
+            const category = String(row.category || '').trim();
+            const fabric = String(row.fabric || '').trim();
+            const rawSku = String(row.sku || '').trim();
+
+            const sellingPrice = parseCleanNumber(row.sellingPrice);
+            const purchasePrice = parseCleanNumber(row.purchasePrice);
+
+            // GHOST / EMPTY ROW FILTERING:
+            // If a row has no name, no category, no fabric, no sku, and 0 price, it's an empty or dragged-down formula row
+            if (!name && !category && !fabric && !rawSku && sellingPrice === 0 && purchasePrice === 0) {
+                return;
+            }
+
             // Saree Name check
-            const name = row.sareeName;
             if (!name) {
                 errs.push(`Row ${idx + 2}: Missing Saree Name`);
                 return;
             }
-
-            // Selling Price check
-            const sellingPrice = parseFloat(row.sellingPrice) || 0;
-            const purchasePrice = parseFloat(row.purchasePrice) || 0;
-            const rawSku = row.sku ? String(row.sku).trim() : '';
 
             // Warn duplicate SKU in file
             if (rawSku) {
@@ -190,28 +644,36 @@ export function CsvImportModal({ isOpen, onClose }: CsvImportModalProps) {
                 }
             }
 
+            const mrp = parseCleanNumber(row.mrp) || sellingPrice;
+            const discountAmount = parseCleanNumber(row.discountAmount);
+            const discountPercentage = parseCleanDiscountPercentage(row.discountPercentage);
+            const stock = Math.round(parseCleanNumber(row.stock));
+
+            const statusStr = String(row.status || '').toLowerCase().trim();
+            const status = statusStr === 'inactive' ? 'inactive' : 'active';
+
             parsed.push({
                 sareeName: name,
-                category: row.category || 'General',
-                categoryId: row.categoryId || '',
-                designCode: row.designCode ? row.designCode.toUpperCase() : '',
-                hsnCode: row.hsnCode || '',
+                category: category || 'General',
+                categoryId: String(row.categoryId || '').trim(),
+                designCode: row.designCode ? String(row.designCode).trim().toUpperCase() : '',
+                hsnCode: row.hsnCode ? String(row.hsnCode).trim() : '',
                 sku: rawSku,
-                description: row.description || '',
-                fabric: row.fabric || 'Silk',
-                color: row.color || 'Multicolor',
+                description: String(row.description || '').trim(),
+                fabric: fabric || 'Silk',
+                color: String(row.color || '').trim() || 'Multicolor',
                 purchasePrice: purchasePrice,
                 sellingPrice: sellingPrice,
-                stock: parseInt(row.stock) || 0,
-                rackNo: row.rackNo || '',
-                barcode: row.barcode || '',
-                status: row.status === 'inactive' ? 'inactive' : 'active',
-                mrp: parseFloat(row.mrp) || sellingPrice,
-                discountAmount: parseFloat(row.discountAmount) || 0,
-                discountPercentage: parseFloat(row.discountPercentage) || 0,
-                occasion: row.occasion || '',
-                gstRate: row.gstRate !== undefined && row.gstRate !== '' ? parseFloat(row.gstRate) : undefined,
-                priceIncludesGst: row.priceIncludesGst === 'true' || row.priceIncludesGst === 'yes' || row.priceIncludesGst === '1' || row.priceIncludesGst === 'TRUE',
+                stock: stock,
+                rackNo: String(row.rackNo || '').trim(),
+                barcode: String(row.barcode || '').trim(),
+                status: status,
+                mrp: mrp,
+                discountAmount: discountAmount,
+                discountPercentage: discountPercentage,
+                occasion: String(row.occasion || '').trim(),
+                gstRate: row.gstRate !== undefined && row.gstRate !== '' ? parseCleanNumber(row.gstRate) : undefined,
+                priceIncludesGst: String(row.priceIncludesGst).toLowerCase() === 'true' || String(row.priceIncludesGst).toLowerCase() === 'yes' || String(row.priceIncludesGst) === '1',
             });
         });
 
@@ -238,11 +700,40 @@ export function CsvImportModal({ isOpen, onClose }: CsvImportModalProps) {
                         toast.error('Could not read Excel file.');
                         return;
                     }
-                    const workbook = XLSX.read(data, { type: 'array' });
-                    const firstSheetName = workbook.SheetNames[0];
-                    const worksheet = workbook.Sheets[firstSheetName];
-                    
-                    const rowsData = XLSX.utils.sheet_to_json<Record<string, any>>(worksheet, { defval: '' });
+                    const workbook = XLSX.read(data, {
+                        type: 'array',
+                        cellFormula: true,
+                        cellDates: true,
+                        cellText: true,
+                        cellNF: true,
+                    });
+
+                    // Search for best sheet that contains product headers (e.g. saree_name, sku, category)
+                    let targetSheetName = workbook.SheetNames[0];
+                    for (const sName of workbook.SheetNames) {
+                        const ws = workbook.Sheets[sName];
+                        if (ws) {
+                            const sample = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1 });
+                            if (sample && sample[0] && Array.isArray(sample[0])) {
+                                const headerRow = sample[0].map(h => String(h).toLowerCase());
+                                if (headerRow.some(h => h.includes('saree') || h.includes('sku') || h.includes('price') || h.includes('fabric'))) {
+                                    targetSheetName = sName;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    const worksheet = workbook.Sheets[targetSheetName];
+                    if (!worksheet) {
+                        toast.error('Could not find worksheet in Excel file.');
+                        return;
+                    }
+
+                    // Pre-process formulas so uncalculated formula cells get evaluated
+                    preProcessWorksheet(worksheet);
+
+                    const rowsData = XLSX.utils.sheet_to_json<Record<string, any>>(worksheet, { defval: '', raw: true });
                     if (rowsData.length === 0) {
                         toast.error('Excel sheet is empty.');
                         return;
@@ -336,19 +827,10 @@ export function CsvImportModal({ isOpen, onClose }: CsvImportModalProps) {
                                     variant="outline"
                                     size="sm"
                                     onClick={downloadExcelTemplate}
-                                    className="border-gold/40 text-maroon gap-1.5 text-xs h-8 font-semibold hover:bg-gold/10 shadow-xs"
+                                    className="border-gold/40 text-maroon gap-2 text-xs h-9 font-semibold hover:bg-gold/10 shadow-sm px-4"
                                 >
-                                    <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-700" />
-                                    Download Excel Template (.xlsx)
-                                </Button>
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={downloadCsvTemplate}
-                                    className="text-gray-500 hover:text-maroon text-xs h-8 gap-1"
-                                >
-                                    <Download className="h-3 w-3" />
-                                    CSV Template
+                                    <FileSpreadsheet className="h-4 w-4 text-emerald-700" />
+                                    Download Sample Template (.xlsx)
                                 </Button>
                             </div>
                         </div>

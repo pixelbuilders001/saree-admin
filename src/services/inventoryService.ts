@@ -675,6 +675,15 @@ export const inventoryService = {
 
     bulkImportProducts: async (rows: BulkImportRowInput[]): Promise<BulkImportSummary> => {
         const userEmail = useAuthStore.getState().user?.email || 'system';
+
+        function cleanNumericValue(val: any): number {
+            if (val === undefined || val === null || val === '') return 0;
+            if (typeof val === 'number') return isNaN(val) ? 0 : val;
+            const clean = String(val).replace(/[₹$€£,\s]/g, '').trim();
+            const num = parseFloat(clean);
+            return isNaN(num) ? 0 : num;
+        }
+
         const summary: BulkImportSummary = {
             totalRows: rows.length,
             created: 0,
@@ -798,7 +807,7 @@ export const inventoryService = {
                 continue;
             }
 
-            const sellingPrice = Number(row.sellingPrice);
+            const sellingPrice = cleanNumericValue(row.sellingPrice);
             if (isNaN(sellingPrice) || sellingPrice < 0) {
                 const err = `Row ${rowNum}${skuVal ? ` (SKU: ${skuVal})` : ''}: Invalid selling price`;
                 summary.failed++;
@@ -814,7 +823,7 @@ export const inventoryService = {
                 continue;
             }
 
-            const purchasePrice = Number(row.purchasePrice);
+            const purchasePrice = cleanNumericValue(row.purchasePrice);
             if (isNaN(purchasePrice) || purchasePrice < 0) {
                 const err = `Row ${rowNum}${skuVal ? ` (SKU: ${skuVal})` : ''}: Invalid purchase price`;
                 summary.failed++;
@@ -830,7 +839,7 @@ export const inventoryService = {
                 continue;
             }
 
-            const stock = Number(row.stock);
+            const stock = Math.round(cleanNumericValue(row.stock));
             if (isNaN(stock) || stock < 0) {
                 const err = `Row ${rowNum}${skuVal ? ` (SKU: ${skuVal})` : ''}: Invalid stock quantity`;
                 summary.failed++;
@@ -884,14 +893,15 @@ export const inventoryService = {
                         stock: stock,
                         rack_no: row.rackNo ? String(row.rackNo).trim() : null,
                         status: row.status === 'inactive' ? 'inactive' : 'active',
-                        mrp: row.mrp ? Number(row.mrp) : sellingPrice,
-                        discount_amount: row.discountAmount ? Number(row.discountAmount) : 0,
-                        discount_percentage: row.discountPercentage ? Number(row.discountPercentage) : 0,
+                        mrp: row.mrp !== undefined && row.mrp !== null ? cleanNumericValue(row.mrp) : sellingPrice,
+                        discount_amount: cleanNumericValue(row.discountAmount),
+                        discount_percentage: cleanNumericValue(row.discountPercentage),
                         occasion: row.occasion ? String(row.occasion).trim() : null,
-                        gst_rate: row.gstRate !== undefined && row.gstRate !== null ? Number(row.gstRate) : null,
+                        gst_rate: row.gstRate !== undefined && row.gstRate !== null ? cleanNumericValue(row.gstRate) : null,
                         price_includes_gst: row.priceIncludesGst ?? false,
                         updated_by: userEmail,
                     };
+                    if (skuVal) updatePayload.sku = skuVal;
                     if (row.barcode) updatePayload.barcode = String(row.barcode).trim();
 
                     const { error: updError } = await supabase
@@ -932,7 +942,7 @@ export const inventoryService = {
             } else {
                 // INSERT new product - ZERO images created, valid without images
                 try {
-                    const randId = 'S' + Math.floor(1000 + Math.random() * 9000) + Math.floor(Math.random() * 9);
+                    const randId = 'S' + Math.floor(10000 + Math.random() * 90000);
                     const insertPayload: any = {
                         id: randId,
                         sku: skuVal || null,
@@ -950,11 +960,11 @@ export const inventoryService = {
                         rack_no: row.rackNo ? String(row.rackNo).trim() : null,
                         barcode: row.barcode ? String(row.barcode).trim() : randId,
                         status: row.status === 'inactive' ? 'inactive' : 'active',
-                        mrp: row.mrp ? Number(row.mrp) : sellingPrice,
-                        discount_amount: row.discountAmount ? Number(row.discountAmount) : 0,
-                        discount_percentage: row.discountPercentage ? Number(row.discountPercentage) : 0,
+                        mrp: row.mrp !== undefined && row.mrp !== null ? cleanNumericValue(row.mrp) : sellingPrice,
+                        discount_amount: cleanNumericValue(row.discountAmount),
+                        discount_percentage: cleanNumericValue(row.discountPercentage),
                         occasion: row.occasion ? String(row.occasion).trim() : null,
-                        gst_rate: row.gstRate !== undefined && row.gstRate !== null ? Number(row.gstRate) : null,
+                        gst_rate: row.gstRate !== undefined && row.gstRate !== null ? cleanNumericValue(row.gstRate) : null,
                         price_includes_gst: row.priceIncludesGst ?? false,
                         created_by: userEmail,
                         updated_by: userEmail,
