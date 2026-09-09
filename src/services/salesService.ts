@@ -9,22 +9,32 @@ export interface SaleItem {
     sareeName: string;
     quantity: number;
     sellingPrice: number;
+    mrp?: number;
+    discountAmount?: number;
+    discountPercentage?: number;
+    hsnCode?: string;
 }
 
 export interface Sale {
     saleId: string;
     invoiceNumber: string;
     items: SaleItem[];
+    subtotal?: number;
     totalAmount: number;
     profit: number;
     date: string;
     customerName?: string;
     customerMobile?: string;
+    customerAddress?: string;
     salespersonId?: string;
     commissionEarned?: number;
     discountAmount?: number;
     discountPercentage?: number;
     paymentMode?: string;
+    appliedVoucherCode?: string | null;
+    appliedVoucherAmount?: number | null;
+    issuedVoucherCode?: string | null;
+    issuedVoucherAmount?: number | null;
     isGstApplied?: boolean;
     gstRate?: number;
     taxableAmount?: number;
@@ -35,6 +45,7 @@ export interface Sale {
     igstRate?: number;
     igstAmount?: number;
     totalGst?: number;
+    placeOfSupply?: string;
 }
 
 export interface SaleReportItem {
@@ -307,6 +318,7 @@ export const salesService = {
             saleId: getFriendlyId(insertedSale.id, false),
             invoiceNumber,
             items: sale.items,
+            subtotal: totalAmount,
             totalAmount: grandTotal,
             profit: netProfit,
             date: insertedSale.created_at,
@@ -317,6 +329,8 @@ export const salesService = {
             discountAmount: sale.discountAmount ?? 0,
             discountPercentage: discountPct,
             paymentMode: sale.paymentMode || 'cash',
+            appliedVoucherCode: sale.voucherCode || null,
+            appliedVoucherAmount: voucherVal > 0 ? voucherVal : null,
             isGstApplied: gstData.isGstApplied,
             gstRate: gstData.gstRate,
             taxableAmount: gstData.taxableAmount,
@@ -327,6 +341,7 @@ export const salesService = {
             igstRate: gstData.igstRate,
             igstAmount: gstData.igstAmount,
             totalGst: gstData.totalGst,
+            placeOfSupply: gstData.isGstApplied ? 'Bihar (10)' : undefined,
         };
     },
 

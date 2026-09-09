@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { Loader2, Printer, AlertTriangle } from 'lucide-react';
+import { decodeReceiptData, type ReceiptData, type ReceiptItem } from '@/utils/receiptUtils';
 
 // ── Shop Constants ────────────────────────────────────────────────────────────
 const SHOP = {
@@ -9,7 +10,7 @@ const SHOP = {
     address: 'Rudauli Chowk, Samastipur, Bihar – 848101',
     email: 'shreebanarasi180@gmail.com',
     phone: '+91-6203909946',
-    gstin: '10AAACS1234F1Z9',
+    gstin: '10AGAFS4190H1Z8',
 };
 
 const TERMS = [
@@ -18,40 +19,6 @@ const TERMS = [
     'Dry clean only for all pure silk products.',
     'Any disputes are subject to Bihar Jurisdiction only.',
 ];
-
-// ── Types ─────────────────────────────────────────────────────────────────────
-interface ReceiptItem {
-    sareeName: string;
-    quantity: number;
-    mrp: number;
-    sellingPrice: number;
-}
-
-interface ReceiptData {
-    invoiceNumber: string;
-    date: string;
-    paymentMode: string;
-    customerName: string | null;
-    customerMobile: string | null;
-    items: ReceiptItem[];
-    totalAmount: number;
-    discountAmount: number;
-    shippingFee?: number;
-    issuedVoucherCode?: string | null;
-    issuedVoucherAmount?: number | null;
-    appliedVoucherCode?: string | null;
-    appliedVoucherAmount?: number | null;
-    isGstApplied?: boolean;
-    gstRate?: number;
-    taxableAmount?: number;
-    cgstRate?: number;
-    cgstAmount?: number;
-    sgstRate?: number;
-    sgstAmount?: number;
-    igstRate?: number;
-    igstAmount?: number;
-    totalGst?: number;
-}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const fmtDate = (iso: string) =>
@@ -82,6 +49,17 @@ export default function ReceiptView() {
     }, [autoPrint, receipt]);
 
     useEffect(() => {
+        // 1. Check for encoded zero-API payload parameter in URL (?d=... or ?data=...)
+        const encodedPayload = searchParams.get('d') || searchParams.get('data');
+        if (encodedPayload) {
+            const decoded = decodeReceiptData(encodedPayload);
+            if (decoded) {
+                setReceipt(decoded);
+                setLoading(false);
+                return;
+            }
+        }
+
         if (!invoiceNumber) return;
         (async () => {
             setLoading(true);
@@ -89,10 +67,10 @@ export default function ReceiptView() {
                 .from('sales')
                 .select(`
                     id,
-                    invoice_number, created_at, payment_mode, total_amount, discount_amount,
+                    invoice_number, created_at, payment_mode, total_amount, discount_amount, discount_percentage,
                     is_gst_applied, gst_rate, taxable_amount, cgst_rate, cgst_amount, sgst_rate, sgst_amount, igst_rate, igst_amount, total_gst,
                     customers ( name, mobile ),
-                    sale_items ( quantity, selling_price, inventory ( saree_name, mrp, selling_price ) )
+                    sale_items ( quantity, selling_price, inventory ( saree_name, mrp, selling_price, hsn_code ) )
                 `)
                 .eq('invoice_number', invoiceNumber)
                 .maybeSingle();
@@ -129,6 +107,7 @@ export default function ReceiptView() {
                             quantity: Math.abs(qty),
                             mrp: Math.abs(mrpVal),
                             sellingPrice: isRet ? -Math.abs(price) : Math.abs(price),
+                            hsnCode: (i.inventory as any)?.hsn_code || '5208',
                         };
                     });
 
@@ -141,13 +120,14 @@ export default function ReceiptView() {
                     items,
                     totalAmount: Number(data.total_amount),
                     discountAmount: Number(data.discount_amount || 0),
+                    discountPercentage: Number((data as any).discount_percentage || 0),
                     issuedVoucherCode: issuedVoucher?.voucher_code || null,
                     issuedVoucherAmount: issuedVoucher ? Number(issuedVoucher.original_amount) : null,
                     appliedVoucherCode: appliedVoucher?.voucher_code || null,
                     appliedVoucherAmount: appliedVoucher ? Number(appliedVoucher.original_amount) : null,
                     isGstApplied: Boolean(data.is_gst_applied),
                     gstRate: Number(data.gst_rate || 0),
-                    taxableAmount: Number(data.taxable_amount || 0),
+                    taxableAmount: data.taxable_amount !== null && data.taxable_amount !== undefined ? Number(data.taxable_amount) : undefined,
                     cgstRate: Number(data.cgst_rate || 0),
                     cgstAmount: Number(data.cgst_amount || 0),
                     sgstRate: Number(data.sgst_rate || 0),
@@ -155,52 +135,100 @@ export default function ReceiptView() {
                     igstRate: Number(data.igst_rate || 0),
                     igstAmount: Number(data.igst_amount || 0),
                     totalGst: Number(data.total_gst || 0),
+                    placeOfSupply: data.is_gst_applied ? 'Bihar (10)' : undefined,
                 };
             } else {
                 // Fallback: Check online orders table
-                const { data: orderData, error: orderErr } = await supabase
+                const decodedInvoice = decodeURIComponent(invoiceNumber).trim();
+                const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(decodedInvoice);
+                let query = supabase
                     .from('orders')
                     .select(`
                         id,
-                        order_number, created_at, payment_method, total_amount, discount, shipping_fee,
-                        customer_name, customer_phone,
-                        order_items ( quantity, unit_price, product_name )
-                    `)
-                    .eq('order_number', invoiceNumber)
-                    .maybeSingle();
+                        order_number, created_at, payment_method, total_amount, subtotal, discount, shipping_fee,
+                        customer_name, customer_phone, customer_email, shipping_address,
+                        taxable_amount, gst_amount, cgst_amount, sgst_amount, igst_amount, gst_rate, place_of_supply,
+                        invoice_number, invoice_date,
+                        gift_wrap_charge,
+                        order_items (
+                            id, order_id, inventory_id, product_name, product_name_snapshot, sku, barcode, quantity, unit_price, discount_amount, taxable_value, gst_rate, cgst_amount, sgst_amount, igst_amount, gst_amount, total_price, product_snapshot, item_status
+                        )
+                    `);
+                if (isUuid) {
+                    query = query.eq('id', decodedInvoice);
+                } else {
+                    query = query.or(`order_number.eq.${decodedInvoice},invoice_number.eq.${decodedInvoice}`);
+                }
+                const { data: orderData, error: orderErr } = await query.maybeSingle();
 
                 if (orderErr) { setError('Failed to load receipt.'); setLoading(false); return; }
                 if (!orderData) { setError('Receipt not found. Please check the link.'); setLoading(false); return; }
 
                 const items: ReceiptItem[] = (orderData.order_items || [])
                     .map((i: any) => {
-                        const unitPrice = Number(i.unit_price);
-                        const mrpVal = Number(i.mrp || unitPrice);
+                        let snap = i.product_snapshot;
+                        if (typeof snap === 'string') {
+                            try { snap = JSON.parse(snap); } catch {}
+                        }
+                        const unitPrice = Number(i.unit_price || snap?.selling_price || 0);
+                        const snapMrp = Number(snap?.mrp || snap?.price || 0);
+                        const rawSareeName = i.product_name || i.product_name_snapshot || snap?.saree_name || snap?.name || 'Pure Silk Banarasi Saree';
+                        const sareeName = (i.item_status === 'cancelled') ? `[Cancelled] ${rawSareeName}` : rawSareeName;
+                        const mrpVal = snapMrp > unitPrice ? snapMrp : (snapMrp > 0 ? snapMrp : unitPrice);
+
                         return {
-                            sareeName: i.product_name || 'Item',
-                            quantity: Number(i.quantity),
+                            sareeName,
+                            quantity: Number(i.quantity || 1),
                             mrp: mrpVal,
                             sellingPrice: unitPrice,
+                            hsnCode: i.hsn_code || snap?.hsn_code || '5208',
                         };
                     });
 
+                const shippingAddr = typeof orderData.shipping_address === 'object' && orderData.shipping_address ? orderData.shipping_address : {};
+                const fullAddress = [
+                    shippingAddr.address || shippingAddr.address_line1,
+                    shippingAddr.city,
+                    shippingAddr.state,
+                    shippingAddr.pinCode || shippingAddr.pincode
+                ].filter(Boolean).join(', ');
+
+                const customerState = (orderData.place_of_supply || shippingAddr.state || 'Bihar').trim();
+                const isIntraState = customerState.toLowerCase().includes('bihar');
+                const hasGst = orderData.gst_amount != null && Number(orderData.gst_amount) > 0;
+
                 receiptData = {
-                    invoiceNumber: orderData.order_number,
-                    date: orderData.created_at,
+                    invoiceNumber: orderData.invoice_number || orderData.order_number || orderData.id,
+                    date: orderData.invoice_date || orderData.created_at,
                     paymentMode: orderData.payment_method || 'cod',
-                    customerName: orderData.customer_name || null,
-                    customerMobile: orderData.customer_phone || null,
+                    customerName: orderData.customer_name || shippingAddr.name || null,
+                    customerMobile: orderData.customer_phone || shippingAddr.phone || null,
+                    customerAddress: fullAddress || null,
+                    customerEmail: orderData.customer_email || shippingAddr.email || null,
                     items,
-                    totalAmount: Number(orderData.total_amount),
+                    subtotal: Number(orderData.subtotal || 0),
+                    totalAmount: Number(orderData.total_amount || 0),
                     discountAmount: Number(orderData.discount || 0),
                     shippingFee: Number(orderData.shipping_fee || 0),
+                    giftWrapCharge: Number(orderData.gift_wrap_charge || 0),
+                    isGstApplied: hasGst,
+                    gstRate: Number(orderData.gst_rate || 5),
+                    taxableAmount: orderData.taxable_amount != null ? Number(orderData.taxable_amount) : undefined,
+                    cgstRate: isIntraState ? (Number(orderData.gst_rate || 5) / 2) : 0,
+                    cgstAmount: orderData.cgst_amount != null ? Number(orderData.cgst_amount) : 0,
+                    sgstRate: isIntraState ? (Number(orderData.gst_rate || 5) / 2) : 0,
+                    sgstAmount: orderData.sgst_amount != null ? Number(orderData.sgst_amount) : 0,
+                    igstRate: !isIntraState ? Number(orderData.gst_rate || 5) : 0,
+                    igstAmount: orderData.igst_amount != null ? Number(orderData.igst_amount) : 0,
+                    totalGst: orderData.gst_amount != null ? Number(orderData.gst_amount) : 0,
+                    placeOfSupply: customerState,
                 };
             }
 
             setReceipt(receiptData);
             setLoading(false);
         })();
-    }, [invoiceNumber]);
+    }, [invoiceNumber, searchParams]);
 
     // ── Loading / Error States ─────────────────────────────────────────────
     if (loading) {
@@ -234,12 +262,18 @@ export default function ReceiptView() {
     const totalItemDiscountPercent = totalMrp > 0 ? (totalItemDiscount / totalMrp) * 100 : 0;
     const totalItemDiscountPercentText = totalItemDiscountPercent > 0 ? ` (${parseFloat(totalItemDiscountPercent.toFixed(1))}%)` : '';
 
-    const subtotal = receipt.items.reduce((s, i) => s + i.quantity * i.sellingPrice, 0);
+    const subtotal = receipt.subtotal && receipt.subtotal > 0
+        ? receipt.subtotal
+        : receipt.items.reduce((s, i) => s + i.quantity * i.sellingPrice, 0);
+
     const billDiscount = receipt.discountAmount || 0;
-    const billDiscountPercent = (subtotal > 0 && billDiscount > 0)
-        ? (billDiscount / subtotal) * 100
-        : 0;
-    const billDiscountPercentText = billDiscountPercent > 0 ? ` (${parseFloat(billDiscountPercent.toFixed(2))}%)` : '';
+    const billDiscountPercent = (receipt.discountPercentage && receipt.discountPercentage > 0)
+        ? receipt.discountPercentage
+        : ((subtotal > 0 && billDiscount > 0) ? (billDiscount / subtotal) * 100 : 0);
+    const billDiscountPercentText = billDiscountPercent > 0 ? ` (${parseFloat(billDiscountPercent.toFixed(1))}%)` : '';
+
+    const totalSavings = totalItemDiscount + billDiscount + Number(receipt.appliedVoucherAmount || 0);
+    const totalSavingsPercent = totalMrp > 0 ? (totalSavings / totalMrp) * 100 : 0;
 
     const handlePrint = () => {
         const orig = document.title;
@@ -385,12 +419,24 @@ export default function ReceiptView() {
                                 {'  '}
                                 <span style={{ fontStyle: 'italic' }}>{dateShort}</span>
                             </div>
+                            {receipt.placeOfSupply && (
+                                <div>
+                                    <span style={{ fontWeight: 'bold' }}>Place of Supply:</span>
+                                    {'  '}
+                                    <span style={{ fontStyle: 'italic' }}>{receipt.placeOfSupply}</span>
+                                </div>
+                            )}
                         </div>
-                        {(receipt.customerName || receipt.customerMobile) && (
-                            <div style={{ lineHeight: '1.85', fontSize: '12.5px' }}>
+                        {(receipt.customerName || receipt.customerMobile || receipt.customerAddress) && (
+                            <div className="invoice-header-right" style={{ lineHeight: '1.85', fontSize: '12.5px', textAlign: 'right', maxWidth: '300px' }}>
                                 <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>Bill To</div>
-                                {receipt.customerName && <div style={{ wordBreak: 'break-word' }}>{receipt.customerName}</div>}
-                                {receipt.customerMobile && <div>{receipt.customerMobile}</div>}
+                                {receipt.customerName && <div style={{ fontWeight: '600', color: '#111', wordBreak: 'break-word' }}>{receipt.customerName}</div>}
+                                {receipt.customerMobile && <div style={{ color: '#444' }}>{receipt.customerMobile}</div>}
+                                {receipt.customerAddress && (
+                                    <div style={{ color: '#555', fontSize: '11.5px', lineHeight: '1.4', marginTop: '3px', wordBreak: 'break-word' }}>
+                                        {receipt.customerAddress}
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>
@@ -403,24 +449,29 @@ export default function ReceiptView() {
                         <table className="receipt-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
                             <thead>
                                 <tr style={{ borderTop: '2px solid #111', borderBottom: '2px solid #111' }}>
-                                    <th style={{ textAlign: 'left', padding: '10px 8px 10px 0', fontWeight: 'bold', letterSpacing: '0.5px', width: '38%' }}>DESCRIPTION</th>
+                                    <th style={{ textAlign: 'left', padding: '10px 8px 10px 0', fontWeight: 'bold', letterSpacing: '0.5px', width: '36%' }}>DESCRIPTION</th>
                                     <th style={{ textAlign: 'center', padding: '10px 6px', fontWeight: 'bold', letterSpacing: '0.5px', width: '8%' }}>QTY</th>
                                     <th style={{ textAlign: 'right', padding: '10px 6px', fontWeight: 'bold', letterSpacing: '0.5px', width: '18%' }}>MRP</th>
-                                    <th style={{ textAlign: 'right', padding: '10px 6px', fontWeight: 'bold', letterSpacing: '0.5px', width: '18%' }}>DISCOUNT</th>
+                                    <th style={{ textAlign: 'right', padding: '10px 6px', fontWeight: 'bold', letterSpacing: '0.5px', width: '20%' }}>DISCOUNT</th>
                                     <th style={{ textAlign: 'right', padding: '10px 0 10px 6px', fontWeight: 'bold', letterSpacing: '0.5px', width: '18%' }}>AMOUNT</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {receipt.items.map((item, idx) => {
-                                    const itemMrp = item.mrp || item.sellingPrice;
+                                    const itemMrp = item.mrp && item.mrp > 0 ? item.mrp : item.sellingPrice;
                                     const itemMrpTotal = item.quantity * itemMrp;
                                     const itemSellingTotal = item.quantity * item.sellingPrice;
-                                    const itemDisc = itemMrpTotal - itemSellingTotal;
+                                    const itemDisc = Math.max(0, itemMrpTotal - itemSellingTotal);
                                     const itemDiscPct = itemMrpTotal > 0 ? (itemDisc / itemMrpTotal) * 100 : 0;
 
                                     return (
                                         <tr key={idx} style={{ borderBottom: '1px dashed #ccc' }}>
-                                            <td style={{ padding: '11px 8px 11px 0', wordBreak: 'break-word' }}>{item.sareeName}</td>
+                                            <td style={{ padding: '11px 8px 11px 0', wordBreak: 'break-word' }}>
+                                                <div>{item.sareeName}</div>
+                                                {item.hsnCode && (
+                                                    <div style={{ fontSize: '11px', color: '#666', marginTop: '2px' }}>HSN: {item.hsnCode}</div>
+                                                )}
+                                            </td>
                                             <td style={{ padding: '11px 6px', textAlign: 'center' }}>{item.quantity}</td>
                                             <td style={{ padding: '11px 6px', textAlign: 'right', whiteSpace: 'nowrap' }}>{fmtCurrency(itemMrp)}</td>
                                             <td style={{ padding: '11px 6px', textAlign: 'right', color: itemDisc > 0 ? '#b91c1c' : '#777', whiteSpace: 'nowrap' }}>
@@ -442,31 +493,31 @@ export default function ReceiptView() {
 
                     {/* ── TOTALS ──────────────────────────────────────── */}
                     <div style={{ borderTop: '2px solid #111', paddingTop: '12px', marginTop: '4px' }}>
-                        <div className="totals-container" style={{ maxWidth: '380px', marginLeft: 'auto', width: '100%' }}>
-                            {totalItemDiscount > 0 && (
+                        <div className="totals-container" style={{ maxWidth: '400px', marginLeft: 'auto', width: '100%' }}>
+                            {totalMrp > subtotal && (
                                 <>
                                     <div className="totals-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', padding: '4px 0', borderBottom: '1px dashed #eee', fontSize: '12.5px' }}>
                                         <span style={{ color: '#555' }}>TOTAL MRP</span>
                                         <span style={{ textAlign: 'right', fontWeight: '500', whiteSpace: 'nowrap' }}>{fmtCurrency(totalMrp)}</span>
                                     </div>
                                     <div className="totals-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', padding: '4px 0', borderBottom: '1px dashed #eee', fontSize: '12.5px', color: '#b91c1c' }}>
-                                        <span>TOTAL ITEM DISCOUNT{totalItemDiscountPercentText}</span>
+                                        <span>PRODUCT DISCOUNT{totalItemDiscountPercentText}</span>
                                         <span style={{ textAlign: 'right', fontWeight: '500', whiteSpace: 'nowrap' }}>− {fmtCurrency(totalItemDiscount)}</span>
                                     </div>
                                 </>
                             )}
 
-                            {(totalItemDiscount > 0 || billDiscount > 0 || (receipt.shippingFee && receipt.shippingFee > 0)) && (
-                                <div className="totals-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', padding: '5px 0', borderBottom: '1px dashed #ccc', fontSize: '12.5px' }}>
-                                    <span style={{ fontWeight: 'bold', letterSpacing: '0.5px' }}>SUBTOTAL</span>
-                                    <span style={{ textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap' }}>{fmtCurrency(subtotal)}</span>
-                                </div>
-                            )}
+                            <div className="totals-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', padding: '5px 0', borderBottom: '1px dashed #ccc', fontSize: '12.5px' }}>
+                                <span style={{ fontWeight: 'bold', letterSpacing: '0.5px' }}>
+                                    {totalMrp > subtotal ? 'SUBTOTAL (AFTER PRODUCT DISCOUNT)' : 'SUBTOTAL'}
+                                </span>
+                                <span style={{ textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap' }}>{fmtCurrency(subtotal)}</span>
+                            </div>
 
                             {billDiscount > 0 && (
                                 <div className="totals-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', padding: '5px 0', borderBottom: '1px dashed #ccc', fontSize: '12.5px', color: '#b91c1c' }}>
                                     <span style={{ fontWeight: 'bold', letterSpacing: '0.5px' }}>
-                                        {totalItemDiscount > 0 ? 'EXTRA DISCOUNT' : 'DISCOUNT'}{billDiscountPercentText}
+                                        DISCOUNT{billDiscountPercentText}
                                     </span>
                                     <span style={{ textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap' }}>− {fmtCurrency(billDiscount)}</span>
                                 </div>
@@ -499,15 +550,24 @@ export default function ReceiptView() {
                                 </>
                             ) : null}
 
-                            {receipt.shippingFee && receipt.shippingFee > 0 && (
+                            {receipt.shippingFee !== undefined && receipt.shippingFee !== null && (
                                 <div className="totals-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', padding: '5px 0', borderBottom: '1px dashed #ccc', fontSize: '12.5px' }}>
-                                    <span style={{ fontWeight: 'bold', letterSpacing: '0.5px' }}>SHIPPING FEE</span>
-                                    <span style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>+ {fmtCurrency(receipt.shippingFee)}</span>
+                                    <span style={{ color: '#555' }}>DELIVERY CHARGES</span>
+                                    <span style={{ textAlign: 'right', fontWeight: '500', whiteSpace: 'nowrap', color: (receipt.shippingFee && receipt.shippingFee > 0) ? '#111' : '#15803d' }}>
+                                        {(receipt.shippingFee && receipt.shippingFee > 0) ? `+ ${fmtCurrency(receipt.shippingFee)}` : 'FREE'}
+                                    </span>
+                                </div>
+                            )}
+
+                            {Boolean(receipt.giftWrapCharge && receipt.giftWrapCharge > 0) && (
+                                <div className="totals-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', padding: '5px 0', borderBottom: '1px dashed #ccc', fontSize: '12.5px' }}>
+                                    <span style={{ color: '#555' }}>GIFT PACKAGING</span>
+                                    <span style={{ textAlign: 'right', fontWeight: '500', whiteSpace: 'nowrap' }}>+ {fmtCurrency(receipt.giftWrapCharge || 0)}</span>
                                 </div>
                             )}
 
                             {receipt.appliedVoucherCode && (
-                                <div className="totals-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', padding: '5px 0', borderBottom: '1px dashed #ccc', fontSize: '12.5px' }}>
+                                <div className="totals-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', padding: '5px 0', borderBottom: '1px dashed #ccc', fontSize: '12.5px', color: '#b91c1c' }}>
                                     <span style={{ fontWeight: 'bold', letterSpacing: '0.5px' }}>VOUCHER APPLIED ({receipt.appliedVoucherCode})</span>
                                     <span style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>− {fmtCurrency(receipt.appliedVoucherAmount || 0)}</span>
                                 </div>
@@ -521,9 +581,28 @@ export default function ReceiptView() {
                             )}
 
                             <div className="totals-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', padding: '8px 0', borderBottom: '2px solid #111', fontSize: '13.5px' }}>
-                                <span style={{ fontWeight: 'bold', letterSpacing: '0.5px' }}>TOTAL PAYABLE</span>
-                                <span style={{ fontWeight: 'bold', textAlign: 'right', whiteSpace: 'nowrap' }}>{fmtCurrency(receipt.totalAmount)}</span>
+                                <span style={{ fontWeight: 'bold', letterSpacing: '0.5px' }}>TOTAL AMOUNT</span>
+                                <span style={{ fontWeight: 'bold', textAlign: 'right', whiteSpace: 'nowrap', fontSize: '14px' }}>{fmtCurrency(receipt.totalAmount)}</span>
                             </div>
+
+                            {totalSavings > 0 && (
+                                <div style={{
+                                    marginTop: '8px',
+                                    padding: '7px 12px',
+                                    background: '#f0fdf4',
+                                    border: '1px solid #86efac',
+                                    borderRadius: '4px',
+                                    color: '#15803d',
+                                    fontSize: '11.5px',
+                                    fontWeight: 'bold',
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center'
+                                }}>
+                                    <span>🎉 Total Savings</span>
+                                    <span>{fmtCurrency(totalSavings)}{totalSavingsPercent > 0 ? ` (${parseFloat(totalSavingsPercent.toFixed(1))}%)` : ''}</span>
+                                </div>
+                            )}
                         </div>
                     </div>
 

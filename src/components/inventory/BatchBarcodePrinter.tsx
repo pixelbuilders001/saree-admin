@@ -28,7 +28,9 @@ import {
     Grid,
     AlertCircle,
     Plus,
-    Minus
+    Minus,
+    Calendar,
+    Clock
 } from 'lucide-react';
 import type { Saree } from '@/services/inventoryService';
 
@@ -36,6 +38,55 @@ interface BatchBarcodePrinterProps {
     sarees: Saree[];
     isOpen: boolean;
     onClose: () => void;
+}
+
+export type UploadDateFilter = 'all' | 'today' | 'yesterday' | 'week' | 'month' | 'custom';
+
+function isMatchingDate(
+    addedDate: string | undefined,
+    filter: UploadDateFilter,
+    customStart?: string,
+    customEnd?: string
+): boolean {
+    if (filter === 'all') return true;
+    if (!addedDate) return false;
+
+    const itemDate = new Date(addedDate);
+    if (isNaN(itemDate.getTime())) return false;
+
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    if (filter === 'today') {
+        return itemDate >= startOfToday;
+    }
+    if (filter === 'yesterday') {
+        const startOfYesterday = new Date(startOfToday);
+        startOfYesterday.setDate(startOfYesterday.getDate() - 1);
+        return itemDate >= startOfYesterday;
+    }
+    if (filter === 'week') {
+        const sevenDaysAgo = new Date(startOfToday);
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        return itemDate >= sevenDaysAgo;
+    }
+    if (filter === 'month') {
+        const thirtyDaysAgo = new Date(startOfToday);
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        return itemDate >= thirtyDaysAgo;
+    }
+    if (filter === 'custom') {
+        if (customStart) {
+            const start = new Date(customStart + 'T00:00:00');
+            if (itemDate < start) return false;
+        }
+        if (customEnd) {
+            const end = new Date(customEnd + 'T23:59:59.999');
+            if (itemDate > end) return false;
+        }
+        return true;
+    }
+    return true;
 }
 
 export function BatchBarcodePrinter({ sarees, isOpen, onClose }: BatchBarcodePrinterProps) {
@@ -46,23 +97,99 @@ export function BatchBarcodePrinter({ sarees, isOpen, onClose }: BatchBarcodePri
     const [gridPreset, setGridPreset] = useState<'24' | '21' | '30' | '12'>('24');
     const [excludeOutOfStock, setExcludeOutOfStock] = useState(true);
 
+    // Stock Upload Date Filter
+    const [dateFilter, setDateFilter] = useState<UploadDateFilter>('all');
+    const [customStartDate, setCustomStartDate] = useState<string>('');
+    const [customEndDate, setCustomEndDate] = useState<string>('');
+
     const hiddenRenderRef = useRef<HTMLDivElement>(null);
 
-    // Initialize selection with all non-out-of-stock sarees when modal opens or sarees change
+    // Calculate upload counts for quick filter buttons
+    const { todayUploadCount, yesterdayUploadCount, weekUploadCount, totalStockItemsCount } = useMemo(() => {
+        if (!sarees) return { todayUploadCount: 0, yesterdayUploadCount: 0, weekUploadCount: 0, totalStockItemsCount: 0 };
+        const now = new Date();
+        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const startOfYesterday = new Date(startOfToday);
+        startOfYesterday.setDate(startOfYesterday.getDate() - 1);
+        const sevenDaysAgo = new Date(startOfToday);
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+        let today = 0;
+        let yesterday = 0;
+        let week = 0;
+        let total = 0;
+
+        sarees.forEach(s => {
+            if (excludeOutOfStock && s.stock <= 0) return;
+            total++;
+            if (!s.addedDate) return;
+            const d = new Date(s.addedDate);
+            if (isNaN(d.getTime())) return;
+            if (d >= startOfToday) today++;
+            if (d >= startOfYesterday) yesterday++;
+            if (d >= sevenDaysAgo) week++;
+        });
+
+        return {
+            todayUploadCount: today,
+            yesterdayUploadCount: yesterday,
+            weekUploadCount: week,
+            totalStockItemsCount: total
+        };
+    }, [sarees, excludeOutOfStock]);
+
+    // Initialize selection when modal opens or sarees change
     React.useEffect(() => {
         if (isOpen && sarees) {
+            const now = new Date();
+            const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+            // If items were uploaded today, default to "today" to isolate new stock!
+            const hasTodayItems = sarees.some(s => {
+                if (!s.addedDate) return false;
+                if (excludeOutOfStock && s.stock <= 0) return false;
+                const d = new Date(s.addedDate);
+                return !isNaN(d.getTime()) && d >= startOfToday;
+            });
+
+            const initialFilter: UploadDateFilter = hasTodayItems ? 'today' : 'all';
+            setDateFilter(initialFilter);
+
             const initialSet = new Set<string>();
             const initialCounts: Record<string, number> = {};
             sarees.forEach(s => {
                 if (!excludeOutOfStock || s.stock > 0) {
-                    initialSet.add(s.id);
-                    initialCounts[s.id] = quantityMode === 'stock' ? Math.max(1, s.stock) : 1;
+                    if (isMatchingDate(s.addedDate, initialFilter, customStartDate, customEndDate)) {
+                        initialSet.add(s.id);
+                        initialCounts[s.id] = quantityMode === 'stock' ? Math.max(1, s.stock) : 1;
+                    }
                 }
             });
             setSelectedIds(initialSet);
             setCustomCounts(initialCounts);
         }
     }, [isOpen, sarees, excludeOutOfStock]);
+
+    const handleDateFilterChange = (newFilter: UploadDateFilter, customStart = customStartDate, customEnd = customEndDate) => {
+        setDateFilter(newFilter);
+
+        const matchingSarees = sarees.filter(s => {
+            if (excludeOutOfStock && s.stock <= 0) return false;
+            return isMatchingDate(s.addedDate, newFilter, customStart, customEnd);
+        });
+
+        const nextIds = new Set<string>();
+        const nextCounts: Record<string, number> = { ...customCounts };
+        matchingSarees.forEach(s => {
+            nextIds.add(s.id);
+            if (!nextCounts[s.id] || nextCounts[s.id] <= 0) {
+                nextCounts[s.id] = quantityMode === 'stock' ? Math.max(1, s.stock) : 1;
+            }
+        });
+
+        setSelectedIds(nextIds);
+        setCustomCounts(nextCounts);
+    };
 
     // Grid configuration details
     const gridConfig = useMemo(() => {
@@ -75,22 +202,24 @@ export function BatchBarcodePrinter({ sarees, isOpen, onClose }: BatchBarcodePri
         }
     }, [gridPreset]);
 
-    // Filter sarees based on search term
+    // Filter sarees based on search term and date filter
     const filteredSarees = useMemo(() => {
         if (!sarees) return [];
         return sarees.filter(saree => {
             if (excludeOutOfStock && saree.stock <= 0) return false;
+            if (!isMatchingDate(saree.addedDate, dateFilter, customStartDate, customEndDate)) return false;
             if (!searchTerm) return true;
             const term = searchTerm.toLowerCase();
             return (
                 saree.sareeName.toLowerCase().includes(term) ||
                 saree.id.toLowerCase().includes(term) ||
+                (saree.sku && saree.sku.toLowerCase().includes(term)) ||
                 (saree.barcode && saree.barcode.toLowerCase().includes(term)) ||
                 (saree.category && saree.category.toLowerCase().includes(term)) ||
                 (saree.rackNo && saree.rackNo.toLowerCase().includes(term))
             );
         });
-    }, [sarees, searchTerm, excludeOutOfStock]);
+    }, [sarees, searchTerm, excludeOutOfStock, dateFilter, customStartDate, customEndDate]);
 
     // Expand selected sarees into array of stickers to print
     const printStickersList = useMemo(() => {
@@ -465,6 +594,129 @@ export function BatchBarcodePrinter({ sarees, isOpen, onClose }: BatchBarcodePri
                             </label>
                         </div>
 
+                        {/* Upload Date Filter / Batch Isolation */}
+                        <div className="space-y-2 p-3 bg-cream/15 border border-gold/20 rounded-xl">
+                            <div className="flex items-center justify-between">
+                                <h3 className="text-xs font-bold text-maroon uppercase tracking-wider flex items-center gap-1.5">
+                                    <Calendar className="h-3.5 w-3.5 text-maroon" /> Filter Stock By Upload Batch
+                                </h3>
+                                {dateFilter === 'today' && todayUploadCount > 0 && (
+                                    <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full border border-emerald-300">
+                                        New Stock ({todayUploadCount})
+                                    </span>
+                                )}
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-1.5">
+                                <button
+                                    type="button"
+                                    onClick={() => handleDateFilterChange('today')}
+                                    className={`px-2 py-1.5 text-[11px] font-semibold rounded-lg border transition-all text-left flex flex-col ${
+                                        dateFilter === 'today'
+                                            ? 'bg-maroon text-gold border-maroon shadow-xs'
+                                            : 'bg-white text-gray-700 hover:bg-cream/40 border-gray-200'
+                                    }`}
+                                >
+                                    <span className="truncate">Today's Batch</span>
+                                    <span className={`text-[10px] font-mono ${dateFilter === 'today' ? 'text-gold/80' : 'text-gray-400'}`}>
+                                        {todayUploadCount} items
+                                    </span>
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={() => handleDateFilterChange('yesterday')}
+                                    className={`px-2 py-1.5 text-[11px] font-semibold rounded-lg border transition-all text-left flex flex-col ${
+                                        dateFilter === 'yesterday'
+                                            ? 'bg-maroon text-gold border-maroon shadow-xs'
+                                            : 'bg-white text-gray-700 hover:bg-cream/40 border-gray-200'
+                                    }`}
+                                >
+                                    <span className="truncate">Last 2 Days</span>
+                                    <span className={`text-[10px] font-mono ${dateFilter === 'yesterday' ? 'text-gold/80' : 'text-gray-400'}`}>
+                                        {yesterdayUploadCount} items
+                                    </span>
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={() => handleDateFilterChange('week')}
+                                    className={`px-2 py-1.5 text-[11px] font-semibold rounded-lg border transition-all text-left flex flex-col ${
+                                        dateFilter === 'week'
+                                            ? 'bg-maroon text-gold border-maroon shadow-xs'
+                                            : 'bg-white text-gray-700 hover:bg-cream/40 border-gray-200'
+                                    }`}
+                                >
+                                    <span className="truncate">Last 7 Days</span>
+                                    <span className={`text-[10px] font-mono ${dateFilter === 'week' ? 'text-gold/80' : 'text-gray-400'}`}>
+                                        {weekUploadCount} items
+                                    </span>
+                                </button>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+                                <button
+                                    type="button"
+                                    onClick={() => handleDateFilterChange('all')}
+                                    className={`px-2 py-1 text-[11px] font-semibold rounded-lg border transition-all flex items-center justify-between ${
+                                        dateFilter === 'all'
+                                            ? 'bg-maroon text-gold border-maroon shadow-xs'
+                                            : 'bg-white text-gray-700 hover:bg-cream/40 border-gray-200'
+                                    }`}
+                                >
+                                    <span>All Stock</span>
+                                    <span className={`text-[10px] font-mono ${dateFilter === 'all' ? 'text-gold/80' : 'text-gray-400'}`}>
+                                        ({totalStockItemsCount})
+                                    </span>
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={() => handleDateFilterChange('custom')}
+                                    className={`px-2 py-1 text-[11px] font-semibold rounded-lg border transition-all flex items-center justify-center gap-1 ${
+                                        dateFilter === 'custom'
+                                            ? 'bg-maroon text-gold border-maroon shadow-xs'
+                                            : 'bg-white text-gray-700 hover:bg-cream/40 border-gray-200'
+                                    }`}
+                                >
+                                    <Clock className="h-3 w-3" />
+                                    <span>Custom Dates</span>
+                                </button>
+                            </div>
+
+                            {/* Custom Date Inputs if custom is active */}
+                            {dateFilter === 'custom' && (
+                                <div className="grid grid-cols-2 gap-2 pt-1.5 border-t border-gold/20 mt-1">
+                                    <div>
+                                        <label className="text-[10px] text-gray-500 font-medium block mb-0.5">From Date</label>
+                                        <input
+                                            type="date"
+                                            value={customStartDate}
+                                            onChange={(e) => {
+                                                const val = e.target.value;
+                                                setCustomStartDate(val);
+                                                handleDateFilterChange('custom', val, customEndDate);
+                                            }}
+                                            className="w-full text-[11px] px-2 py-1 border border-gold/30 rounded bg-white font-mono focus:ring-1 focus:ring-maroon focus:outline-none"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] text-gray-500 font-medium block mb-0.5">To Date</label>
+                                        <input
+                                            type="date"
+                                            value={customEndDate}
+                                            onChange={(e) => {
+                                                const val = e.target.value;
+                                                setCustomEndDate(val);
+                                                handleDateFilterChange('custom', customStartDate, val);
+                                            }}
+                                            className="w-full text-[11px] px-2 py-1 border border-gold/30 rounded bg-white font-mono focus:ring-1 focus:ring-maroon focus:outline-none"
+                                        />
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
                         {/* Search & Select Inventory Items */}
                         <div className="flex-1 flex flex-col min-h-[260px] space-y-2">
                             <div className="flex items-center justify-between">
@@ -557,11 +809,26 @@ export function BatchBarcodePrinter({ sarees, isOpen, onClose }: BatchBarcodePri
                                                         className="rounded border-gray-300 text-maroon focus:ring-maroon h-3.5 w-3.5 cursor-pointer shrink-0"
                                                     />
                                                     <div className="min-w-0 flex-1">
-                                                        <p className="font-semibold text-gray-800 truncate text-xs" title={saree.sareeName}>
-                                                            {saree.sareeName}
-                                                        </p>
+                                                        <div className="flex items-center gap-1.5 min-w-0">
+                                                            <p className="font-semibold text-gray-800 truncate text-xs" title={saree.sareeName}>
+                                                                {saree.sareeName}
+                                                            </p>
+                                                            {saree.addedDate && isMatchingDate(saree.addedDate, 'today') && (
+                                                                <span className="shrink-0 text-[9px] font-bold bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded border border-emerald-300">
+                                                                    Today
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                         <div className="flex items-center gap-1.5 text-[10px] text-gray-400 font-mono">
                                                             <span>ID: {saree.id}</span>
+                                                            {saree.sku && (
+                                                                <>
+                                                                    <span>•</span>
+                                                                    <span className="text-gray-600 font-semibold truncate max-w-[90px]" title={saree.sku}>
+                                                                        SKU: {saree.sku}
+                                                                    </span>
+                                                                </>
+                                                            )}
                                                             <span>•</span>
                                                             <span className="text-maroon font-bold">₹{saree.sellingPrice.toLocaleString()}</span>
                                                             <span>•</span>
