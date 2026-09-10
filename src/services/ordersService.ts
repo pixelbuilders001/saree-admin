@@ -8,6 +8,17 @@ export interface ShippingAddress {
     country?: string;
     line1?: string;
     line2?: string;
+    address?: string;
+    address_line1?: string;
+    address_line2?: string;
+    landmark?: string;
+    locality?: string;
+    pincode?: string;
+    pinCode?: string;
+    name?: string;
+    phone?: string;
+    alternatePhone?: string;
+    email?: string;
     [key: string]: any;
 }
 
@@ -24,6 +35,19 @@ export interface OrderItem {
     productSnapshot?: any;
     itemStatus?: string;
     createdAt: string;
+    hsnCode?: string;
+    taxableValue?: number;
+    gstRate?: number;
+    cgstAmount?: number;
+    sgstAmount?: number;
+    igstAmount?: number;
+    gstAmount?: number;
+    discountAmount?: number;
+    productNameSnapshot?: string;
+    imageUrl?: string;
+    color?: string;
+    size?: string;
+    fabric?: string;
 }
 
 export interface OrderStatusHistory {
@@ -54,10 +78,169 @@ export interface Order {
     isGift?: boolean;
     giftRecipientName?: string;
     giftMessage?: string;
+    giftWrapCharge?: number;
+    // Tax, GST & Invoice fields
+    invoiceNumber?: string;
+    invoiceDate?: string;
+    isGstApplied?: boolean;
+    gstRate?: number;
+    taxableAmount?: number;
+    cgstAmount?: number;
+    sgstAmount?: number;
+    igstAmount?: number;
+    totalGst?: number;
+    placeOfSupply?: string;
+    customerGstin?: string;
+    // Discounts & vouchers
+    couponCode?: string;
+    couponDiscount?: number;
+    // Shipping & Tracking
+    trackingNumber?: string;
+    courierName?: string;
+    trackingUrl?: string;
+    paymentId?: string;
     createdAt: string;
     updatedAt: string;
     items?: OrderItem[];
     statusHistory?: OrderStatusHistory[];
+}
+
+export function mapOrderRow(data: any): Order {
+    const shippingAddress: ShippingAddress = typeof data.shipping_address === 'string'
+        ? (() => { try { return JSON.parse(data.shipping_address); } catch { return {}; } })()
+        : data.shipping_address || {};
+
+    const subtotal = Number(data.subtotal || 0);
+    const shippingFee = Number(data.shipping_fee ?? data.shippingFee ?? data.shipping_charge ?? 0);
+    const discount = Number(data.discount ?? data.discount_amount ?? 0);
+    const totalAmount = Number(data.total_amount ?? data.totalAmount ?? 0);
+    const giftWrapCharge = Number(data.gift_wrap_charge ?? data.giftWrapCharge ?? 0);
+
+    const hasGst = data.gst_amount != null
+        ? Number(data.gst_amount) > 0
+        : (data.is_gst_applied ?? true);
+
+    const rawState = (data.place_of_supply || shippingAddress.state || 'Bihar').trim();
+    const isIntraState = rawState.toLowerCase().includes('bihar');
+    const gstRate = Number(data.gst_rate || 5);
+
+    const rawTaxable = data.taxable_amount != null
+        ? Number(data.taxable_amount)
+        : (hasGst ? Math.max(0, Math.round(((subtotal - discount) / (1 + gstRate / 100)) * 100) / 100) : (subtotal - discount));
+
+    const rawTotalGst = data.gst_amount != null
+        ? Number(data.gst_amount)
+        : (hasGst ? Math.max(0, Math.round((subtotal - discount - rawTaxable) * 100) / 100) : 0);
+
+    const cgstAmt = data.cgst_amount != null
+        ? Number(data.cgst_amount)
+        : (hasGst && isIntraState ? Math.round((rawTotalGst / 2) * 100) / 100 : 0);
+
+    const sgstAmt = data.sgst_amount != null
+        ? Number(data.sgst_amount)
+        : (hasGst && isIntraState ? Math.round((rawTotalGst - cgstAmt) * 100) / 100 : 0);
+
+    const igstAmt = data.igst_amount != null
+        ? Number(data.igst_amount)
+        : (hasGst && !isIntraState ? rawTotalGst : 0);
+
+    const items: OrderItem[] = (data.order_items || []).map((item: any) => {
+        let snap = item.product_snapshot;
+        if (typeof snap === 'string') {
+            try { snap = JSON.parse(snap); } catch {}
+        }
+        const snapImages = snap?.images || snap?.image_urls || [];
+        const imageUrl = snap?.image || snap?.primary_image || (Array.isArray(snapImages) && snapImages.length > 0 ? (typeof snapImages[0] === 'string' ? snapImages[0] : snapImages[0]?.imageUrl || snapImages[0]?.url) : null);
+        const unitPrice = Number(item.unit_price || snap?.selling_price || 0);
+        const quantity = Number(item.quantity || 1);
+        const totalPrice = Number(item.total_price || (unitPrice * quantity));
+        const itemGstRate = Number(item.gst_rate || snap?.gst_rate || gstRate);
+        const itemTaxable = item.taxable_value != null
+            ? Number(item.taxable_value)
+            : Math.round((totalPrice / (1 + itemGstRate / 100)) * 100) / 100;
+        const itemGstAmt = item.gst_amount != null
+            ? Number(item.gst_amount)
+            : Math.round((totalPrice - itemTaxable) * 100) / 100;
+
+        return {
+            id: item.id,
+            orderId: item.order_id,
+            inventoryId: item.inventory_id,
+            productName: item.product_name || item.product_name_snapshot || snap?.saree_name || 'Pure Silk Banarasi Saree',
+            sku: item.sku || snap?.sku,
+            barcode: item.barcode || snap?.barcode,
+            quantity,
+            unitPrice,
+            totalPrice,
+            productSnapshot: snap,
+            itemStatus: item.item_status || 'active',
+            hsnCode: item.hsn_code || snap?.hsn_code || snap?.hsnCode || '5208',
+            taxableValue: itemTaxable,
+            gstRate: itemGstRate,
+            cgstAmount: item.cgst_amount != null ? Number(item.cgst_amount) : (isIntraState ? Math.round(itemGstAmt / 2 * 100) / 100 : 0),
+            sgstAmount: item.sgst_amount != null ? Number(item.sgst_amount) : (isIntraState ? Math.round(itemGstAmt / 2 * 100) / 100 : 0),
+            igstAmount: item.igst_amount != null ? Number(item.igst_amount) : (!isIntraState ? itemGstAmt : 0),
+            gstAmount: itemGstAmt,
+            discountAmount: item.discount_amount != null ? Number(item.discount_amount) : 0,
+            productNameSnapshot: item.product_name_snapshot || snap?.saree_name,
+            imageUrl,
+            color: item.color || snap?.color || snap?.primary_color,
+            size: item.size || snap?.size,
+            fabric: item.fabric || snap?.fabric,
+            createdAt: item.created_at,
+        };
+    });
+
+    const statusHistory = (data.order_status_history || []).map((h: any) => ({
+        id: h.id,
+        orderId: h.order_id,
+        status: h.status,
+        note: h.note,
+        createdAt: h.created_at,
+    })).sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    return {
+        id: data.id,
+        orderNumber: data.order_number,
+        userId: data.user_id,
+        customerName: data.customer_name || shippingAddress.name || 'Valued Customer',
+        customerPhone: data.customer_phone || shippingAddress.phone || '',
+        customerEmail: data.customer_email || shippingAddress.email || undefined,
+        shippingAddress,
+        subtotal,
+        shippingFee,
+        discount,
+        totalAmount,
+        paymentMethod: data.payment_method || 'cod',
+        paymentStatus: data.payment_status || 'pending',
+        orderStatus: data.order_status || 'placed',
+        notes: data.notes || undefined,
+        isGift: data.is_gift === true,
+        giftRecipientName: data.gift_recipient_name || undefined,
+        giftMessage: data.gift_message || undefined,
+        giftWrapCharge,
+        invoiceNumber: data.invoice_number || data.order_number,
+        invoiceDate: data.invoice_date || data.created_at,
+        isGstApplied: hasGst,
+        gstRate,
+        taxableAmount: rawTaxable,
+        cgstAmount: cgstAmt,
+        sgstAmount: sgstAmt,
+        igstAmount: igstAmt,
+        totalGst: rawTotalGst,
+        placeOfSupply: rawState,
+        customerGstin: data.customer_gstin || data.gstin || undefined,
+        couponCode: data.coupon_code || data.applied_voucher_code || undefined,
+        couponDiscount: data.coupon_discount ? Number(data.coupon_discount) : undefined,
+        trackingNumber: data.tracking_number || data.awb_number || undefined,
+        courierName: data.courier_name || undefined,
+        trackingUrl: data.tracking_url || undefined,
+        paymentId: data.payment_id || data.razorpay_payment_id || undefined,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at,
+        items,
+        statusHistory,
+    };
 }
 
 export const ordersService = {
@@ -73,51 +256,7 @@ export const ordersService = {
 
         if (error) throw error;
 
-        return (data || []).map((order: any) => ({
-            id: order.id,
-            orderNumber: order.order_number,
-            userId: order.user_id,
-            customerName: order.customer_name,
-            customerPhone: order.customer_phone,
-            customerEmail: order.customer_email,
-            shippingAddress: typeof order.shipping_address === 'string' 
-                ? JSON.parse(order.shipping_address) 
-                : order.shipping_address || {},
-            subtotal: Number(order.subtotal),
-            shippingFee: Number(order.shipping_fee),
-            discount: Number(order.discount),
-            totalAmount: Number(order.total_amount),
-            paymentMethod: order.payment_method,
-            paymentStatus: order.payment_status,
-            orderStatus: order.order_status,
-            notes: order.notes,
-            isGift: order.is_gift === true,
-            giftRecipientName: order.gift_recipient_name || undefined,
-            giftMessage: order.gift_message || undefined,
-            createdAt: order.created_at,
-            updatedAt: order.updated_at,
-            items: (order.order_items || []).map((item: any) => ({
-                id: item.id,
-                orderId: item.order_id,
-                inventoryId: item.inventory_id,
-                productName: item.product_name,
-                sku: item.sku,
-                barcode: item.barcode,
-                quantity: Number(item.quantity),
-                unitPrice: Number(item.unit_price),
-                totalPrice: Number(item.total_price),
-                productSnapshot: item.product_snapshot,
-                itemStatus: item.item_status || 'active',
-                createdAt: item.created_at,
-            })),
-            statusHistory: (order.order_status_history || []).map((h: any) => ({
-                id: h.id,
-                orderId: h.order_id,
-                status: h.status,
-                note: h.note,
-                createdAt: h.created_at,
-            })).sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
-        }));
+        return (data || []).map(mapOrderRow);
     },
 
     getOrderById: async (id: string): Promise<Order> => {
@@ -134,51 +273,7 @@ export const ordersService = {
         if (error) throw error;
         if (!data) throw new Error('Order not found');
 
-        return {
-            id: data.id,
-            orderNumber: data.order_number,
-            userId: data.user_id,
-            customerName: data.customer_name,
-            customerPhone: data.customer_phone,
-            customerEmail: data.customer_email,
-            shippingAddress: typeof data.shipping_address === 'string' 
-                ? JSON.parse(data.shipping_address) 
-                : data.shipping_address || {},
-            subtotal: Number(data.subtotal),
-            shippingFee: Number(data.shipping_fee),
-            discount: Number(data.discount),
-            totalAmount: Number(data.total_amount),
-            paymentMethod: data.payment_method,
-            paymentStatus: data.payment_status,
-            orderStatus: data.order_status,
-            notes: data.notes,
-            isGift: data.is_gift === true,
-            giftRecipientName: data.gift_recipient_name || undefined,
-            giftMessage: data.gift_message || undefined,
-            createdAt: data.created_at,
-            updatedAt: data.updated_at,
-            items: (data.order_items || []).map((item: any) => ({
-                id: item.id,
-                orderId: item.order_id,
-                inventoryId: item.inventory_id,
-                productName: item.product_name,
-                sku: item.sku,
-                barcode: item.barcode,
-                quantity: Number(item.quantity),
-                unitPrice: Number(item.unit_price),
-                totalPrice: Number(item.total_price),
-                productSnapshot: item.product_snapshot,
-                itemStatus: item.item_status || 'active',
-                createdAt: item.created_at,
-            })),
-            statusHistory: (data.order_status_history || []).map((h: any) => ({
-                id: h.id,
-                orderId: h.order_id,
-                status: h.status,
-                note: h.note,
-                createdAt: h.created_at,
-            })).sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
-        };
+        return mapOrderRow(data);
     },
 
     createOrder: async (orderData: {

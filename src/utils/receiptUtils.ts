@@ -115,10 +115,12 @@ export function mapSaleToReceiptData(saleOrOrder: any): ReceiptData {
             customerAddress = addr;
         } else if (typeof addr === 'object' && addr !== null) {
             customerAddress = [
-                addr.address || addr.address_line1,
+                addr.street || addr.line1 || addr.address || addr.address_line1,
+                addr.line2 || addr.address_line2 || addr.landmark || addr.locality,
                 addr.city,
                 addr.state,
-                addr.pinCode || addr.pincode
+                addr.zip || addr.pinCode || addr.pincode,
+                addr.country
             ].filter(Boolean).join(', ');
         }
     }
@@ -133,13 +135,28 @@ export function mapSaleToReceiptData(saleOrOrder: any): ReceiptData {
             ? Number(saleOrOrder.discount_percentage)
             : (subtotal > 0 && discountAmount > 0 ? parseFloat(((discountAmount / subtotal) * 100).toFixed(2)) : undefined));
 
+    const rawPos = saleOrOrder.placeOfSupply || saleOrOrder.place_of_supply || (typeof saleOrOrder.shippingAddress === 'object' ? saleOrOrder.shippingAddress?.state : null) || (typeof saleOrOrder.shipping_address === 'object' ? saleOrOrder.shipping_address?.state : null) || (isGstApplied ? 'Bihar (10)' : undefined);
+    const placeOfSupply = isGstApplied ? rawPos : undefined;
+    const isIntraState = placeOfSupply ? placeOfSupply.toLowerCase().includes('bihar') : true;
+
+    const gstRate = Number(saleOrOrder.gstRate || saleOrOrder.gst_rate || (isGstApplied ? 5 : 0));
+    const rawTotalGst = Number(saleOrOrder.totalGst ?? saleOrOrder.total_gst ?? saleOrOrder.gstAmount ?? saleOrOrder.gst_amount ?? 0);
+
     const taxableAmount = saleOrOrder.taxableAmount !== undefined && saleOrOrder.taxableAmount !== null
         ? Number(saleOrOrder.taxableAmount)
         : (saleOrOrder.taxable_amount !== undefined && saleOrOrder.taxable_amount !== null
             ? Number(saleOrOrder.taxable_amount)
-            : (isGstApplied ? Math.max(0, subtotal - discountAmount) : undefined));
+            : (isGstApplied ? Math.max(0, subtotal - discountAmount - rawTotalGst) : undefined));
 
-    const placeOfSupply = saleOrOrder.placeOfSupply || saleOrOrder.place_of_supply || (isGstApplied ? 'Bihar (10)' : undefined);
+    const totalGst = rawTotalGst > 0 ? rawTotalGst : (isGstApplied && taxableAmount ? Math.round(taxableAmount * (gstRate / 100) * 100) / 100 : 0);
+
+    const cgstRate = Number(saleOrOrder.cgstRate ?? saleOrOrder.cgst_rate ?? (isGstApplied && isIntraState ? gstRate / 2 : 0));
+    const sgstRate = Number(saleOrOrder.sgstRate ?? saleOrOrder.sgst_rate ?? (isGstApplied && isIntraState ? gstRate / 2 : 0));
+    const igstRate = Number(saleOrOrder.igstRate ?? saleOrOrder.igst_rate ?? (isGstApplied && !isIntraState ? gstRate : 0));
+
+    const cgstAmount = Number(saleOrOrder.cgstAmount ?? saleOrOrder.cgst_amount ?? (isGstApplied && isIntraState ? Math.round((totalGst / 2) * 100) / 100 : 0));
+    const sgstAmount = Number(saleOrOrder.sgstAmount ?? saleOrOrder.sgst_amount ?? (isGstApplied && isIntraState ? Math.round((totalGst - cgstAmount) * 100) / 100 : 0));
+    const igstAmount = Number(saleOrOrder.igstAmount ?? saleOrOrder.igst_amount ?? (isGstApplied && !isIntraState ? totalGst : 0));
 
     return {
         invoiceNumber: saleOrOrder.invoiceNumber || saleOrOrder.invoice_number || saleOrOrder.orderNumber || saleOrOrder.order_number || 'INV',
@@ -161,15 +178,15 @@ export function mapSaleToReceiptData(saleOrOrder: any): ReceiptData {
         issuedVoucherCode: saleOrOrder.issuedVoucherCode || null,
         issuedVoucherAmount: saleOrOrder.issuedVoucherAmount != null ? Number(saleOrOrder.issuedVoucherAmount) : null,
         isGstApplied,
-        gstRate: Number(saleOrOrder.gstRate || saleOrOrder.gst_rate || (isGstApplied ? 5 : 0)),
+        gstRate,
         taxableAmount,
-        cgstRate: Number(saleOrOrder.cgstRate ?? saleOrOrder.cgst_rate ?? (isGstApplied ? 2.5 : 0)),
-        cgstAmount: Number(saleOrOrder.cgstAmount ?? saleOrOrder.cgst_amount ?? 0),
-        sgstRate: Number(saleOrOrder.sgstRate ?? saleOrOrder.sgst_rate ?? (isGstApplied ? 2.5 : 0)),
-        sgstAmount: Number(saleOrOrder.sgstAmount ?? saleOrOrder.sgst_amount ?? 0),
-        igstRate: Number(saleOrOrder.igstRate ?? saleOrOrder.igst_rate ?? 0),
-        igstAmount: Number(saleOrOrder.igstAmount ?? saleOrOrder.igst_amount ?? 0),
-        totalGst: Number(saleOrOrder.totalGst ?? saleOrOrder.total_gst ?? saleOrOrder.gst_amount ?? (Number(saleOrOrder.cgstAmount || saleOrOrder.cgst_amount || 0) + Number(saleOrOrder.sgstAmount || saleOrOrder.sgst_amount || 0) + Number(saleOrOrder.igstAmount || saleOrOrder.igst_amount || 0))),
+        cgstRate,
+        cgstAmount,
+        sgstRate,
+        sgstAmount,
+        igstRate,
+        igstAmount,
+        totalGst,
         placeOfSupply,
     };
 }
@@ -177,9 +194,10 @@ export function mapSaleToReceiptData(saleOrOrder: any): ReceiptData {
 /**
  * Generates a full shareable receipt URL containing embedded order data.
  */
-export function generateReceiptUrl(saleOrOrder: any, domain: string = 'https://shreebanarasisarees.in'): string {
+export function generateReceiptUrl(saleOrOrder: any, domain?: string): string {
     const receiptData = mapSaleToReceiptData(saleOrOrder);
     const payload = encodeReceiptData(receiptData);
     const inv = encodeURIComponent(receiptData.invoiceNumber || 'INV');
-    return `${domain.replace(/\/$/, '')}/receipt/${inv}?d=${payload}`;
+    const baseDomain = domain || (typeof window !== 'undefined' && window.location?.origin ? window.location.origin : 'https://shreebanarasisarees.in');
+    return `${baseDomain.replace(/\/$/, '')}/receipt/${inv}?d=${payload}`;
 }

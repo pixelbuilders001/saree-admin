@@ -2,6 +2,7 @@ import React from 'react';
 import { useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ordersService, type Order, type OrderItem, type CartItem } from '@/services/ordersService';
+import { receiptService } from '@/services/receiptService';
 import { pushNotificationService } from '@/services/pushNotificationService';
 import { inventoryService, type Saree } from '@/services/inventoryService';
 import {
@@ -29,6 +30,7 @@ import {
     Gift,
     X,
     ChevronRight,
+    ChevronLeft,
     Package,
     CircleCheck,
     IndianRupee,
@@ -37,12 +39,23 @@ import {
     ArrowUpRight,
     Send,
     Home,
-    Ban
+    Ban,
+    ExternalLink,
+    Receipt,
+    Download,
+    Share2,
+    Building2,
+    Navigation,
+    Tag,
+    Percent,
+    ShieldCheck,
+    Check
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, copyTextToClipboard } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ReceiptModal } from '@/components/ReceiptModal';
 import {
     Table,
     TableBody,
@@ -110,6 +123,7 @@ export default function OrdersPage() {
 
     // UI state
     const [selectedOrderId, setSelectedOrderId] = React.useState<string | null>(null);
+    const [mobileDetailOpen, setMobileDetailOpen] = React.useState(false);
     const [searchQuery, setSearchQuery] = React.useState('');
     const [statusFilter, setStatusFilter] = React.useState<string>('all');
     const [paymentFilter, setPaymentFilter] = React.useState<string>('all');
@@ -118,6 +132,35 @@ export default function OrdersPage() {
     const [statusNote, setStatusNote] = React.useState('');
     const [tempOrderStatus, setTempOrderStatus] = React.useState<string>('');
     const [tempPaymentStatus, setTempPaymentStatus] = React.useState<string>('');
+
+    // Receipt / Invoice Modal state
+    const [isReceiptModalOpen, setIsReceiptModalOpen] = React.useState(false);
+    const [receiptOrder, setReceiptOrder] = React.useState<Order | null>(null);
+
+    const handleOpenInvoice = (order: Order) => {
+        setReceiptOrder(order);
+        setIsReceiptModalOpen(true);
+    };
+
+    // Direct Download Invoice State & Handler
+    const [isDownloadingInvoice, setIsDownloadingInvoice] = React.useState(false);
+
+    const handleDirectDownloadInvoice = (order: Order) => {
+        try {
+            setIsDownloadingInvoice(true);
+            receiptService.downloadOrderInvoicePDF(order);
+            toast.success(`Tax invoice downloaded for order ${order.orderNumber}`);
+        } catch (err: any) {
+            console.error('Error downloading invoice:', err);
+            toast.error('Failed to generate invoice PDF. Please try opening via Tax Invoice.');
+        } finally {
+            setIsDownloadingInvoice(false);
+        }
+    };
+
+    // Clipboard feedback state
+    const [copiedAddressId, setCopiedAddressId] = React.useState<string | null>(null);
+    const [copiedOrderNumberId, setCopiedOrderNumberId] = React.useState<string | null>(null);
 
     // Single item cancellation state
     const [cancellingItem, setCancellingItem] = React.useState<{ orderId: string; itemId: string; name: string } | null>(null);
@@ -550,18 +593,127 @@ export default function OrdersPage() {
         }
     };
 
+    // Helper: Parse full address details cleanly
+    const parseAddressDetails = (address: any) => {
+        const emptyResult = {
+            recipientName: '',
+            recipientPhone: '',
+            phone: '',
+            line1: '',
+            line2: '',
+            street: '',
+            landmark: '',
+            city: '',
+            state: '',
+            zip: '',
+            pincode: '',
+            country: 'India',
+            fullFormatted: '',
+            formattedAddress: ''
+        };
+
+        if (!address) return emptyResult;
+
+        let addrObj = address;
+        if (typeof address === 'string') {
+            const trimmed = address.trim();
+            if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+                try {
+                    addrObj = JSON.parse(trimmed);
+                } catch {
+                    addrObj = address;
+                }
+            }
+        }
+
+        if (typeof addrObj === 'string') {
+            return {
+                ...emptyResult,
+                line1: addrObj,
+                street: addrObj,
+                fullFormatted: addrObj,
+                formattedAddress: addrObj
+            };
+        }
+
+        const recipientName = addrObj.name || addrObj.recipientName || addrObj.customerName || addrObj.fullName || '';
+        const recipientPhone = addrObj.phone || addrObj.recipientPhone || addrObj.alternatePhone || addrObj.mobile || '';
+        const line1 = addrObj.street || addrObj.line1 || addrObj.address || addrObj.address_line1 || addrObj.flat || addrObj.house || '';
+        const line2 = addrObj.line2 || addrObj.address_line2 || addrObj.landmark || addrObj.locality || addrObj.area || '';
+        const city = addrObj.city || addrObj.town || '';
+        const state = addrObj.state || addrObj.province || '';
+        const zip = addrObj.zip || addrObj.pincode || addrObj.pinCode || addrObj.postalCode || '';
+        const country = addrObj.country || 'India';
+
+        const lines = [
+            line1,
+            line2,
+            [city, state].filter(Boolean).join(', ') + (zip ? ` - ${zip}` : ''),
+            country
+        ].filter(Boolean);
+
+        const fullFormatted = lines.join(', ') || line1 || '';
+
+        return {
+            recipientName,
+            recipientPhone,
+            phone: recipientPhone,
+            line1,
+            line2,
+            street: line1,
+            landmark: line2,
+            city,
+            state,
+            zip,
+            pincode: zip,
+            country,
+            fullFormatted,
+            formattedAddress: fullFormatted
+        };
+    };
+
     // Helper: Formatted address string
     const formatAddress = (address: any) => {
         if (!address) return '';
+        if (typeof address === 'string') {
+            const trimmed = address.trim();
+            if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+                try {
+                    const parsed = JSON.parse(trimmed);
+                    return formatAddress(parsed);
+                } catch {
+                    return address;
+                }
+            }
+            return address;
+        }
         const parts = [
-            address.street || address.line1,
-            address.line2,
+            address.street || address.line1 || address.address || address.address_line1,
+            address.line2 || address.address_line2 || address.landmark || address.locality,
             address.city,
             address.state,
-            address.zip || address.pincode,
+            address.zip || address.pincode || address.pinCode,
             address.country
         ];
         return parts.filter(Boolean).join(', ');
+    };
+
+    // Helper: Copy text to clipboard with feedback
+    const copyToClipboard = async (text: string, label: string = 'Text'): Promise<boolean> => {
+        const textToCopy = (text || '').trim();
+        if (!textToCopy) {
+            toast.error(`No ${label.toLowerCase()} available to copy`);
+            return false;
+        }
+
+        const success = await copyTextToClipboard(textToCopy);
+        if (success) {
+            toast.success(`${label} copied to clipboard`);
+            return true;
+        } else {
+            toast.error(`Could not copy ${label.toLowerCase()}`);
+            return false;
+        }
     };
 
     // Helper: Customer avatar initials
@@ -577,13 +729,22 @@ export default function OrdersPage() {
     }, [selectedOrder]);
 
     // Copy order number to clipboard
-    const copyOrderNumber = async (orderNumber: string) => {
-        try {
-            await navigator.clipboard.writeText(orderNumber);
-            toast.success('Order number copied to clipboard');
-        } catch {
-            toast.error('Could not copy order number');
+    const copyOrderNumber = async (orderNumber: string, orderId?: string) => {
+        const ok = await copyToClipboard(orderNumber, 'Order number');
+        if (ok && orderId) {
+            setCopiedOrderNumberId(orderId);
+            setTimeout(() => setCopiedOrderNumberId(null), 2000);
         }
+    };
+
+    // Handle selecting an order — on mobile this also opens the full-screen detail overlay
+    const handleSelectOrder = (orderId: string) => {
+        setSelectedOrderId(orderId);
+        setMobileDetailOpen(true);
+    };
+
+    const handleCloseMobileDetail = () => {
+        setMobileDetailOpen(false);
     };
 
     return (
@@ -1029,30 +1190,109 @@ export default function OrdersPage() {
                                 <span className="text-[10px] text-gray-500 normal-case font-normal hidden md:inline">Click an order to view full details</span>
                             </CardTitle>
                         </CardHeader>
-                        <CardContent className="p-0 overflow-x-auto">
+                        <CardContent className="p-0">
+                            {/* ── MOBILE card list (hidden on lg+) ── */}
+                            <div className="lg:hidden divide-y divide-gold/10">
+                                {isLoading ? (
+                                    <div className="h-40 flex flex-col items-center justify-center gap-2 text-maroon/50 text-xs italic">
+                                        <Loader2 className="h-6 w-6 animate-spin" />
+                                        Loading order logs...
+                                    </div>
+                                ) : filteredOrders.length === 0 ? (
+                                    <div className="flex flex-col items-center gap-2 py-10">
+                                        <div className="p-3 bg-gray-100 rounded-full">
+                                            <Search className="h-5 w-5 text-gray-400" />
+                                        </div>
+                                        <p className="text-sm text-gray-500">No matching orders found</p>
+                                        <p className="text-xs text-gray-400">Try adjusting your search or filters</p>
+                                    </div>
+                                ) : (
+                                    filteredOrders.map((order) => {
+                                        const destination = [order.shippingAddress?.city, order.shippingAddress?.state].filter(Boolean).join(', ');
+                                        return (
+                                            <div
+                                                key={order.id}
+                                                className={cn(
+                                                    "p-3 cursor-pointer active:bg-gold/10 transition-colors",
+                                                    selectedOrderId === order.id ? "bg-gold/10" : "bg-white hover:bg-cream/20"
+                                                )}
+                                                onClick={() => handleSelectOrder(order.id)}
+                                            >
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <div className="flex items-center gap-2.5 min-w-0">
+                                                        <div className="h-9 w-9 shrink-0 rounded-full bg-gradient-to-br from-maroon to-maroon-dark text-gold flex items-center justify-center text-[11px] font-bold shadow-sm">
+                                                            {getInitials(order.customerName)}
+                                                        </div>
+                                                        <div className="min-w-0">
+                                                            <div className="font-bold text-gray-900 text-sm truncate">{order.customerName}</div>
+                                                            <div className="text-[11px] text-gray-500 font-mono">{order.customerPhone}</div>
+                                                            {destination && <div className="text-[10px] text-gray-400 truncate flex items-center gap-1"><MapPin className="h-2.5 w-2.5 shrink-0" />{destination}</div>}
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex flex-col items-end gap-1 shrink-0">
+                                                        <span className="inline-flex items-center gap-0.5 font-bold font-mono text-maroon text-sm">
+                                                            <IndianRupee className="h-3.5 w-3.5" />{order.totalAmount.toLocaleString()}
+                                                        </span>
+                                                        <span className={`inline-flex items-center gap-1 text-[9px] font-bold uppercase px-2 py-0.5 rounded-full border ${getOrderStatusBadgeClass(order.orderStatus)}`}>
+                                                            <span className={`h-1.5 w-1.5 rounded-full ${getStatusDotClass(order.orderStatus)}`} />
+                                                            {order.orderStatus.replace('_', ' ')}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center justify-between mt-2 pt-2 border-t border-gold/10">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-[10px] font-mono text-maroon font-bold">{order.orderNumber}</span>
+                                                        {order.isGift && <span className="inline-flex items-center gap-0.5 text-[8px] font-bold px-1 py-0.5 rounded-full bg-pink-50 text-pink-700 border border-pink-200"><Gift className="h-2 w-2" />Gift</span>}
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className={`inline-flex items-center gap-1 text-[9px] font-bold uppercase px-2 py-0.5 rounded-full border ${getPaymentStatusBadgeClass(order.paymentStatus)}`}>
+                                                            <span className={`h-1.5 w-1.5 rounded-full ${getPaymentDotClass(order.paymentStatus)}`} />
+                                                            {order.paymentStatus}
+                                                        </span>
+                                                        <span className="text-[10px] text-gray-400 font-mono">
+                                                            {new Date(order.createdAt).toLocaleDateString(undefined, { day: '2-digit', month: 'short' })}
+                                                        </span>
+                                                        <button
+                                                            className="p-1 text-maroon hover:bg-gold/20 rounded transition-colors"
+                                                            title="View Invoice"
+                                                            onClick={(e) => { e.stopPropagation(); handleOpenInvoice(order); }}
+                                                        >
+                                                            <Receipt className="h-4 w-4" />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })
+                                )}
+                            </div>
+
+                            {/* ── DESKTOP table (hidden below lg) ── */}
+                            <div className="hidden lg:block overflow-x-auto">
                             <Table>
                                 <TableHeader className="bg-cream/10">
                                     <TableRow className="border-b border-gold/10 hover:bg-transparent">
                                         <TableHead className="h-10 text-[10px] font-bold text-maroon py-1 px-3">Order No</TableHead>
-                                        <TableHead className="h-10 text-[10px] font-bold text-maroon py-1">Customer</TableHead>
+                                        <TableHead className="h-10 text-[10px] font-bold text-maroon py-1">Customer &amp; Destination</TableHead>
                                         <TableHead className="h-10 text-[10px] font-bold text-maroon py-1 text-center">Items</TableHead>
                                         <TableHead className="h-10 text-[10px] font-bold text-maroon py-1 text-right">Total</TableHead>
                                         <TableHead className="h-10 text-[10px] font-bold text-maroon py-1 text-center">Fulfillment</TableHead>
                                         <TableHead className="h-10 text-[10px] font-bold text-maroon py-1 text-center">Payment</TableHead>
                                         <TableHead className="h-10 text-[10px] font-bold text-maroon py-1 text-right">Date</TableHead>
+                                        <TableHead className="h-10 text-[10px] font-bold text-maroon py-1 text-center w-12">Invoice</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {isLoading ? (
                                         <TableRow>
-                                            <TableCell colSpan={7} className="h-48 text-center text-maroon/50 text-xs italic">
+                                            <TableCell colSpan={8} className="h-48 text-center text-maroon/50 text-xs italic">
                                                 <Loader2 className="h-6 w-6 animate-spin mx-auto mb-1" />
                                                 Loading order logs...
                                             </TableCell>
                                         </TableRow>
                                     ) : filteredOrders.length === 0 ? (
                                         <TableRow>
-                                            <TableCell colSpan={7} className="h-32 text-center">
+                                            <TableCell colSpan={8} className="h-32 text-center">
                                                 <div className="flex flex-col items-center gap-2 py-4">
                                                     <div className="p-3 bg-gray-100 rounded-full">
                                                         <Search className="h-5 w-5 text-gray-400" />
@@ -1063,88 +1303,126 @@ export default function OrdersPage() {
                                             </TableCell>
                                         </TableRow>
                                     ) : (
-                                        filteredOrders.map((order) => (
-                                            <TableRow
-                                                key={order.id}
-                                                className={cn(
-                                                    "hover:bg-cream/10 border-b border-gold/5 cursor-pointer h-14 transition-colors",
-                                                    selectedOrderId === order.id && "bg-gold/10 hover:bg-gold/15"
-                                                )}
-                                                onClick={() => setSelectedOrderId(order.id)}
-                                            >
-                                                <TableCell className="py-1 px-3">
-                                                    <div className="flex items-center gap-1.5">
-                                                        <span className="text-xs font-mono font-bold text-maroon">{order.orderNumber}</span>
-                                                        {order.isGift && (
-                                                            <span className="inline-flex items-center gap-0.5 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full border bg-pink-50 text-pink-700 border-pink-200 whitespace-nowrap">
-                                                                <Gift className="h-2.5 w-2.5" /> Gift
+                                        filteredOrders.map((order) => {
+                                            const destination = [order.shippingAddress?.city, order.shippingAddress?.state].filter(Boolean).join(', ');
+                                            return (
+                                                <TableRow
+                                                    key={order.id}
+                                                    className={cn(
+                                                        "hover:bg-cream/10 border-b border-gold/5 cursor-pointer h-14 transition-colors",
+                                                        selectedOrderId === order.id && "bg-gold/10 hover:bg-gold/15"
+                                                    )}
+                                                    onClick={() => setSelectedOrderId(order.id)}
+                                                >
+                                                    <TableCell className="py-1 px-3">
+                                                        <div className="flex flex-col gap-0.5">
+                                                            <div className="flex items-center gap-1.5">
+                                                                <span className="text-xs font-mono font-bold text-maroon">{order.orderNumber}</span>
+                                                                {order.isGift && (
+                                                                    <span className="inline-flex items-center gap-0.5 text-[8px] font-bold uppercase tracking-wider px-1 py-0.2 rounded-full border bg-pink-50 text-pink-700 border-pink-200 whitespace-nowrap">
+                                                                        <Gift className="h-2 w-2" /> Gift
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            {order.invoiceNumber && order.invoiceNumber !== order.orderNumber && (
+                                                                <span className="text-[9px] font-mono text-gray-400">{order.invoiceNumber}</span>
+                                                            )}
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell className="py-1">
+                                                        <div className="flex items-center gap-2.5">
+                                                            <div className="h-8 w-8 shrink-0 rounded-full bg-gradient-to-br from-maroon to-maroon-dark text-gold flex items-center justify-center text-[10px] font-bold font-sans shadow-sm">
+                                                                {getInitials(order.customerName)}
+                                                            </div>
+                                                            <div className="min-w-0">
+                                                                <div className="font-semibold text-gray-800 text-xs truncate">{order.customerName}</div>
+                                                                <div className="text-[10px] text-gray-500 truncate flex items-center gap-1">
+                                                                    <span>{order.customerPhone}</span>
+                                                                    {destination && (
+                                                                        <>
+                                                                            <span className="text-gray-300">•</span>
+                                                                            <span className="text-gray-600 truncate">{destination}</span>
+                                                                        </>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell className="py-1 text-center">
+                                                        {order.items?.some(i => (i.itemStatus || '').toLowerCase() === 'cancelled') ? (
+                                                            <div className="inline-flex flex-col items-center">
+                                                                <span className="inline-flex items-center justify-center h-6 min-w-6 px-1.5 rounded-md bg-rose-50 text-rose-700 text-[10px] font-bold font-mono border border-rose-200">
+                                                                    {order.items.filter(i => (i.itemStatus || '').toLowerCase() !== 'cancelled').length}/{order.items.length}
+                                                                </span>
+                                                                <span className="text-[8px] text-rose-600 font-semibold">active</span>
+                                                            </div>
+                                                        ) : (
+                                                            <span className="inline-flex items-center justify-center h-6 min-w-6 px-1.5 rounded-md bg-gray-100 text-gray-700 text-[10px] font-bold font-mono">
+                                                                {order.items?.length || 0}
                                                             </span>
                                                         )}
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell className="py-1">
-                                                    <div className="flex items-center gap-2.5">
-                                                        <div className="h-8 w-8 shrink-0 rounded-full bg-gradient-to-br from-maroon to-maroon-dark text-gold flex items-center justify-center text-[10px] font-bold font-sans shadow-sm">
-                                                            {getInitials(order.customerName)}
-                                                        </div>
-                                                        <div className="min-w-0">
-                                                            <div className="font-semibold text-gray-800 text-xs truncate">{order.customerName}</div>
-                                                            <div className="text-[10px] text-gray-500 truncate">{order.customerPhone}</div>
-                                                        </div>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell className="py-1 text-center">
-                                                    {order.items?.some(i => (i.itemStatus || '').toLowerCase() === 'cancelled') ? (
-                                                        <div className="inline-flex flex-col items-center">
-                                                            <span className="inline-flex items-center justify-center h-6 min-w-6 px-1.5 rounded-md bg-rose-50 text-rose-700 text-[10px] font-bold font-mono border border-rose-200">
-                                                                {order.items.filter(i => (i.itemStatus || '').toLowerCase() !== 'cancelled').length}/{order.items.length}
+                                                    </TableCell>
+                                                    <TableCell className="py-1 text-xs font-bold font-mono text-gray-800 text-right">
+                                                        <div className="flex flex-col items-end">
+                                                            <span className="inline-flex items-center gap-0.5 text-maroon font-bold">
+                                                                <IndianRupee className="h-3 w-3" />
+                                                                {order.totalAmount.toLocaleString()}
                                                             </span>
-                                                            <span className="text-[8px] text-rose-600 font-semibold">active</span>
+                                                            {order.isGstApplied && (
+                                                                <span className="text-[8px] text-emerald-700 font-sans font-semibold">Incl. 5% GST</span>
+                                                            )}
                                                         </div>
-                                                    ) : (
-                                                        <span className="inline-flex items-center justify-center h-6 min-w-6 px-1.5 rounded-md bg-gray-100 text-gray-700 text-[10px] font-bold font-mono">
-                                                            {order.items?.length || 0}
+                                                    </TableCell>
+                                                    <TableCell className="py-1 text-center">
+                                                        <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border ${getOrderStatusBadgeClass(order.orderStatus)}`}>
+                                                            <span className={`h-1.5 w-1.5 rounded-full ${getStatusDotClass(order.orderStatus)}`} />
+                                                            {order.orderStatus.replace('_', ' ')}
                                                         </span>
-                                                    )}
-                                                </TableCell>
-                                                <TableCell className="py-1 text-xs font-bold font-mono text-gray-800 text-right">
-                                                    <span className="inline-flex items-center gap-0.5 text-maroon">
-                                                        <IndianRupee className="h-3 w-3" />
-                                                        {order.totalAmount.toLocaleString()}
-                                                    </span>
-                                                </TableCell>
-                                                <TableCell className="py-1 text-center">
-                                                    <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border ${getOrderStatusBadgeClass(order.orderStatus)}`}>
-                                                        <span className={`h-1.5 w-1.5 rounded-full ${getStatusDotClass(order.orderStatus)}`} />
-                                                        {order.orderStatus.replace('_', ' ')}
-                                                    </span>
-                                                </TableCell>
-                                                <TableCell className="py-1 text-center">
-                                                    <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border ${getPaymentStatusBadgeClass(order.paymentStatus)}`}>
-                                                        <span className={`h-1.5 w-1.5 rounded-full ${getPaymentDotClass(order.paymentStatus)}`} />
-                                                        {order.paymentStatus}
-                                                    </span>
-                                                </TableCell>
-                                                <TableCell className="py-1 text-right pr-3">
-                                                    <div className="text-xs font-mono text-gray-500">
-                                                        {new Date(order.createdAt).toLocaleDateString(undefined, { day: '2-digit', month: 'short' })}
-                                                    </div>
-                                                    <div className="text-[10px] font-mono text-gray-400">
-                                                        {new Date(order.createdAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
-                                                    </div>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))
+                                                    </TableCell>
+                                                    <TableCell className="py-1 text-center">
+                                                        <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border ${getPaymentStatusBadgeClass(order.paymentStatus)}`}>
+                                                            <span className={`h-1.5 w-1.5 rounded-full ${getPaymentDotClass(order.paymentStatus)}`} />
+                                                            {order.paymentStatus}
+                                                        </span>
+                                                    </TableCell>
+                                                    <TableCell className="py-1 text-right">
+                                                        <div className="text-xs font-mono text-gray-500">
+                                                            {new Date(order.createdAt).toLocaleDateString(undefined, { day: '2-digit', month: 'short' })}
+                                                        </div>
+                                                        <div className="text-[10px] font-mono text-gray-400">
+                                                            {new Date(order.createdAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell className="py-1 text-center" onClick={(e) => e.stopPropagation()}>
+                                                        <Button
+                                                            size="icon"
+                                                            variant="ghost"
+                                                            className="h-8 w-8 text-maroon hover:bg-gold/20 hover:text-maroon rounded-lg transition-transform active:scale-95"
+                                                            title="View &amp; Download Tax Invoice"
+                                                            onClick={() => handleOpenInvoice(order)}
+                                                        >
+                                                            <Receipt className="h-4 w-4" />
+                                                        </Button>
+                                                    </TableCell>
+                                                </TableRow>
+                                            );
+                                        })
                                     )}
                                 </TableBody>
                             </Table>
+                            </div>
                         </CardContent>
                     </Card>
                 </div>
 
-                {/* Detail Panel (Right Column) */}
+                {/* Detail Panel — Desktop: right column; Mobile: full-screen overlay */}
                 {selectedOrderId && (
-                    <div className="lg:col-span-5 space-y-4">
+                    <div className={cn(
+                        // Mobile: fixed full-screen overlay, slide up when open
+                        "fixed inset-0 z-50 bg-white overflow-y-auto transition-transform duration-300 lg:static lg:inset-auto lg:z-auto lg:overflow-visible lg:transition-none",
+                        "lg:col-span-5 lg:space-y-4",
+                        mobileDetailOpen ? "translate-y-0" : "translate-y-full lg:translate-y-0"
+                    )}>
                         {selectedOrder ? (
                             <motion.div
                                 key={selectedOrder.id}
@@ -1155,6 +1433,27 @@ export default function OrdersPage() {
                                 <Card className="border-gold/20 shadow-md relative overflow-hidden bg-white">
                                     {/* Header */}
                                     <div className="bg-gradient-to-r from-maroon via-maroon-dark to-maroon-dark text-gold p-4 border-b border-gold/15">
+                                        {/* Mobile-only back button bar */}
+                                        <div className="flex items-center justify-between lg:hidden mb-3 pb-2.5 border-b border-gold/20">
+                                            <button
+                                                onClick={handleCloseMobileDetail}
+                                                className="flex items-center gap-1.5 text-xs font-bold text-gold hover:text-white transition-colors cursor-pointer bg-white/10 px-2.5 py-1 rounded-full border border-gold/30"
+                                            >
+                                                <ChevronLeft className="h-4 w-4" />
+                                                <span>Back to Orders</span>
+                                            </button>
+                                            <button
+                                                className="text-gold/80 hover:text-gold p-1 rounded hover:bg-gold/10 transition-colors cursor-pointer"
+                                                onClick={() => {
+                                                    setSelectedOrderId(null);
+                                                    handleCloseMobileDetail();
+                                                }}
+                                                title="Close details"
+                                            >
+                                                <X className="h-4 w-4" />
+                                            </button>
+                                        </div>
+
                                         <div className="flex flex-row items-start justify-between gap-2">
                                             <div className="min-w-0">
                                                 <div className="text-[9px] uppercase tracking-[0.25em] opacity-70 font-sans">Order Details</div>
@@ -1162,22 +1461,42 @@ export default function OrdersPage() {
                                                     <span className="text-base font-bold font-mono tracking-wider truncate">{selectedOrder.orderNumber}</span>
                                                     <button
                                                         title="Copy order number"
-                                                        onClick={() => copyOrderNumber(selectedOrder.orderNumber)}
-                                                        className="opacity-70 hover:opacity-100 text-gold transition-opacity shrink-0"
+                                                        onClick={() => copyOrderNumber(selectedOrder.orderNumber, selectedOrder.id)}
+                                                        className="opacity-70 hover:opacity-100 text-gold transition-opacity shrink-0 cursor-pointer"
                                                     >
-                                                        <Copy className="h-3 w-3" />
+                                                        {copiedOrderNumberId === selectedOrder.id ? (
+                                                            <Check className="h-3 w-3 text-emerald-300" />
+                                                        ) : (
+                                                            <Copy className="h-3 w-3" />
+                                                        )}
                                                     </button>
                                                 </div>
                                                 <div className="text-[10px] font-mono opacity-60 mt-0.5">
                                                     {new Date(selectedOrder.createdAt).toLocaleString()}
                                                 </div>
                                             </div>
-                                            <button
-                                                className="text-gold/70 hover:text-gold text-xs font-bold uppercase tracking-wider p-1 rounded hover:bg-gold/10 transition-colors shrink-0"
-                                                onClick={() => setSelectedOrderId(null)}
-                                            >
-                                                <X className="h-4 w-4" />
-                                            </button>
+                                            <div className="flex items-center gap-1.5 shrink-0">
+                                                <Button
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    onClick={() => handleOpenInvoice(selectedOrder)}
+                                                    className="h-7 px-2.5 text-[11px] font-semibold bg-white/10 hover:bg-white/20 text-gold border border-gold/30 rounded flex items-center gap-1.5 transition-colors cursor-pointer"
+                                                    title="View & Download Tax Invoice"
+                                                >
+                                                    <FileText className="h-3.5 w-3.5" />
+                                                    <span className="hidden sm:inline">Tax Invoice</span>
+                                                </Button>
+                                                <button
+                                                    className="text-gold/70 hover:text-gold text-xs font-bold uppercase tracking-wider p-1.5 rounded hover:bg-gold/10 transition-colors shrink-0 cursor-pointer hidden lg:inline-flex"
+                                                    onClick={() => {
+                                                        setSelectedOrderId(null);
+                                                        handleCloseMobileDetail();
+                                                    }}
+                                                    title="Close details"
+                                                >
+                                                    <X className="h-4 w-4" />
+                                                </button>
+                                            </div>
                                         </div>
 
                                         {/* Status ribbon */}
@@ -1210,43 +1529,45 @@ export default function OrdersPage() {
                                                         Step {currentFulfillmentIndex + 1} / {FULFILLMENT_STEPS.length}
                                                     </span>
                                                 </div>
-                                                <div className="flex items-center">
-                                                    {FULFILLMENT_STEPS.map((step, idx) => {
-                                                        const isComplete = idx < currentFulfillmentIndex;
-                                                        const isCurrent = idx === currentFulfillmentIndex;
-                                                        return (
-                                                            <React.Fragment key={step.key}>
-                                                                <div className="flex flex-col items-center flex-1 min-w-0">
-                                                                    <div className={cn(
-                                                                        "h-8 w-8 rounded-full flex items-center justify-center border-2 transition-all",
-                                                                        isCurrent
-                                                                            ? "bg-maroon border-maroon text-gold shadow-md shadow-maroon/30 scale-110"
-                                                                            : isComplete
-                                                                                ? "bg-emerald-500 border-emerald-500 text-white"
-                                                                                : "bg-white border-gray-200 text-gray-300"
-                                                                    )}>
-                                                                        {isComplete ? (
-                                                                            <CircleCheck className="h-4 w-4" />
-                                                                        ) : (
-                                                                            <step.icon className={cn("h-3.5 w-3.5", isCurrent && "animate-pulse")} />
-                                                                        )}
+                                                <div className="overflow-x-auto pb-1 -mx-1 px-1">
+                                                    <div className="flex items-center min-w-[480px]">
+                                                        {FULFILLMENT_STEPS.map((step, idx) => {
+                                                            const isComplete = idx < currentFulfillmentIndex;
+                                                            const isCurrent = idx === currentFulfillmentIndex;
+                                                            return (
+                                                                <React.Fragment key={step.key}>
+                                                                    <div className="flex flex-col items-center flex-1 min-w-0">
+                                                                        <div className={cn(
+                                                                            "h-8 w-8 rounded-full flex items-center justify-center border-2 transition-all",
+                                                                            isCurrent
+                                                                                ? "bg-maroon border-maroon text-gold shadow-md shadow-maroon/30 scale-110"
+                                                                                : isComplete
+                                                                                    ? "bg-emerald-500 border-emerald-500 text-white"
+                                                                                    : "bg-white border-gray-200 text-gray-300"
+                                                                        )}>
+                                                                            {isComplete ? (
+                                                                                <CircleCheck className="h-4 w-4" />
+                                                                            ) : (
+                                                                                <step.icon className={cn("h-3.5 w-3.5", isCurrent && "animate-pulse")} />
+                                                                            )}
+                                                                        </div>
+                                                                        <span className={cn(
+                                                                            "text-[8px] font-bold uppercase tracking-wider mt-1.5 text-center px-0.5",
+                                                                            isCurrent ? "text-maroon" : isComplete ? "text-emerald-600" : "text-gray-400"
+                                                                        )}>
+                                                                            {step.label}
+                                                                        </span>
                                                                     </div>
-                                                                    <span className={cn(
-                                                                        "text-[8px] font-bold uppercase tracking-wider mt-1.5 text-center px-0.5",
-                                                                        isCurrent ? "text-maroon" : isComplete ? "text-emerald-600" : "text-gray-400"
-                                                                    )}>
-                                                                        {step.label}
-                                                                    </span>
-                                                                </div>
-                                                                {idx < FULFILLMENT_STEPS.length - 1 && (
-                                                                    <div className={cn(
-                                                                        "h-0.5 flex-1 mb-5 rounded",
-                                                                        idx < currentFulfillmentIndex ? "bg-emerald-400" : "bg-gray-200"
-                                                                    )} />
-                                                                )}
-                                                            </React.Fragment>
-                                                        );
-                                                    })}
+                                                                    {idx < FULFILLMENT_STEPS.length - 1 && (
+                                                                        <div className={cn(
+                                                                            "h-0.5 flex-1 mb-5 rounded",
+                                                                            idx < currentFulfillmentIndex ? "bg-emerald-400" : "bg-gray-200"
+                                                                        )} />
+                                                                    )}
+                                                                </React.Fragment>
+                                                            );
+                                                        })}
+                                                    </div>
                                                 </div>
                                             </div>
                                         ) : (
@@ -1307,157 +1628,437 @@ export default function OrdersPage() {
                                             </div>
                                         )}
 
-                                        {/* Customer & Shipping Information */}
-                                        <div className="grid grid-cols-1 gap-3">
-                                            <div className="border border-gold/10 p-3 rounded-lg bg-slate-50 space-y-2">
-                                                <div className="flex items-center gap-1.5 border-b border-gold/5 pb-1.5">
-                                                    <User className="h-4 w-4 text-maroon" />
-                                                    <span className="text-[10px] font-bold text-maroon uppercase tracking-wider">Customer</span>
-                                                </div>
-                                                <div className="flex items-center gap-3">
-                                                    <div className="h-10 w-10 shrink-0 rounded-full bg-gradient-to-br from-maroon to-maroon-dark text-gold flex items-center justify-center font-bold text-sm shadow-sm">
-                                                        {getInitials(selectedOrder.customerName)}
-                                                    </div>
-                                                    <div className="text-xs space-y-0.5 min-w-0">
-                                                        <div className="font-bold text-gray-800 truncate">{selectedOrder.customerName}</div>
-                                                        <div className="text-gray-600 flex items-center gap-1"><Phone className="h-3 w-3 inline text-gray-400" /> {selectedOrder.customerPhone}</div>
-                                                        {selectedOrder.customerEmail && (
-                                                            <div className="text-gray-600 flex items-center gap-1 truncate"><Mail className="h-3 w-3 inline text-gray-400" /> {selectedOrder.customerEmail}</div>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            </div>
+                                        {/* Comprehensive Customer, Shipping, Tax, and Order Registry */}
+                                        {(() => {
+                                            const parsedAddr = parseAddressDetails(selectedOrder.shippingAddress);
+                                            const posState = (selectedOrder.placeOfSupply || parsedAddr.state || 'Bihar').trim();
+                                            const isIntraState = posState.toLowerCase() === 'bihar';
+                                            const gstRate = selectedOrder.gstRate ?? 5;
+                                            const taxableAmt = selectedOrder.taxableAmount ?? Math.round((selectedOrder.totalAmount - (selectedOrder.shippingFee || 0)) / (1 + gstRate / 100));
+                                            const totalGstAmt = selectedOrder.totalGst ?? Math.max(0, selectedOrder.totalAmount - (selectedOrder.shippingFee || 0) - taxableAmt);
+                                            const cgstAmt = selectedOrder.cgstAmount ?? (isIntraState ? Math.round(totalGstAmt / 2) : 0);
+                                            const sgstAmt = selectedOrder.sgstAmount ?? (isIntraState ? Math.round(totalGstAmt / 2) : 0);
+                                            const igstAmt = selectedOrder.igstAmount ?? (!isIntraState ? totalGstAmt : 0);
 
-                                            <div className="border border-gold/10 p-3 rounded-lg bg-slate-50 space-y-1.5">
-                                                <div className="flex items-center gap-1.5 border-b border-gold/5 pb-1.5">
-                                                    <MapPin className="h-4 w-4 text-maroon" />
-                                                    <span className="text-[10px] font-bold text-maroon uppercase tracking-wider">Shipping Address</span>
-                                                </div>
-                                                <div className="text-xs text-gray-600 leading-relaxed">
-                                                    {formatAddress(selectedOrder.shippingAddress) || <em className="text-gray-400">No address provided</em>}
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Order Items */}
-                                        <div className="border border-gold/10 rounded-lg overflow-hidden">
-                                            <div className="bg-cream/15 p-2 border-b border-gold/10 text-[10px] font-bold text-maroon uppercase tracking-wider flex items-center gap-1.5">
-                                                <PackageOpen className="h-3.5 w-3.5" /> Items Registry
-                                                <span className="ml-auto text-[9px] font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded-full font-mono flex items-center gap-1">
-                                                    <span>{selectedOrder.items?.length || 0} items</span>
-                                                    {selectedOrder.items?.some(i => (i.itemStatus || '').toLowerCase() === 'cancelled') && (
-                                                        <span className="text-rose-600 font-sans font-semibold">
-                                                            ({selectedOrder.items.filter(i => (i.itemStatus || '').toLowerCase() !== 'cancelled').length} active)
-                                                        </span>
-                                                    )}
-                                                </span>
-                                            </div>
-                                            <Table>
-                                                <TableHeader className="bg-slate-50">
-                                                    <TableRow className="border-b border-gold/5 hover:bg-transparent">
-                                                        <TableHead className="h-7 py-0.5 text-[9px] font-bold text-gray-500">Item</TableHead>
-                                                        <TableHead className="h-7 py-0.5 text-[9px] font-bold text-gray-500 text-center">Qty</TableHead>
-                                                        <TableHead className="h-7 py-0.5 text-[9px] font-bold text-gray-500 text-right">Price</TableHead>
-                                                        <TableHead className="h-7 py-0.5 text-[9px] font-bold text-gray-500 text-right">Total</TableHead>
-                                                        <TableHead className="h-7 py-0.5 text-[9px] font-bold text-gray-500 text-center w-16">Action</TableHead>
-                                                    </TableRow>
-                                                </TableHeader>
-                                                <TableBody>
-                                                    {selectedOrder.items?.map((item) => {
-                                                        const isItemCancelled = (item.itemStatus || '').toLowerCase() === 'cancelled';
-                                                        const canCancelItem = !isItemCancelled && !['delivered', 'cancelled', 'returned'].includes(selectedOrder.orderStatus);
-
-                                                        return (
-                                                            <TableRow key={item.id} className={cn("border-b border-gold/5 h-9", isItemCancelled && "bg-rose-50/40 opacity-75")}>
-                                                                <TableCell className="py-1 text-xs">
-                                                                    <div className="flex items-center gap-1.5">
-                                                                        <div className={cn("font-semibold text-gray-800 truncate max-w-[140px]", isItemCancelled && "line-through text-gray-500")}>
-                                                                            {item.productName}
-                                                                        </div>
-                                                                        {isItemCancelled && (
-                                                                            <span className="px-1.5 py-0.2 rounded text-[9px] font-semibold bg-rose-50 text-rose-700 border border-rose-200 shrink-0">
-                                                                                Cancelled
-                                                                            </span>
+                                            return (
+                                                <>
+                                                    {/* Customer Profile & Full Structured Shipping Address */}
+                                                    <div className="grid grid-cols-1 gap-3">
+                                                        {/* Customer Profile */}
+                                                        <div className="border border-gold/15 p-3 rounded-lg bg-slate-50 space-y-2">
+                                                            <div className="flex items-center justify-between border-b border-gold/10 pb-1.5">
+                                                                <div className="flex items-center gap-1.5">
+                                                                    <User className="h-4 w-4 text-maroon" />
+                                                                    <span className="text-[10px] font-bold text-maroon uppercase tracking-wider">Customer Profile</span>
+                                                                </div>
+                                                                {selectedOrder.customerGstin && (
+                                                                    <span className="text-[9px] font-mono font-bold bg-maroon/10 text-maroon px-2 py-0.5 rounded border border-maroon/20">
+                                                                        GSTIN: {selectedOrder.customerGstin}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            <div className="flex items-start gap-3">
+                                                                <div className="h-10 w-10 shrink-0 rounded-full bg-gradient-to-br from-maroon to-maroon-dark text-gold flex items-center justify-center font-bold text-sm shadow-sm">
+                                                                    {getInitials(selectedOrder.customerName)}
+                                                                </div>
+                                                                <div className="text-xs space-y-1 min-w-0 flex-1">
+                                                                    <div className="font-bold text-gray-900 truncate text-sm">{selectedOrder.customerName}</div>
+                                                                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-gray-600">
+                                                                        <a
+                                                                            href={`tel:${selectedOrder.customerPhone}`}
+                                                                            className="flex items-center gap-1 text-maroon hover:underline font-mono font-medium"
+                                                                        >
+                                                                            <Phone className="h-3 w-3 text-gray-400" />
+                                                                            {selectedOrder.customerPhone || 'No phone'}
+                                                                        </a>
+                                                                        {selectedOrder.customerEmail && (
+                                                                            <a
+                                                                                href={`mailto:${selectedOrder.customerEmail}`}
+                                                                                className="flex items-center gap-1 text-gray-600 hover:text-maroon hover:underline truncate"
+                                                                            >
+                                                                                <Mail className="h-3 w-3 text-gray-400 shrink-0" />
+                                                                                <span className="truncate">{selectedOrder.customerEmail}</span>
+                                                                            </a>
                                                                         )}
                                                                     </div>
-                                                                    {item.sku && <div className="text-[9px] text-gray-400 font-mono">SKU: {item.sku}</div>}
-                                                                </TableCell>
-                                                                <TableCell className={cn("py-1 text-xs text-center font-mono", isItemCancelled && "line-through text-gray-400")}>
-                                                                    {item.quantity}
-                                                                </TableCell>
-                                                                <TableCell className={cn("py-1 text-xs text-right font-mono", isItemCancelled && "line-through text-gray-400")}>
-                                                                    ₹{item.unitPrice.toLocaleString()}
-                                                                </TableCell>
-                                                                <TableCell className={cn("py-1 text-xs text-right font-mono", isItemCancelled && "line-through text-gray-400")}>
-                                                                    ₹{item.totalPrice.toLocaleString()}
-                                                                </TableCell>
-                                                                <TableCell className="py-1 text-center">
-                                                                    {canCancelItem ? (
-                                                                        <Button
-                                                                            size="sm"
-                                                                            variant="ghost"
-                                                                            className="h-6 px-2 text-[10px] font-semibold text-rose-700 hover:text-rose-800 hover:bg-rose-100 rounded cursor-pointer"
-                                                                            onClick={() => {
-                                                                                setCancellingItem({
-                                                                                    orderId: selectedOrder.id,
-                                                                                    itemId: item.id,
-                                                                                    name: item.productName
-                                                                                });
-                                                                                setItemCancelReason('Item cancelled by admin');
-                                                                            }}
-                                                                            disabled={updateStatusMutation.isPending}
-                                                                        >
-                                                                            Cancel
-                                                                        </Button>
-                                                                    ) : isItemCancelled ? (
-                                                                        <span className="text-[9px] text-rose-600 font-medium">Cancelled</span>
-                                                                    ) : (
-                                                                        <span className="text-[9px] text-gray-400">-</span>
-                                                                    )}
-                                                                </TableCell>
-                                                            </TableRow>
-                                                        );
-                                                    })}
-                                                </TableBody>
-                                            </Table>
+                                                                </div>
+                                                            </div>
+                                                        </div>
 
-                                            {/* Financial Summary */}
-                                            <div className="p-3.5 bg-slate-50 border-t border-gold/10 space-y-2 text-xs text-gray-600 font-sans">
-                                                {selectedOrder.items?.some(i => (i.itemStatus || '').toLowerCase() === 'cancelled') && (
-                                                    <div className="text-[10px] text-rose-700 bg-rose-50/70 border border-rose-200/80 px-2.5 py-1.5 rounded flex items-center gap-1.5 font-medium">
-                                                        <Ban className="h-3 w-3 shrink-0" />
-                                                        <span>Totals reflect active items only. Cancelled items have been deducted.</span>
+                                                        {/* Structured Shipping Destination Address Card */}
+                                                        {(() => {
+                                                            const fullCopyAddress = [
+                                                                parsedAddr.recipientName || selectedOrder.customerName,
+                                                                parsedAddr.phone || selectedOrder.customerPhone ? `Phone: ${parsedAddr.phone || selectedOrder.customerPhone}` : '',
+                                                                parsedAddr.street,
+                                                                parsedAddr.landmark ? `Landmark: ${parsedAddr.landmark}` : '',
+                                                                [parsedAddr.city, parsedAddr.state].filter(Boolean).join(', ') + (parsedAddr.pincode ? ` - ${parsedAddr.pincode}` : ''),
+                                                                parsedAddr.country || 'India'
+                                                            ].filter(Boolean).join('\n') || parsedAddr.formattedAddress || parsedAddr.fullFormatted || formatAddress(selectedOrder.shippingAddress);
+
+                                                            const mapsQuery = parsedAddr.formattedAddress || formatAddress(selectedOrder.shippingAddress) || [parsedAddr.city, parsedAddr.state, parsedAddr.country].filter(Boolean).join(', ');
+
+                                                            return (
+                                                                <div className="border border-gold/15 p-3.5 rounded-lg bg-slate-50 space-y-2.5">
+                                                                    <div className="flex items-center justify-between border-b border-gold/10 pb-1.5">
+                                                                        <div className="flex items-center gap-1.5">
+                                                                            <MapPin className="h-4 w-4 text-maroon" />
+                                                                            <span className="text-[10px] font-bold text-maroon uppercase tracking-wider">Shipping Destination</span>
+                                                                        </div>
+                                                                        <div className="flex items-center gap-1">
+                                                                            <Button
+                                                                                size="sm"
+                                                                                variant="ghost"
+                                                                                className={cn(
+                                                                                    "h-6 px-2 text-[10px] rounded flex items-center gap-1 cursor-pointer transition-colors",
+                                                                                    copiedAddressId === selectedOrder.id
+                                                                                        ? "text-emerald-700 bg-emerald-50 border border-emerald-200"
+                                                                                        : "text-gray-600 hover:text-maroon hover:bg-gold/10"
+                                                                                )}
+                                                                                onClick={async () => {
+                                                                                    const ok = await copyToClipboard(fullCopyAddress, 'Shipping address');
+                                                                                    if (ok) {
+                                                                                        setCopiedAddressId(selectedOrder.id);
+                                                                                        setTimeout(() => setCopiedAddressId(null), 2500);
+                                                                                    }
+                                                                                }}
+                                                                                title="Copy full delivery address to clipboard"
+                                                                            >
+                                                                                {copiedAddressId === selectedOrder.id ? (
+                                                                                    <>
+                                                                                        <Check className="h-3 w-3 text-emerald-600" />
+                                                                                        <span className="font-semibold text-emerald-700">Copied!</span>
+                                                                                    </>
+                                                                                ) : (
+                                                                                    <>
+                                                                                        <Copy className="h-3 w-3" />
+                                                                                        <span>Copy</span>
+                                                                                    </>
+                                                                                )}
+                                                                            </Button>
+                                                                            {mapsQuery && (
+                                                                                <a
+                                                                                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}`}
+                                                                                    target="_blank"
+                                                                                    rel="noreferrer"
+                                                                                    className="h-6 px-2 text-[10px] text-gray-600 hover:text-maroon hover:bg-gold/10 rounded inline-flex items-center gap-1 font-medium transition-colors"
+                                                                                    title="Open location in Google Maps"
+                                                                                >
+                                                                                    <ExternalLink className="h-3 w-3" />
+                                                                                    Maps
+                                                                                </a>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+
+                                                                    <div className="text-xs space-y-1.5">
+                                                                        <div className="flex items-baseline justify-between gap-2">
+                                                                            <span className="font-bold text-gray-900 text-sm">
+                                                                                {parsedAddr.recipientName || selectedOrder.customerName}
+                                                                            </span>
+                                                                            {parsedAddr.phone && (
+                                                                                <span className="text-[11px] font-mono text-gray-600">
+                                                                                    📞 {parsedAddr.phone}
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+
+                                                                        {parsedAddr.street && (
+                                                                            <div className="text-gray-700 leading-snug">
+                                                                                {parsedAddr.street}
+                                                                            </div>
+                                                                        )}
+
+                                                                        {parsedAddr.landmark && (
+                                                                            <div className="text-gray-500 text-[11px] italic">
+                                                                                <span className="font-medium text-gray-600">Landmark:</span> {parsedAddr.landmark}
+                                                                            </div>
+                                                                        )}
+
+                                                                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-gray-800 font-medium pt-0.5">
+                                                                            {parsedAddr.city && <span>{parsedAddr.city}</span>}
+                                                                            {parsedAddr.state && (
+                                                                                <>
+                                                                                    <span className="text-gray-300">•</span>
+                                                                                    <span>{parsedAddr.state}</span>
+                                                                                </>
+                                                                            )}
+                                                                            {parsedAddr.pincode && (
+                                                                                <>
+                                                                                    <span className="text-gray-300">•</span>
+                                                                                    <span className="font-mono bg-white px-1.5 py-0.5 rounded border border-gray-200 text-gray-800 text-[11px]">
+                                                                                        PIN: {parsedAddr.pincode}
+                                                                                    </span>
+                                                                                </>
+                                                                            )}
+                                                                            <span className="text-gray-300">•</span>
+                                                                            <span className="text-gray-600">{parsedAddr.country || 'India'}</span>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })()}
+
+                                                        {/* Tax & GST Breakdown Card */}
+                                                        <div className="border border-gold/20 rounded-lg p-3 bg-gradient-to-br from-cream/20 to-white space-y-2.5">
+                                                            <div className="flex items-center justify-between border-b border-gold/10 pb-1.5">
+                                                                <div className="flex items-center gap-1.5">
+                                                                    <Receipt className="h-4 w-4 text-maroon" />
+                                                                    <span className="text-[10px] font-bold text-maroon uppercase tracking-wider">Tax & GST Breakdown</span>
+                                                                </div>
+                                                                <span className="text-[10px] font-mono font-bold text-gray-600 bg-white px-2 py-0.5 rounded border border-gold/20">
+                                                                    Inv #{selectedOrder.invoiceNumber || selectedOrder.orderNumber}
+                                                                </span>
+                                                            </div>
+
+                                                            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                                                                <span className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+                                                                    isIntraState 
+                                                                        ? 'bg-blue-50 text-blue-800 border-blue-200' 
+                                                                        : 'bg-purple-50 text-purple-800 border-purple-200'
+                                                                }`}>
+                                                                    <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                                                                    {isIntraState ? 'Intra-State Supply (Bihar)' : `Inter-State Supply (${posState})`}
+                                                                </span>
+                                                                <span className="text-[11px] text-gray-600">
+                                                                    Place of Supply: <strong className="text-gray-900">{posState}</strong>
+                                                                </span>
+                                                            </div>
+
+                                                            {/* Tax Grid Breakdown */}
+                                                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-0.5">
+                                                                <div className="bg-white p-2 rounded border border-gold/15 text-center">
+                                                                    <span className="text-[9px] font-bold text-gray-500 uppercase block">Taxable Base</span>
+                                                                    <span className="text-xs font-bold font-mono text-gray-800">₹{taxableAmt.toLocaleString()}</span>
+                                                                </div>
+                                                                {isIntraState ? (
+                                                                    <>
+                                                                        <div className="bg-white p-2 rounded border border-gold/15 text-center">
+                                                                            <span className="text-[9px] font-bold text-blue-700 uppercase block">CGST (2.5%)</span>
+                                                                            <span className="text-xs font-bold font-mono text-gray-800">₹{cgstAmt.toLocaleString()}</span>
+                                                                        </div>
+                                                                        <div className="bg-white p-2 rounded border border-gold/15 text-center">
+                                                                            <span className="text-[9px] font-bold text-blue-700 uppercase block">SGST (2.5%)</span>
+                                                                            <span className="text-xs font-bold font-mono text-gray-800">₹{sgstAmt.toLocaleString()}</span>
+                                                                        </div>
+                                                                    </>
+                                                                ) : (
+                                                                    <div className="bg-white p-2 rounded border border-purple-200 text-center col-span-2 sm:col-span-2">
+                                                                        <span className="text-[9px] font-bold text-purple-700 uppercase block">IGST (5%)</span>
+                                                                        <span className="text-xs font-bold font-mono text-gray-800">₹{igstAmt.toLocaleString()}</span>
+                                                                    </div>
+                                                                )}
+                                                                <div className="bg-white p-2 rounded border border-gold/20 text-center bg-cream/10">
+                                                                    <span className="text-[9px] font-bold text-maroon uppercase block">Total GST</span>
+                                                                    <span className="text-xs font-bold font-mono text-maroon">₹{totalGstAmt.toLocaleString()}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
                                                     </div>
-                                                )}
-                                                <div className="flex justify-between">
-                                                    <span className="text-gray-500">Subtotal</span>
-                                                    <span className="font-mono">₹{selectedOrder.subtotal.toLocaleString()}</span>
-                                                </div>
-                                                <div className="flex justify-between">
-                                                    <span className="text-gray-500">Shipping Fee</span>
-                                                    <span className="font-mono">₹{selectedOrder.shippingFee.toLocaleString()}</span>
-                                                </div>
-                                                {selectedOrder.discount > 0 && (
-                                                    <div className="flex justify-between text-red-600">
-                                                        <span>Discount</span>
-                                                        <span className="font-mono">-₹{selectedOrder.discount.toLocaleString()}</span>
+
+                                                    {/* Order Items Registry */}
+                                                    <div className="border border-gold/15 rounded-lg overflow-hidden bg-white">
+                                                        <div className="bg-cream/15 p-2.5 border-b border-gold/10 text-[10px] font-bold text-maroon uppercase tracking-wider flex items-center gap-1.5">
+                                                            <PackageOpen className="h-3.5 w-3.5" /> Items Registry
+                                                            <span className="ml-auto text-[9px] font-bold text-gray-500 bg-white px-2 py-0.5 rounded-full border border-gold/15 font-mono flex items-center gap-1">
+                                                                <span>{selectedOrder.items?.length || 0} items</span>
+                                                                {selectedOrder.items?.some(i => (i.itemStatus || '').toLowerCase() === 'cancelled') && (
+                                                                    <span className="text-rose-600 font-sans font-semibold">
+                                                                        ({selectedOrder.items.filter(i => (i.itemStatus || '').toLowerCase() !== 'cancelled').length} active)
+                                                                    </span>
+                                                                )}
+                                                            </span>
+                                                        </div>
+                                                        <div className="overflow-x-auto">
+                                                            <Table className="min-w-[520px]">
+                                                                <TableHeader className="bg-slate-50">
+                                                                    <TableRow className="border-b border-gold/10 hover:bg-transparent">
+                                                                        <TableHead className="h-8 py-1 text-[9px] font-bold text-gray-500 uppercase">Product</TableHead>
+                                                                        <TableHead className="h-8 py-1 text-[9px] font-bold text-gray-500 text-center uppercase">Qty</TableHead>
+                                                                        <TableHead className="h-8 py-1 text-[9px] font-bold text-gray-500 text-right uppercase">Unit Price</TableHead>
+                                                                        <TableHead className="h-8 py-1 text-[9px] font-bold text-gray-500 text-right uppercase">Taxable</TableHead>
+                                                                        <TableHead className="h-8 py-1 text-[9px] font-bold text-gray-500 text-right uppercase">GST (5%)</TableHead>
+                                                                        <TableHead className="h-8 py-1 text-[9px] font-bold text-gray-500 text-right uppercase">Total</TableHead>
+                                                                        <TableHead className="h-8 py-1 text-[9px] font-bold text-gray-500 text-center w-14 uppercase">Action</TableHead>
+                                                                    </TableRow>
+                                                                </TableHeader>
+                                                                <TableBody>
+                                                                    {selectedOrder.items?.map((item) => {
+                                                                        const isItemCancelled = (item.itemStatus || '').toLowerCase() === 'cancelled';
+                                                                        const canCancelItem = !isItemCancelled && !['delivered', 'cancelled', 'returned'].includes(selectedOrder.orderStatus);
+                                                                        const itemTaxable = item.taxableValue ?? Math.round(item.totalPrice / 1.05);
+                                                                        const itemGst = item.gstAmount ?? Math.max(0, item.totalPrice - itemTaxable);
+
+                                                                        return (
+                                                                            <TableRow key={item.id} className={cn("border-b border-gold/5", isItemCancelled && "bg-rose-50/40 opacity-75")}>
+                                                                                <TableCell className="py-2 text-xs">
+                                                                                    <div className="flex items-center gap-2">
+                                                                                        {item.imageUrl ? (
+                                                                                            <img
+                                                                                                src={item.imageUrl}
+                                                                                                alt={item.productName}
+                                                                                                className="h-10 w-10 object-cover rounded border border-gold/20 shrink-0 bg-white"
+                                                                                            />
+                                                                                        ) : (
+                                                                                            <div className="h-10 w-10 rounded border border-dashed border-gold/30 bg-slate-50 flex items-center justify-center shrink-0 text-gray-400">
+                                                                                                <Package className="h-4 w-4" />
+                                                                                            </div>
+                                                                                        )}
+                                                                                        <div className="min-w-0 space-y-0.5">
+                                                                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                                                                                <span className={cn("font-semibold text-gray-900 leading-snug line-clamp-1", isItemCancelled && "line-through text-gray-400")}>
+                                                                                                    {item.productName}
+                                                                                                </span>
+                                                                                                {isItemCancelled && (
+                                                                                                    <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-50 text-rose-700 border border-rose-200 shrink-0">
+                                                                                                        Cancelled
+                                                                                                    </span>
+                                                                                                )}
+                                                                                            </div>
+                                                                                            <div className="flex flex-wrap items-center gap-1 text-[9px] font-mono text-gray-500">
+                                                                                                <span className="bg-slate-100 px-1 py-0.2 rounded">HSN: {item.hsnCode || '5208'}</span>
+                                                                                                {item.sku && <span className="bg-slate-100 px-1 py-0.2 rounded truncate max-w-[90px]">SKU: {item.sku}</span>}
+                                                                                                {item.color && <span className="bg-slate-100 px-1 py-0.2 rounded">Color: {item.color}</span>}
+                                                                                                {item.size && <span className="bg-slate-100 px-1 py-0.2 rounded">Size: {item.size}</span>}
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                </TableCell>
+                                                                                <TableCell className={cn("py-2 text-xs text-center font-mono font-medium", isItemCancelled && "line-through text-gray-400")}>
+                                                                                    {item.quantity}
+                                                                                </TableCell>
+                                                                                <TableCell className={cn("py-2 text-xs text-right font-mono", isItemCancelled && "line-through text-gray-400")}>
+                                                                                    ₹{item.unitPrice.toLocaleString()}
+                                                                                </TableCell>
+                                                                                <TableCell className={cn("py-2 text-xs text-right font-mono text-gray-600", isItemCancelled && "line-through text-gray-400")}>
+                                                                                    ₹{itemTaxable.toLocaleString()}
+                                                                                </TableCell>
+                                                                                <TableCell className={cn("py-2 text-xs text-right font-mono text-gray-600", isItemCancelled && "line-through text-gray-400")}>
+                                                                                    ₹{itemGst.toLocaleString()}
+                                                                                </TableCell>
+                                                                                <TableCell className={cn("py-2 text-xs text-right font-mono font-bold text-gray-900", isItemCancelled && "line-through text-gray-400")}>
+                                                                                    ₹{item.totalPrice.toLocaleString()}
+                                                                                </TableCell>
+                                                                                <TableCell className="py-2 text-center">
+                                                                                    {canCancelItem ? (
+                                                                                        <Button
+                                                                                            size="sm"
+                                                                                            variant="ghost"
+                                                                                            className="h-6 px-1.5 text-[10px] font-semibold text-rose-700 hover:text-rose-800 hover:bg-rose-100 rounded cursor-pointer"
+                                                                                            onClick={() => {
+                                                                                                setCancellingItem({
+                                                                                                    orderId: selectedOrder.id,
+                                                                                                    itemId: item.id,
+                                                                                                    name: item.productName
+                                                                                                });
+                                                                                                setItemCancelReason('Item cancelled by admin');
+                                                                                            }}
+                                                                                            disabled={updateStatusMutation.isPending}
+                                                                                        >
+                                                                                            Cancel
+                                                                                        </Button>
+                                                                                    ) : isItemCancelled ? (
+                                                                                        <span className="text-[9px] text-rose-600 font-medium">Cancelled</span>
+                                                                                    ) : (
+                                                                                        <span className="text-[9px] text-gray-400">-</span>
+                                                                                    )}
+                                                                                </TableCell>
+                                                                            </TableRow>
+                                                                        );
+                                                                    })}
+                                                                </TableBody>
+                                                           </Table>
+                                                        </div>
+
+                                                        {/* Financial Summary & Tax Calculation Card */}
+                                                        <div className="p-4 bg-slate-50 border-t border-gold/15 space-y-2.5 text-xs text-gray-700 font-sans">
+                                                            {selectedOrder.items?.some(i => (i.itemStatus || '').toLowerCase() === 'cancelled') && (
+                                                                <div className="text-[10px] text-rose-700 bg-rose-50/80 border border-rose-200 px-2.5 py-1.5 rounded flex items-center gap-1.5 font-medium">
+                                                                    <Ban className="h-3.5 w-3.5 shrink-0" />
+                                                                    <span>Totals reflect active items only. Cancelled items have been deducted.</span>
+                                                                </div>
+                                                            )}
+                                                            <div className="space-y-1.5">
+                                                                <div className="flex justify-between">
+                                                                    <span className="text-gray-500">Items Subtotal</span>
+                                                                    <span className="font-mono font-medium">₹{selectedOrder.subtotal.toLocaleString()}</span>
+                                                                </div>
+                                                                {selectedOrder.discount > 0 && (
+                                                                    <div className="flex justify-between text-rose-600 font-medium">
+                                                                        <span className="flex items-center gap-1">
+                                                                            Coupon Discount
+                                                                            {selectedOrder.couponCode && (
+                                                                                <span className="text-[9px] font-mono uppercase bg-rose-100 px-1.5 py-0.2 rounded text-rose-800">
+                                                                                    {selectedOrder.couponCode}
+                                                                                </span>
+                                                                            )}
+                                                                        </span>
+                                                                        <span className="font-mono">-₹{selectedOrder.discount.toLocaleString()}</span>
+                                                                    </div>
+                                                                )}
+                                                                <div className="flex justify-between">
+                                                                    <span className="text-gray-500">Shipping Charges</span>
+                                                                    <span className="font-mono font-medium">
+                                                                        {selectedOrder.shippingFee > 0 ? `₹${selectedOrder.shippingFee.toLocaleString()}` : <span className="text-emerald-600 font-semibold uppercase text-[10px]">FREE</span>}
+                                                                    </span>
+                                                                </div>
+                                                                {selectedOrder.isGift && (
+                                                                    <div className="flex justify-between text-pink-700">
+                                                                        <span className="flex items-center gap-1">🎁 Gift Packaging & Ribbon</span>
+                                                                        <span className="font-mono font-medium">+₹100</span>
+                                                                    </div>
+                                                                )}
+                                                                <div className="border-t border-dashed border-gold/20 pt-1.5 flex justify-between text-[11px] text-gray-500">
+                                                                    <span>Taxable Amount (Base)</span>
+                                                                    <span className="font-mono">₹{taxableAmt.toLocaleString()}</span>
+                                                                </div>
+                                                                <div className="flex justify-between text-[11px] text-gray-500">
+                                                                    <span>
+                                                                        {isIntraState ? 'GST (CGST 2.5% + SGST 2.5%)' : `GST (IGST 5% - ${posState})`}
+                                                                    </span>
+                                                                    <span className="font-mono">₹{totalGstAmt.toLocaleString()}</span>
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="flex justify-between items-center font-bold text-maroon border-t border-gold/20 pt-2.5">
+                                                                <div>
+                                                                    <div className="text-sm">Grand Total</div>
+                                                                    <div className="text-[9px] font-normal text-gray-500 uppercase tracking-wider">Inclusive of all taxes & delivery</div>
+                                                                </div>
+                                                                <span className="font-mono text-lg text-maroon font-extrabold">₹{selectedOrder.totalAmount.toLocaleString()}</span>
+                                                            </div>
+
+                                                            {/* Invoice & Receipt Actions */}
+                                                            <div className="pt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                                <Button
+                                                                    size="sm"
+                                                                    className="bg-gradient-to-r from-maroon via-maroon to-maroon-dark hover:from-maroon-dark hover:to-maroon text-gold font-bold text-xs flex items-center justify-center gap-2 h-9 shadow-sm cursor-pointer border border-gold/30"
+                                                                    onClick={() => handleOpenInvoice(selectedOrder)}
+                                                                >
+                                                                    <FileText className="h-3.5 w-3.5" />
+                                                                    Tax Invoice & Receipt
+                                                                </Button>
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="outline"
+                                                                    className="border-gold/30 hover:bg-gold/10 text-maroon text-xs font-semibold flex items-center justify-center gap-1.5 h-9 cursor-pointer"
+                                                                    onClick={() => handleDirectDownloadInvoice(selectedOrder)}
+                                                                    disabled={isDownloadingInvoice}
+                                                                    title="Directly download PDF invoice file without preview"
+                                                                >
+                                                                    {isDownloadingInvoice ? (
+                                                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                                    ) : (
+                                                                        <Download className="h-3.5 w-3.5" />
+                                                                    )}
+                                                                    <span>Download Invoice</span>
+                                                                </Button>
+                                                            </div>
+                                                        </div>
                                                     </div>
-                                                )}
-                                                <div className="flex justify-between items-center font-bold text-maroon border-t border-gold/10 pt-2">
-                                                    <span className="text-sm">Total Amount</span>
-                                                    <span className="font-mono text-base">₹{selectedOrder.totalAmount.toLocaleString()}</span>
-                                                </div>
-                                                <Button
-                                                    size="sm"
-                                                    variant="outline"
-                                                    className="w-full border-gold/30 hover:bg-gold/10 text-maroon text-xs font-semibold flex items-center justify-center gap-1.5 h-9"
-                                                    onClick={() => window.open(generateReceiptUrl(selectedOrder), '_blank')}
-                                                >
-                                                    <Printer className="h-3.5 w-3.5" />
-                                                    Print / Save Receipt
-                                                </Button>
-                                            </div>
-                                        </div>
+                                                </>
+                                            );
+                                        })()}
 
                                         {/* Notes */}
                                         {selectedOrder.notes && (
@@ -1647,6 +2248,13 @@ export default function OrdersPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            {/* Tax Invoice & Receipt Modal */}
+            <ReceiptModal
+                isOpen={isReceiptModalOpen}
+                onClose={() => setIsReceiptModalOpen(false)}
+                sale={receiptOrder}
+            />
         </div>
     );
 }

@@ -313,8 +313,8 @@ export default function ExchangePage() {
         const now = new Date();
         const diffDays = Math.ceil((now.getTime() - saleDate.getTime()) / (1000 * 3600 * 24));
 
-        if (diffDays > 7) {
-            toast.error(`Sale is more than 7 days old (${diffDays} days). Exchange period expired.`);
+        if (diffDays > 3) {
+            toast.error(`Sale is more than 3 days old (${diffDays} days). Exchange period expired.`);
             return;
         }
 

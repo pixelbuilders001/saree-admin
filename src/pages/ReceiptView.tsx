@@ -14,7 +14,7 @@ const SHOP = {
 };
 
 const TERMS = [
-    'Goods once sold can be exchanged within 7 days with the original invoice and Silk Mark tag intact.',
+    'Goods once sold can be exchanged within 3 days with the original invoice and Silk Mark tag intact.',
     'No cash refunds; exchange or store credit only.',
     'Dry clean only for all pure silk products.',
     'Any disputes are subject to Bihar Jurisdiction only.',
