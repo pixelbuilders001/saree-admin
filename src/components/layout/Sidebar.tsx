@@ -19,7 +19,8 @@ import {
     Heart,
     Megaphone,
     Bell,
-    Presentation
+    Presentation,
+    LayoutGrid
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -56,6 +57,7 @@ const navGroups = [
     {
         title: "Storefront & Engagement",
         items: [
+            { icon: LayoutGrid, label: 'Homepage', path: '/homepage' },
             { icon: MessageSquare, label: 'Reviews', path: '/reviews' },
             { icon: Heart, label: 'Wishlists', path: '/wishlist' },
             { icon: BarChart3, label: 'Online Reports', path: '/storefront-reports' },
