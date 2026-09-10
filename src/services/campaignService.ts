@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { compressImage } from '@/lib/imageCompressor';
+import { uploadToImageKit } from '@/services/imagekitService';
 
 export interface Campaign {
     id: string;
@@ -86,40 +87,29 @@ export const campaignService = {
     },
 
     uploadBanner: async (file: File, campaignSlug: string, type: 'desktop' | 'mobile'): Promise<string> => {
-        // Compress image to ensure performance (max 800KB, max width/height 2400px for desktop)
-        const compressedFile = await compressImage(file, 800, 2400);
-        const fileExt = compressedFile.name.split('.').pop();
-        const fileName = `${campaignSlug}/${type}_${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
-        const filePath = `${fileName}`;
+        // Compress image to WebP (max 800KB, max width/height 2400px)
+        const compressedFile = await compressImage(file, 800, 2400, 'image/webp');
+        const cleanSlug = campaignSlug.toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+        const fileName = `${cleanSlug}_${type}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.webp`;
 
-        const { error: uploadError } = await supabase.storage
-            .from('campaign-banners')
-            .upload(filePath, compressedFile, {
-                cacheControl: '3600',
-                upsert: true
-            });
-
-        if (uploadError) throw uploadError;
-
-        const { data: { publicUrl } } = supabase.storage
-            .from('campaign-banners')
-            .getPublicUrl(filePath);
-
-        return publicUrl;
+        // Upload to ImageKit in '/campaign-banners' folder
+        const result = await uploadToImageKit(compressedFile, fileName, '/campaign-banners');
+        return result.url;
     },
 
     deleteBannerByUrl: async (url: string): Promise<void> => {
         if (!url) return;
         try {
-            // Extract the relative path in the storage bucket from the public URL
-            // e.g., https://[project-id].supabase.co/storage/v1/object/public/campaign-banners/slug/desktop_abc.jpg
-            const bucketPrefix = '/campaign-banners/';
-            const index = url.indexOf(bucketPrefix);
-            if (index !== -1) {
-                const filePath = decodeURIComponent(url.substring(index + bucketPrefix.length));
-                await supabase.storage
-                    .from('campaign-banners')
-                    .remove([filePath]);
+            // Clean up older Supabase storage files if applicable
+            if (url.includes('supabase') || url.includes('/campaign-banners/')) {
+                const bucketPrefix = '/campaign-banners/';
+                const index = url.indexOf(bucketPrefix);
+                if (index !== -1) {
+                    const filePath = decodeURIComponent(url.substring(index + bucketPrefix.length));
+                    await supabase.storage
+                        .from('campaign-banners')
+                        .remove([filePath]);
+                }
             }
         } catch (error) {
             console.error('Failed to delete campaign banner image:', error);

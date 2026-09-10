@@ -244,8 +244,8 @@ export default function CampaignsPage() {
         setBannerPreviewUrl(rawUrl);
 
         try {
-            // Compress: max 800 KB threshold, max 2400px
-            const compressed = await compressImage(file, 800, 2400);
+            // Compress: max 800 KB threshold, max 2400px, WebP format
+            const compressed = await compressImage(file, 800, 2400, 'image/webp');
             const compressedKB = Math.round(compressed.size / 1024);
 
             URL.revokeObjectURL(rawUrl);
@@ -1010,7 +1010,7 @@ export default function CampaignsPage() {
                                                 <>
                                                     <Upload className="h-6 w-6 text-gold/60 mx-auto mb-1.5" />
                                                     <p className="text-[10.5px] font-semibold text-gray-700">Click to upload campaign banner</p>
-                                                    <p className="text-[9px] text-gray-400 mt-0.5">Supports PNG, JPG, JPEG, WebP. Auto-compressed before upload.</p>
+                                                    <p className="text-[9px] text-gray-400 mt-0.5">Supports PNG, JPG, WebP. Auto-optimized & uploaded to ImageKit CDN.</p>
                                                 </>
                                             )}
                                         </div>
