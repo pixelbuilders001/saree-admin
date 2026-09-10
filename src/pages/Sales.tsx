@@ -86,6 +86,8 @@ export default function SalesPage() {
     const [lastScannedBarcode, setLastScannedBarcode] = React.useState<string | null>(null);
     const [isProcessingScan, setIsProcessingScan] = React.useState(false);
     const [isRemoteLinkOpen, setIsRemoteLinkOpen] = React.useState(false);
+    const [isCustomerDetailsOpen, setIsCustomerDetailsOpen] = React.useState(false);
+    const [isBreakdownOpen, setIsBreakdownOpen] = React.useState(false);
     const [searchParams] = useSearchParams();
     const remoteMode = searchParams.get('remoteMode');
     const urlSessionId = searchParams.get('sessionId');
@@ -640,15 +642,15 @@ export default function SalesPage() {
     }
 
     return (
-        <div className="h-[calc(100vh-56px)] lg:h-screen flex flex-col gap-2 overflow-hidden -m-4 lg:-m-8 p-3 lg:p-3.5 text-sm bg-cream/10">
-            {/* Main Work Area: Catalogue + Cart */}
+        <div className="h-[calc(100vh-70px)] lg:h-screen flex flex-col gap-2 overflow-hidden -mx-4 -mb-6 mt-0 lg:-m-8 p-2.5 lg:p-3.5 text-sm bg-cream/10">
+            {/* Main Work Area: Catalogue (Desktop only) + Checkout Terminal */}
             <div className="flex-1 flex flex-col lg:flex-row gap-3 min-h-0">
-            {/* Left Panel: Inventory Catalog & Filters */}
+            {/* Left Panel: Inventory Catalog & Filters (Desktop only) */}
             <motion.div
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3 }}
-                className="flex-1 flex flex-col min-w-0 bg-white rounded-xl border border-gold/20 overflow-hidden shadow-md"
+                className="hidden lg:flex flex-1 flex-col min-w-0 bg-white rounded-xl border border-gold/20 overflow-hidden shadow-md"
             >
                 {/* Catalog Header */}
                 <div className="px-4 py-3 border-b border-gold/10 bg-gradient-to-r from-cream/50 to-transparent flex items-center justify-between">
@@ -690,20 +692,20 @@ export default function SalesPage() {
                             </button>
                         )}
                     </div>
-                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <div className="flex items-center gap-2">
                         <Button
                             type="button"
                             variant="outline"
-                            className="h-10 px-3 border-gold/30 text-maroon hover:bg-gold/10 gap-1.5 text-xs font-semibold w-full sm:w-auto shadow-sm"
+                            className="h-10 px-3 border-gold/30 text-maroon hover:bg-gold/10 gap-1.5 text-xs font-semibold shadow-sm"
                             onClick={() => setIsScannerOpen(true)}
                         >
                             <ScanLine className="h-4 w-4" />
                             Scan Barcode
                         </Button>
                         <Button
+                            type="button"
                             variant="outline"
-                            size="sm"
-                            className="h-10 px-3 text-maroon hover:bg-maroon/5 gap-1.5 border-gold/30 text-xs font-semibold w-full sm:w-auto shadow-sm"
+                            className="h-10 px-3 text-maroon hover:bg-maroon/5 gap-1.5 border-gold/30 text-xs font-semibold shadow-sm"
                             onClick={() => setIsRemoteLinkOpen(true)}
                         >
                             <Smartphone className="h-4 w-4" />
@@ -835,6 +837,7 @@ export default function SalesPage() {
                     )}
 
                 </div>
+
             </motion.div>
 
             {/* Right Panel: POS Sidebar (Billing & Customer details) */}
@@ -861,69 +864,113 @@ export default function SalesPage() {
                             </span>
                         )}
                     </div>
-                    {cart.length > 0 && (
-                        <button
+                    <div className="flex items-center gap-1.5">
+                        <Button
                             type="button"
-                            onClick={() => setCart([])}
-                            className="text-[10px] text-gold/80 hover:text-white bg-gold/10 hover:bg-gold/20 border border-gold/20 px-2 py-0.5 rounded transition-colors font-medium flex items-center gap-1"
-                            title="Clear all cart items"
+                            variant="outline"
+                            size="sm"
+                            className="sm:hidden h-7.5 px-2 text-gold border-gold/30 hover:bg-gold/20 gap-1 text-[11px] font-semibold bg-gold/10"
+                            onClick={() => setIsScannerOpen(true)}
+                            title="Scan Barcode"
                         >
-                            <Trash2 className="h-3 w-3" />
-                            Clear
-                        </button>
-                    )}
+                            <ScanLine className="h-3.5 w-3.5 shrink-0" />
+                            <span>Scan<span className="hidden min-[400px]:inline"> Barcode</span></span>
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="sm:hidden h-7.5 px-2 text-gold border-gold/30 hover:bg-gold/20 gap-1 text-[11px] font-semibold bg-gold/10"
+                            onClick={() => setIsRemoteLinkOpen(true)}
+                            title="Remote Mobile Scanner"
+                        >
+                            <Smartphone className="h-3.5 w-3.5 shrink-0" />
+                            <span>Remote<span className="hidden min-[400px]:inline"> Scan</span></span>
+                        </Button>
+                        {cart.length > 0 && (
+                            <button
+                                type="button"
+                                onClick={() => setCart([])}
+                                className="text-[10px] text-gold/80 hover:text-white bg-gold/10 hover:bg-gold/20 border border-gold/20 px-2 py-0.5 rounded transition-colors font-medium flex items-center gap-1"
+                                title="Clear all cart items"
+                            >
+                                <Trash2 className="h-3 w-3" />
+                                Clear
+                            </button>
+                        )}
+                    </div>
                 </div>
 
-                {/* Customer & Staff Details Form (Compact) */}
-                <div className="px-3 py-2 border-b border-gray-100 bg-stone-50/50 space-y-1.5 shrink-0">
-                    <div className="grid grid-cols-2 gap-1.5">
-                        <div className="relative">
+                {/* Customer & Staff Details Form (Compact & Collapsible on Mobile) */}
+                <div className="border-b border-gray-100 bg-stone-50/50 shrink-0">
+                    <button
+                        type="button"
+                        onClick={() => setIsCustomerDetailsOpen(prev => !prev)}
+                        className="lg:hidden w-full px-3 py-1.5 flex items-center justify-between text-xs hover:bg-stone-100/70 transition-colors border-b border-stone-100"
+                    >
+                        <span className="flex items-center gap-1.5 text-gray-700 truncate">
+                            <User className="h-3.5 w-3.5 text-maroon shrink-0" />
+                            <span className="font-semibold text-gray-800 truncate">
+                                {customerName || customerMobile ? `${customerName || 'Customer'} (${customerMobile || 'No mobile'})` : 'Walk-in Customer'}
+                            </span>
+                            <span className="text-[10px] text-gray-400">
+                                • {activeStaff.find(s => s.id === selectedStaffId)?.name || 'Self (0%)'}
+                            </span>
+                        </span>
+                        <span className="text-[10px] text-maroon font-bold flex items-center gap-0.5 ml-2 shrink-0">
+                            {isCustomerDetailsOpen ? 'Collapse ▴' : 'Edit Customer ▾'}
+                        </span>
+                    </button>
+                    <div className={cn("px-3 py-2 space-y-1.5", !isCustomerDetailsOpen && "hidden lg:block")}>
+                        <div className="grid grid-cols-2 gap-1.5">
+                            <div className="relative">
+                                <Input
+                                    placeholder="Mobile (10 digits)"
+                                    className="h-8 text-xs border-gold/25 focus-visible:ring-maroon pr-8 placeholder:text-gray-400 bg-white shadow-xs"
+                                    value={customerMobile}
+                                    onChange={(e) => {
+                                        const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                                        setCustomerMobile(val);
+                                    }}
+                                    maxLength={10}
+                                />
+                                {customerMobile.length > 0 && (
+                                    <button
+                                        type="button"
+                                        onClick={() => handleCustomerSearch()}
+                                        className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-maroon hover:text-maroon-dark font-bold"
+                                    >
+                                        Find
+                                    </button>
+                                )}
+                            </div>
                             <Input
-                                placeholder="Mobile (10 digits)"
-                                className="h-8 text-xs border-gold/25 focus-visible:ring-maroon pr-8 placeholder:text-gray-400 bg-white shadow-xs"
-                                value={customerMobile}
-                                onChange={(e) => {
-                                    const val = e.target.value.replace(/\D/g, '').slice(0, 10);
-                                    setCustomerMobile(val);
-                                }}
-                                maxLength={10}
+                                ref={customerNameInputRef}
+                                placeholder="Customer Name"
+                                className="h-8 text-xs border-gold/25 focus-visible:ring-maroon placeholder:text-gray-400 bg-white shadow-xs"
+                                value={customerName}
+                                onChange={(e) => setCustomerName(e.target.value)}
                             />
-                            {customerMobile.length > 0 && (
-                                <button
-                                    type="button"
-                                    onClick={() => handleCustomerSearch()}
-                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-maroon hover:text-maroon-dark font-bold"
-                                >
-                                    Find
-                                </button>
-                            )}
                         </div>
-                        <Input
-                            ref={customerNameInputRef}
-                            placeholder="Customer Name"
-                            className="h-8 text-xs border-gold/25 focus-visible:ring-maroon placeholder:text-gray-400 bg-white shadow-xs"
-                            value={customerName}
-                            onChange={(e) => setCustomerName(e.target.value)}
-                        />
-                    </div>
 
-                    <div className="flex items-center gap-1.5">
-                        <select
-                            value={selectedStaffId}
-                            onChange={(e) => setSelectedStaffId(e.target.value)}
-                            className={cn(
-                                "flex-1 h-8 text-xs border rounded-lg px-2 bg-white focus:outline-none focus:ring-1 focus:ring-maroon/30 shadow-xs",
-                                selectedStaffId ? "border-gold/25 text-gray-700 font-medium" : "border-amber-300 text-amber-700 font-bold"
-                            )}
-                        >
-                            <option value="">— Assign Salesperson * —</option>
-                            <option value="self">Self (0%)</option>
-                            {activeStaff.map((staff) => (
-                                <option key={staff.id} value={staff.id}>
-                                    {staff.name} ({staff.commission_rate}%)
-                                </option>
-                            ))}
-                        </select>
+                        <div className="flex items-center gap-1.5">
+                            <select
+                                value={selectedStaffId}
+                                onChange={(e) => setSelectedStaffId(e.target.value)}
+                                className={cn(
+                                    "flex-1 h-8 text-xs border rounded-lg px-2 bg-white focus:outline-none focus:ring-1 focus:ring-maroon/30 shadow-xs",
+                                    selectedStaffId ? "border-gold/25 text-gray-700 font-medium" : "border-amber-300 text-amber-700 font-bold"
+                                )}
+                            >
+                                <option value="">— Assign Salesperson * —</option>
+                                <option value="self">Self (0%)</option>
+                                {activeStaff.map((staff) => (
+                                    <option key={staff.id} value={staff.id}>
+                                        {staff.name} ({staff.commission_rate}%)
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
                     </div>
                 </div>
 
@@ -1126,119 +1173,144 @@ export default function SalesPage() {
                         </div>
                     </div>
 
-                    {/* Controls Row: Extra Discount & Store Voucher */}
-                    <div className="grid grid-cols-2 gap-2">
-                        {/* Extra Discount Input */}
-                        <div className="flex items-center justify-between bg-white border border-stone-200 rounded-lg px-2 py-1 shadow-xs">
-                            <span className="text-[10px] font-bold text-maroon shrink-0 flex items-center gap-0.5">
-                                <Edit2 className="h-2.5 w-2.5" /> Extra Disc
+                    {/* Mobile 1-Line Summary Bar & Toggle */}
+                    <button
+                        type="button"
+                        onClick={() => setIsBreakdownOpen(prev => !prev)}
+                        className="lg:hidden w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 flex items-center justify-between shadow-xs text-xs"
+                    >
+                        <div className="flex items-center gap-1.5 truncate">
+                            <span className="font-bold text-stone-600 text-[11px]">Net Payable:</span>
+                            <span className="font-mono font-black text-sm text-maroon">
+                                ₹{netPayable.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </span>
-                            <div className="flex items-center gap-1">
-                                <input
-                                    type="number"
-                                    min="0"
-                                    value={manualDiscountInput}
-                                    onChange={(e) => setManualDiscountInput(e.target.value)}
-                                    className="w-10 h-5 text-xs font-mono font-bold border border-amber-300 rounded bg-amber-50/80 text-center text-maroon focus:outline-none focus:ring-1 focus:ring-maroon"
-                                    placeholder="0"
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => setManualDiscountType(prev => prev === 'percentage' ? 'amount' : 'percentage')}
-                                    className="text-[9px] font-bold bg-maroon text-gold hover:bg-maroon-dark px-1.5 h-5 rounded font-mono transition-colors flex items-center justify-center"
-                                    title="Toggle % or ₹"
-                                >
-                                    {manualDiscountType === 'percentage' ? '%' : '₹'}
-                                </button>
-                            </div>
+                            {totalDiscountAmount > 0 && (
+                                <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200 shrink-0">
+                                    Saved ₹{totalDiscountAmount}
+                                </span>
+                            )}
                         </div>
+                        <span className="text-[10px] text-maroon font-bold flex items-center gap-0.5 ml-2 shrink-0">
+                            {isBreakdownOpen ? 'Hide breakdown ▴' : 'Discounts & Breakdown ▾'}
+                        </span>
+                    </button>
 
-                        {/* Store Voucher Input / Badge */}
-                        <div className="flex items-center bg-white border border-stone-200 rounded-lg p-1 shadow-xs">
-                            {appliedVoucher ? (
-                                <div className="flex items-center justify-between w-full text-[10px] bg-amber-50 rounded border border-amber-200 px-1.5 py-0.5 h-5.5">
-                                    <span className="font-bold text-amber-900 font-mono truncate">{appliedVoucher.code} (-₹{appliedVoucherAmount})</span>
-                                    <button
-                                        type="button"
-                                        onClick={handleClearVoucher}
-                                        className="text-[9px] text-red-600 hover:text-red-800 font-bold uppercase ml-1 shrink-0"
-                                    >
-                                        ✕
-                                    </button>
-                                </div>
-                            ) : (
-                                <div className="flex items-center gap-1 w-full">
+                    {/* Collapsible Details Container (Always visible on desktop, toggleable on mobile) */}
+                    <div className={cn("space-y-2", !isBreakdownOpen && "hidden lg:block")}>
+                        {/* Controls Row: Extra Discount & Store Voucher */}
+                        <div className="grid grid-cols-2 gap-2">
+                            {/* Extra Discount Input */}
+                            <div className="flex items-center justify-between bg-white border border-stone-200 rounded-lg px-2 py-1 shadow-xs">
+                                <span className="text-[10px] font-bold text-maroon shrink-0 flex items-center gap-0.5">
+                                    <Edit2 className="h-2.5 w-2.5" /> Extra Disc
+                                </span>
+                                <div className="flex items-center gap-1">
                                     <input
-                                        type="text"
-                                        placeholder="Voucher Code"
-                                        value={voucherCodeInput}
-                                        onChange={(e) => setVoucherCodeInput(e.target.value.toUpperCase())}
-                                        className="w-full text-[10px] border border-stone-200 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-maroon uppercase font-mono h-5.5 bg-white text-stone-800"
-                                        onKeyDown={(e) => e.key === 'Enter' && handleApplyVoucher()}
+                                        type="number"
+                                        min="0"
+                                        value={manualDiscountInput}
+                                        onChange={(e) => setManualDiscountInput(e.target.value)}
+                                        className="w-10 h-5 text-xs font-mono font-bold border border-amber-300 rounded bg-amber-50/80 text-center text-maroon focus:outline-none focus:ring-1 focus:ring-maroon"
+                                        placeholder="0"
                                     />
                                     <button
                                         type="button"
-                                        disabled={isCheckingVoucher || !voucherCodeInput.trim()}
-                                        onClick={handleApplyVoucher}
-                                        className="bg-maroon hover:bg-maroon-dark text-gold disabled:opacity-50 text-[9px] font-bold px-2 rounded transition-colors h-5.5 uppercase shrink-0"
+                                        onClick={() => setManualDiscountType(prev => prev === 'percentage' ? 'amount' : 'percentage')}
+                                        className="text-[9px] font-bold bg-maroon text-gold hover:bg-maroon-dark px-1.5 h-5 rounded font-mono transition-colors flex items-center justify-center"
+                                        title="Toggle % or ₹"
                                     >
-                                        {isCheckingVoucher ? '...' : 'APPLY'}
+                                        {manualDiscountType === 'percentage' ? '%' : '₹'}
                                     </button>
                                 </div>
+                            </div>
+
+                            {/* Store Voucher Input / Badge */}
+                            <div className="flex items-center bg-white border border-stone-200 rounded-lg p-1 shadow-xs">
+                                {appliedVoucher ? (
+                                    <div className="flex items-center justify-between w-full text-[10px] bg-amber-50 rounded border border-amber-200 px-1.5 py-0.5 h-5.5">
+                                        <span className="font-bold text-amber-900 font-mono truncate">{appliedVoucher.code} (-₹{appliedVoucherAmount})</span>
+                                        <button
+                                            type="button"
+                                            onClick={handleClearVoucher}
+                                            className="text-[9px] text-red-600 hover:text-red-800 font-bold uppercase ml-1 shrink-0"
+                                        >
+                                            ✕
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center gap-1 w-full">
+                                        <input
+                                            type="text"
+                                            placeholder="Voucher Code"
+                                            value={voucherCodeInput}
+                                            onChange={(e) => setVoucherCodeInput(e.target.value.toUpperCase())}
+                                            className="w-full text-[10px] border border-stone-200 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-maroon uppercase font-mono h-5.5 bg-white text-stone-800"
+                                            onKeyDown={(e) => e.key === 'Enter' && handleApplyVoucher()}
+                                        />
+                                        <button
+                                            type="button"
+                                            disabled={isCheckingVoucher || !voucherCodeInput.trim()}
+                                            onClick={handleApplyVoucher}
+                                            className="bg-maroon hover:bg-maroon-dark text-gold disabled:opacity-50 text-[9px] font-bold px-2 rounded transition-colors h-5.5 uppercase shrink-0"
+                                        >
+                                            {isCheckingVoucher ? '...' : 'APPLY'}
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Complete Price Breakup Summary */}
+                        <div className="bg-white rounded-lg border border-stone-200/90 p-2.5 text-xs space-y-1 shadow-xs">
+                            <div className="flex justify-between text-stone-600">
+                                <span>Subtotal (MRP)</span>
+                                <span className="font-mono font-medium">₹{subtotal.toLocaleString('en-IN')}</span>
+                            </div>
+                            {itemDiscountAmount > 0 && (
+                                <div className="flex justify-between text-emerald-700 text-[11px]">
+                                    <span>Item Discount</span>
+                                    <span className="font-mono font-medium">-₹{itemDiscountAmount.toLocaleString('en-IN')}</span>
+                                </div>
                             )}
-                        </div>
-                    </div>
-
-                    {/* Complete Price Breakup Summary */}
-                    <div className="bg-white rounded-lg border border-stone-200/90 p-2.5 text-xs space-y-1 shadow-xs">
-                        <div className="flex justify-between text-stone-600">
-                            <span>Subtotal (MRP)</span>
-                            <span className="font-mono font-medium">₹{subtotal.toLocaleString('en-IN')}</span>
-                        </div>
-                        {itemDiscountAmount > 0 && (
-                            <div className="flex justify-between text-emerald-700 text-[11px]">
-                                <span>Item Discount</span>
-                                <span className="font-mono font-medium">-₹{itemDiscountAmount.toLocaleString('en-IN')}</span>
-                            </div>
-                        )}
-                        {totalDiscountAmount > itemDiscountAmount && (
-                            <div className="flex justify-between text-amber-700 text-[11px]">
-                                <span>Extra Discount</span>
-                                <span className="font-mono font-medium">-₹{(totalDiscountAmount - itemDiscountAmount).toLocaleString('en-IN')}</span>
-                            </div>
-                        )}
-                        {overallDiscountPercentage > 0 && (
-                            <div className="flex justify-between text-emerald-800 text-[10px] font-semibold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                                <span>Total Savings</span>
-                                <span className="font-mono">-₹{totalDiscountAmount.toLocaleString('en-IN')} ({overallDiscountPercentage}%)</span>
-                            </div>
-                        )}
-
-                        {isGstApplied && (
-                            <div className="pt-1 mt-1 border-t border-stone-100 space-y-0.5">
-                                <div className="flex justify-between text-stone-700 font-semibold text-[11px]">
-                                    <span>Taxable Amount</span>
-                                    <span className="font-mono">₹{gstData.taxableAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            {totalDiscountAmount > itemDiscountAmount && (
+                                <div className="flex justify-between text-amber-700 text-[11px]">
+                                    <span>Extra Discount</span>
+                                    <span className="font-mono font-medium">-₹{(totalDiscountAmount - itemDiscountAmount).toLocaleString('en-IN')}</span>
                                 </div>
-                                <div className="flex justify-between text-stone-500 text-[10px] pl-1.5">
-                                    <span>CGST (2.5%) + SGST (2.5%)</span>
-                                    <span className="font-mono">₹{gstData.totalGst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            )}
+                            {overallDiscountPercentage > 0 && (
+                                <div className="flex justify-between text-emerald-800 text-[10px] font-semibold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                    <span>Total Savings</span>
+                                    <span className="font-mono">-₹{totalDiscountAmount.toLocaleString('en-IN')} ({overallDiscountPercentage}%)</span>
                                 </div>
-                            </div>
-                        )}
+                            )}
 
-                        {appliedVoucherAmount > 0 && (
-                            <div className="flex justify-between text-amber-800 text-[11px] pt-1 border-t border-amber-100">
-                                <span>Voucher Redeem</span>
-                                <span className="font-mono">-₹{appliedVoucherAmount.toLocaleString('en-IN')}</span>
-                            </div>
-                        )}
+                            {isGstApplied && (
+                                <div className="pt-1 mt-1 border-t border-stone-100 space-y-0.5">
+                                    <div className="flex justify-between text-stone-700 font-semibold text-[11px]">
+                                        <span>Taxable Amount</span>
+                                        <span className="font-mono">₹{gstData.taxableAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                    </div>
+                                    <div className="flex justify-between text-stone-500 text-[10px] pl-1.5">
+                                        <span>CGST (2.5%) + SGST (2.5%)</span>
+                                        <span className="font-mono">₹{gstData.totalGst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                    </div>
+                                </div>
+                            )}
 
-                        <div className="flex justify-between items-center text-maroon font-bold text-base pt-1.5 border-t border-stone-200">
-                            <span>Net Payable</span>
-                            <span className="font-mono font-black text-lg text-maroon">
-                                ₹{netPayable.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </span>
+                            {appliedVoucherAmount > 0 && (
+                                <div className="flex justify-between text-amber-800 text-[11px] pt-1 border-t border-amber-100">
+                                    <span>Voucher Redeem</span>
+                                    <span className="font-mono">-₹{appliedVoucherAmount.toLocaleString('en-IN')}</span>
+                                </div>
+                            )}
+
+                            <div className="flex justify-between items-center text-maroon font-bold text-base pt-1.5 border-t border-stone-200">
+                                <span>Net Payable</span>
+                                <span className="font-mono font-black text-lg text-maroon">
+                                    ₹{netPayable.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </span>
+                            </div>
                         </div>
                     </div>
 

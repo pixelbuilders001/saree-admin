@@ -1,6 +1,10 @@
 import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { customerService, type Customer } from '@/services/customerService';
+import {
+    customerService,
+    type Customer,
+    type CustomerShippingAddress
+} from '@/services/customerService';
 import {
     Users,
     Search,
@@ -22,7 +26,10 @@ import {
     Globe,
     Store,
     ClipboardList,
-    Wallet
+    Wallet,
+    Truck,
+    ExternalLink,
+    Check
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -105,6 +112,21 @@ export default function CustomersPage() {
     const selectedCustomer = React.useMemo(() => {
         return customers?.find(c => c.customerId === selectedCustomerId) || null;
     }, [customers, selectedCustomerId]);
+
+    // Fetch saved shipping addresses for selected customer (if online)
+    const { data: shippingAddresses, isLoading: isLoadingAddresses } = useQuery({
+        queryKey: ['customerShippingAddresses', selectedCustomerId],
+        queryFn: () => customerService.getCustomerShippingAddresses(selectedCustomerId!),
+        enabled: !!selectedCustomerId && selectedCustomer?.type === 'online'
+    });
+
+    const displayShippingAddresses = React.useMemo(() => {
+        if (shippingAddresses && shippingAddresses.length > 0) return shippingAddresses;
+        if (selectedCustomer?.shippingAddresses && selectedCustomer.shippingAddresses.length > 0) {
+            return selectedCustomer.shippingAddresses;
+        }
+        return [];
+    }, [shippingAddresses, selectedCustomer]);
 
     // Initialize edit form when toggled or customer changes
     React.useEffect(() => {
@@ -675,11 +697,12 @@ export default function CustomersPage() {
                                                                     {selectedCustomer?.email}
                                                                 </div>
                                                             )}
-                                                            {selectedCustomer?.city && (
-                                                                <div className="flex items-center text-[11px] text-gray-600">
-                                                                    <MapPin className="h-3 w-3 text-maroon mr-1" />
-                                                                    {selectedCustomer?.city}
-                                                                    {selectedCustomer?.address && <span className="text-[10px] text-gray-400 ml-1">({selectedCustomer?.address})</span>}
+                                                            {(selectedCustomer?.city || selectedCustomer?.address) && (
+                                                                <div className="flex items-center text-[11px] text-gray-600 max-w-full">
+                                                                    <MapPin className="h-3 w-3 text-maroon mr-1 shrink-0" />
+                                                                    <span className="truncate">
+                                                                        {[selectedCustomer?.city, selectedCustomer?.address].filter(Boolean).join(' • ')}
+                                                                    </span>
                                                                 </div>
                                                             )}
                                                         </div>
@@ -713,6 +736,160 @@ export default function CustomersPage() {
                                                         </span>
                                                     </div>
                                                 </div>
+
+                                                {/* Saved Shipping Addresses (Online Customer) */}
+                                                {selectedCustomer?.type === 'online' && (
+                                                    <div className="space-y-2.5 pt-1">
+                                                        <div className="flex items-center justify-between">
+                                                            <h3 className="text-xs font-bold uppercase tracking-wider text-maroon flex items-center gap-1.5">
+                                                                <Truck className="h-3.5 w-3.5 text-maroon/80" />
+                                                                Saved Shipping Addresses
+                                                                <span className="text-[10px] font-mono font-bold bg-sky-50 text-sky-700 border border-sky-200 px-1.5 py-0.2 rounded-full">
+                                                                    {displayShippingAddresses.length}
+                                                                </span>
+                                                            </h3>
+                                                            {isLoadingAddresses && (
+                                                                <span className="text-[10px] text-gray-400 flex items-center gap-1">
+                                                                    <Loader2 className="h-2.5 w-2.5 animate-spin text-maroon" /> Fetching...
+                                                                </span>
+                                                            )}
+                                                        </div>
+
+                                                        {displayShippingAddresses.length === 0 ? (
+                                                            <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50/50 p-4 text-center">
+                                                                <MapPin className="h-5 w-5 text-gray-300 mx-auto mb-1" />
+                                                                <p className="text-xs text-gray-600 font-medium">No saved shipping addresses</p>
+                                                                <p className="text-[10px] text-gray-400 mt-0.5">This customer has not saved a delivery address yet.</p>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                                                {displayShippingAddresses.map((addr, idx) => {
+                                                                    const fullFormatted = [
+                                                                        addr.address_line1,
+                                                                        addr.address_line2,
+                                                                        addr.landmark ? `Landmark: ${addr.landmark}` : null,
+                                                                        addr.city,
+                                                                        addr.district,
+                                                                        addr.state,
+                                                                        addr.pincode ? `PIN: ${addr.pincode}` : null
+                                                                    ].filter(Boolean).join(', ');
+
+                                                                    return (
+                                                                        <div
+                                                                            key={addr.id || idx}
+                                                                            className={cn(
+                                                                                "rounded-xl border p-3 bg-white space-y-2 relative transition-all shadow-xs",
+                                                                                addr.is_default 
+                                                                                    ? "border-emerald-300 bg-emerald-50/15 ring-1 ring-emerald-200/50"
+                                                                                    : "border-gold/20 hover:border-gold/40"
+                                                                            )}
+                                                                        >
+                                                                            {/* Card Header: Label + Badges + Copy Button */}
+                                                                            <div className="flex items-center justify-between gap-1">
+                                                                                <div className="flex items-center gap-1.5 flex-wrap">
+                                                                                    <span className={cn(
+                                                                                        "px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider",
+                                                                                        addr.address_label?.toLowerCase() === 'work' 
+                                                                                            ? "bg-purple-100 text-purple-800"
+                                                                                            : addr.address_label?.toLowerCase() === 'home'
+                                                                                            ? "bg-sky-100 text-sky-800"
+                                                                                            : "bg-gray-100 text-gray-700"
+                                                                                    )}>
+                                                                                        {addr.address_label || 'Address'}
+                                                                                    </span>
+                                                                                    {addr.is_default && (
+                                                                                        <span className="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 flex items-center gap-0.5">
+                                                                                            <Check className="h-2.5 w-2.5" /> Default
+                                                                                        </span>
+                                                                                    )}
+                                                                                    {addr.source === 'order' && (
+                                                                                        <span className="px-1.5 py-0.5 rounded text-[8px] font-bold text-gray-500 bg-gray-100">
+                                                                                            Checkout Order
+                                                                                        </span>
+                                                                                    )}
+                                                                                </div>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => {
+                                                                                        const copyText = `${addr.full_name ? addr.full_name + '\n' : ''}${addr.phone ? 'Phone: ' + addr.phone + '\n' : ''}${fullFormatted}`;
+                                                                                        navigator.clipboard.writeText(copyText);
+                                                                                        toast.success('Full address copied to clipboard!');
+                                                                                    }}
+                                                                                    className="text-gray-400 hover:text-maroon p-1 rounded hover:bg-gray-100 transition-colors cursor-pointer"
+                                                                                    title="Copy formatted address"
+                                                                                >
+                                                                                    <Copy className="h-3.5 w-3.5" />
+                                                                                </button>
+                                                                            </div>
+
+                                                                            {/* Recipient Details */}
+                                                                            {(addr.full_name || addr.phone) && (
+                                                                                <div className="text-[11px] font-medium text-gray-800 flex items-center justify-between gap-2 border-b border-gray-100 pb-1.5">
+                                                                                    <span className="font-bold truncate">{addr.full_name || selectedCustomer?.name}</span>
+                                                                                    {addr.phone && (
+                                                                                        <span className="font-mono text-[10px] text-gray-600 flex items-center gap-0.5 shrink-0">
+                                                                                            <Phone className="h-2.5 w-2.5 text-maroon" /> {addr.phone}
+                                                                                        </span>
+                                                                                    )}
+                                                                                </div>
+                                                                            )}
+
+                                                                            {/* Street & Location */}
+                                                                            <div className="text-[11px] text-gray-600 space-y-0.5 leading-relaxed">
+                                                                                <p className="font-medium text-gray-900">{addr.address_line1}</p>
+                                                                                {addr.address_line2 && <p className="text-gray-500">{addr.address_line2}</p>}
+                                                                                {addr.landmark && (
+                                                                                    <p className="text-[10px] text-amber-800 font-medium">📍 Landmark: {addr.landmark}</p>
+                                                                                )}
+                                                                                <p className="text-[10px] text-gray-500 font-mono pt-0.5">
+                                                                                    {[addr.city, addr.district, addr.state].filter(Boolean).join(', ')}
+                                                                                    {addr.pincode && <span className="font-bold text-maroon ml-1">PIN: {addr.pincode}</span>}
+                                                                                </p>
+                                                                            </div>
+
+                                                                            {/* GPS coordinates if available */}
+                                                                            {addr.latitude != null && addr.longitude != null && (
+                                                                                <div className="pt-1 border-t border-gray-100 flex items-center justify-between text-[9px]">
+                                                                                    <span className="text-gray-400 font-mono">
+                                                                                        GPS: {Number(addr.latitude).toFixed(4)}, {Number(addr.longitude).toFixed(4)}
+                                                                                    </span>
+                                                                                    <a
+                                                                                        href={`https://www.google.com/maps?q=${addr.latitude},${addr.longitude}`}
+                                                                                        target="_blank"
+                                                                                        rel="noreferrer"
+                                                                                        className="text-maroon hover:underline flex items-center gap-0.5 font-bold"
+                                                                                    >
+                                                                                        Map <ExternalLink className="h-2.5 w-2.5" />
+                                                                                    </a>
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+
+                                                {/* In-Store Customer Registered Address */}
+                                                {selectedCustomer?.type === 'instore' && (
+                                                    <div className="rounded-xl border border-gold/15 bg-cream-light/5 p-3 space-y-1.5">
+                                                        <h4 className="text-[10px] font-bold uppercase tracking-wider text-gray-600 flex items-center gap-1.5">
+                                                            <Store className="h-3 w-3 text-maroon" /> In-Store Registered Address
+                                                        </h4>
+                                                        {selectedCustomer.address || selectedCustomer.city ? (
+                                                            <div className="text-xs text-gray-700 flex items-start gap-1.5">
+                                                                <MapPin className="h-3.5 w-3.5 text-maroon shrink-0 mt-0.5" />
+                                                                <div>
+                                                                    <p className="font-medium text-gray-900">{selectedCustomer.address || 'No street address specified'}</p>
+                                                                    {selectedCustomer.city && <p className="text-[11px] text-gray-500">City: {selectedCustomer.city}</p>}
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            <p className="text-[11px] text-gray-400 italic">No in-store address registered. Click Edit Profile to add an address.</p>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </div>
                                         ) : (
                                             /* EDIT PROFILE FORM */

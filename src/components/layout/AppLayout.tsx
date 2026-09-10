@@ -23,7 +23,7 @@ export const AppLayout = () => {
         <div className="min-h-screen bg-cream-light">
             <Sidebar />
 
-            <main className="lg:ml-64 p-4 lg:p-8">
+            <main className="lg:ml-64 pt-[70px] lg:pt-8 px-4 pb-6 lg:px-8 lg:pb-8">
                 <div className={isPOSPage ? "max-w-none w-full mx-auto" : "max-w-7xl mx-auto"}>
                     <Outlet />
                 </div>

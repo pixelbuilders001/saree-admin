@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { dashboardService } from '@/services/dashboardService';
 import { storefrontService } from '@/services/storefrontService';
@@ -22,19 +23,31 @@ import {
     Layers3,
     ArrowUpRight,
     Heart,
-    ShoppingCart
+    ShoppingCart,
+    Truck,
+    CheckCircle2,
+    PackageCheck,
+    AlertCircle,
+    Smartphone,
+    Star,
+    ExternalLink,
+    Calendar,
+    ChevronRight,
+    Package,
+    Box,
+    ShieldCheck,
+    MapPin,
+    Store,
+    CreditCard,
+    Send,
+    Home,
+    Ban,
+    ArrowRight,
+    Eye
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import {
-    AreaChart,
-    Area,
-    XAxis,
-    YAxis,
-    CartesianGrid,
-    Tooltip,
-    ResponsiveContainer
-} from 'recharts';
+import { Badge } from '@/components/ui/badge';
 
 export default function DashboardPage() {
     const { data: stats, isLoading: isStatsLoading, isFetching, refetch } = useQuery({
@@ -54,7 +67,44 @@ export default function DashboardPage() {
 
     const isLoading = isStatsLoading || isWishlistLoading || isCartsLoading;
 
+    const navigate = useNavigate();
     const [activeTab, setActiveTab] = React.useState<'sales' | 'expenses' | 'weavers'>('sales');
+
+    const getOrderStatusBadge = (status: string) => {
+        switch (status?.toLowerCase()) {
+            case 'delivered':
+                return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+            case 'shipped':
+            case 'out_for_delivery':
+                return 'bg-blue-50 text-blue-700 border-blue-200';
+            case 'packed':
+            case 'processing':
+                return 'bg-amber-50 text-amber-700 border-amber-200';
+            case 'confirmed':
+            case 'placed':
+                return 'bg-purple-50 text-purple-700 border-purple-200';
+            case 'cancelled':
+            case 'returned':
+                return 'bg-rose-50 text-rose-700 border-rose-200';
+            default:
+                return 'bg-gray-50 text-gray-700 border-gray-200';
+        }
+    };
+
+    const getPaymentStatusBadge = (status: string) => {
+        switch (status?.toLowerCase()) {
+            case 'paid':
+                return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+            case 'pending':
+                return 'bg-amber-50 text-amber-700 border-amber-200';
+            case 'refunded':
+                return 'bg-purple-50 text-purple-700 border-purple-200';
+            case 'failed':
+                return 'bg-rose-50 text-rose-700 border-rose-200';
+            default:
+                return 'bg-gray-50 text-gray-700 border-gray-200';
+        }
+    };
 
     if (isLoading) {
         return (
@@ -157,7 +207,7 @@ export default function DashboardPage() {
 
     return (
         <motion.div 
-            className="space-y-4 max-w-7xl mx-auto px-4 py-2"
+            className="space-y-4 max-w-7xl mx-auto px-0 sm:px-2 py-1"
             variants={containerVariants}
             initial="hidden"
             animate="visible"
@@ -172,12 +222,18 @@ export default function DashboardPage() {
                         <h1 className="text-lg font-black font-serif text-maroon tracking-wider uppercase">SBS Terminal Command Center</h1>
                     </div>
                     <p className="text-[10px] text-gray-500 font-sans mt-0.5">
-                        Centralized operations command: inventory valuation, weaver ledger liabilities, and cash flow auditing
+                        Centralized operations command: omnichannel fulfillment, inventory valuation, weaver ledger liabilities & audit
                     </p>
                 </div>
 
-                <div className="flex items-center gap-3">
-                    <span className="text-[9px] font-mono bg-cream/35 border border-gold/20 text-maroon px-2 py-0.5 rounded flex items-center gap-1.5 shadow-sm font-bold">
+                <div className="flex flex-wrap items-center gap-2">
+                    {stats?.todayRevenue !== undefined && (
+                        <div className="text-[10px] font-mono bg-amber-50/90 border border-amber-200/80 text-amber-900 px-2.5 py-1 rounded flex items-center gap-1.5 shadow-sm font-semibold">
+                            <Clock className="h-3 w-3 text-amber-700" />
+                            <span>TODAY: <strong className="font-bold">{formatCurrency(stats.todayRevenue)}</strong> ({stats.todayOrdersCount || 0} orders)</span>
+                        </div>
+                    )}
+                    <span className="text-[9px] font-mono bg-cream/35 border border-gold/20 text-maroon px-2 py-1 rounded flex items-center gap-1.5 shadow-sm font-bold">
                         <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-ping"></span>
                         SYSTEM: ONLINE
                     </span>
@@ -214,17 +270,217 @@ export default function DashboardPage() {
                 ))}
             </div>
 
-            {/* Inventory Valuation & Revenue Trend Split Section */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-                {/* Inventory Valuation Asset Card */}
-                <motion.div variants={itemVariants} className="lg:col-span-1">
-                    <Card className="border-gold/15 bg-white shadow-sm h-[260px] flex flex-col">
-                        <CardHeader className="bg-cream/20 border-b border-gold/10 p-3 flex flex-row items-center gap-2">
-                            <Scale className="h-4 w-4 text-maroon" />
-                            <div>
-                                <CardTitle className="text-xs font-bold text-maroon tracking-wider uppercase">Inventory Valuation</CardTitle>
-                                <p className="text-[9px] text-gray-400">Current stock asset values & potential markup</p>
+            {/* ONLINE ORDERS COMMAND CENTER */}
+            <motion.div variants={itemVariants}>
+                <Card className="border-gold/20 bg-white shadow-sm overflow-hidden">
+                    <CardHeader className="bg-gradient-to-r from-cream/30 via-white to-cream/20 border-b border-gold/15 p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                            <div className="p-1.5 bg-indigo-50 text-indigo-700 rounded-md border border-indigo-100">
+                                <ShoppingBag className="h-4 w-4" />
                             </div>
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <CardTitle className="text-xs font-bold text-maroon tracking-wider uppercase">
+                                        Online Storefront & Orders Pipeline
+                                    </CardTitle>
+                                    <span className="text-[9px] font-mono bg-indigo-50 text-indigo-700 border border-indigo-200 px-1.5 py-0.2 rounded font-bold">
+                                        {stats?.totalOnlineOrders || 0} TOTAL ORDERS
+                                    </span>
+                                </div>
+                                <p className="text-[9px] text-gray-400 mt-0.5">
+                                    Omnichannel digital orders, fulfillment workflow stages, customer delivery tracking & payments
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                            <div className="hidden sm:flex items-center gap-2 text-[9px] text-gray-500 font-mono bg-cream/20 border border-gold/15 px-2 py-1 rounded">
+                                <span>Vol: <strong className="text-gray-800">{formatCurrency(stats?.onlineOrdersRevenue || 0)}</strong></span>
+                                <span>•</span>
+                                <span>Realized: <strong className="text-emerald-700">{formatCurrency(stats?.onlineDeliveredRevenue || 0)}</strong></span>
+                            </div>
+                            <button
+                                onClick={() => navigate('/orders')}
+                                className="flex items-center gap-1 text-[10px] font-bold text-maroon hover:text-maroon/80 border border-gold/30 hover:border-gold/60 px-2.5 py-1 rounded bg-cream/15 hover:bg-cream/30 transition-all cursor-pointer uppercase tracking-wider"
+                            >
+                                <span>Order Manager</span>
+                                <ChevronRight className="h-3 w-3" />
+                            </button>
+                        </div>
+                    </CardHeader>
+
+                    <CardContent className="p-3 space-y-3">
+                        {/* Fulfillment Pipeline Stage Cards - Mobile Responsive Grid */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
+                            {[
+                                { key: 'placed', label: 'Placed', count: stats?.onlineStatusCounts?.placed || 0, icon: Package, color: 'text-purple-700 bg-purple-50/60 border-purple-200/60' },
+                                { key: 'confirmed', label: 'Confirmed', count: stats?.onlineStatusCounts?.confirmed || 0, icon: CheckCircle2, color: 'text-indigo-700 bg-indigo-50/60 border-indigo-200/60' },
+                                { key: 'processing', label: 'Processing', count: stats?.onlineStatusCounts?.processing || 0, icon: Loader2, color: 'text-amber-700 bg-amber-50/60 border-amber-200/60' },
+                                { key: 'packed', label: 'Packed', count: stats?.onlineStatusCounts?.packed || 0, icon: Box, color: 'text-yellow-700 bg-yellow-50/60 border-yellow-200/60' },
+                                { key: 'shipped', label: 'Shipped', count: stats?.onlineStatusCounts?.shipped || 0, icon: Truck, color: 'text-blue-700 bg-blue-50/60 border-blue-200/60' },
+                                { key: 'out_for_delivery', label: 'Out for Delivery', count: stats?.onlineStatusCounts?.out_for_delivery || 0, icon: Send, color: 'text-cyan-700 bg-cyan-50/60 border-cyan-200/60' },
+                                { key: 'delivered', label: 'Delivered', count: stats?.onlineStatusCounts?.delivered || 0, icon: Home, color: 'text-emerald-700 bg-emerald-50/60 border-emerald-200/60' },
+                                { key: 'cancelled', label: 'Cancelled / Return', count: stats?.onlineOrdersCancelled || 0, icon: Ban, color: 'text-rose-700 bg-rose-50/60 border-rose-200/60' }
+                            ].map((step, idx) => (
+                                <div 
+                                    key={idx} 
+                                    onClick={() => navigate('/orders')}
+                                    className={`p-2 rounded-lg border ${step.color} transition-all hover:shadow-sm cursor-pointer flex flex-col justify-between`}
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-[8px] font-bold uppercase tracking-wider opacity-75">{step.label}</span>
+                                        <step.icon className="h-3 w-3 opacity-80" />
+                                    </div>
+                                    <div className="text-base font-black font-sans mt-1">
+                                        {step.count}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Quick KPI summary row */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 border-t border-gold/10 text-xs">
+                            <div className="bg-cream/10 p-2 rounded border border-gold/10 flex items-center justify-between">
+                                <div>
+                                    <div className="text-[8px] text-gray-500 font-semibold uppercase">Pending Dispatch</div>
+                                    <div className="text-sm font-black text-amber-700 mt-0.5">{stats?.onlineOrdersPendingAction || 0} orders</div>
+                                </div>
+                                <span className="text-[8px] font-mono text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">Needs Action</span>
+                            </div>
+                            <div className="bg-cream/10 p-2 rounded border border-gold/10 flex items-center justify-between">
+                                <div>
+                                    <div className="text-[8px] text-gray-500 font-semibold uppercase">In Transit</div>
+                                    <div className="text-sm font-black text-blue-700 mt-0.5">{stats?.onlineOrdersInTransit || 0} packages</div>
+                                </div>
+                                <span className="text-[8px] font-mono text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">En Route</span>
+                            </div>
+                            <div className="bg-cream/10 p-2 rounded border border-gold/10 flex items-center justify-between">
+                                <div>
+                                    <div className="text-[8px] text-gray-500 font-semibold uppercase">Realized Delivered</div>
+                                    <div className="text-sm font-black text-emerald-700 mt-0.5">{formatCurrency(stats?.onlineDeliveredRevenue || 0)}</div>
+                                </div>
+                                <span className="text-[8px] font-mono text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">{stats?.onlineOrdersDelivered || 0} delivered</span>
+                            </div>
+                            <div className="bg-cream/10 p-2 rounded border border-gold/10 flex items-center justify-between">
+                                <div>
+                                    <div className="text-[8px] text-gray-500 font-semibold uppercase">Payment Channels</div>
+                                    <div className="text-xs font-bold text-gray-800 mt-0.5 font-mono">
+                                        Online: {stats?.onlinePaymentCounts?.online || 0} | COD: {stats?.onlinePaymentCounts?.cod || 0}
+                                    </div>
+                                </div>
+                                <span className="text-[8px] font-mono text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">
+                                    Paid: {stats?.onlinePaymentCounts?.paid || 0}
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* Recent Online Orders Table - Mobile responsive with horizontal scroll */}
+                        <div className="pt-2 border-t border-gold/10">
+                            <div className="flex items-center justify-between mb-2">
+                                <div className="text-[9px] font-bold text-maroon uppercase tracking-wider flex items-center gap-1.5">
+                                    <Clock className="h-3 w-3" />
+                                    <span>Recent Online Customer Orders ({stats?.recentOnlineOrders?.length || 0})</span>
+                                </div>
+                                <Link to="/orders" className="text-[9px] font-bold text-maroon hover:underline flex items-center gap-1 uppercase">
+                                    <span>View All in Orders</span>
+                                    <ArrowRight className="h-2.5 w-2.5" />
+                                </Link>
+                            </div>
+
+                            <div className="overflow-x-auto rounded border border-gold/10">
+                                <Table>
+                                    <TableHeader className="bg-cream/10">
+                                        <TableRow className="border-b border-gold/10 h-7">
+                                            <TableHead className="h-7 text-[8px] font-bold text-maroon py-1">Order #</TableHead>
+                                            <TableHead className="h-7 text-[8px] font-bold text-maroon py-1">Customer & Contact</TableHead>
+                                            <TableHead className="h-7 text-[8px] font-bold text-maroon py-1">Destination</TableHead>
+                                            <TableHead className="h-7 text-[8px] font-bold text-maroon py-1">Items Ordered</TableHead>
+                                            <TableHead className="h-7 text-[8px] font-bold text-maroon py-1 text-right">Amount (₹)</TableHead>
+                                            <TableHead className="h-7 text-[8px] font-bold text-maroon py-1 text-center">Fulfillment</TableHead>
+                                            <TableHead className="h-7 text-[8px] font-bold text-maroon py-1 text-center">Payment</TableHead>
+                                            <TableHead className="h-7 text-[8px] font-bold text-maroon py-1 text-right">Placed At</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {stats?.recentOnlineOrders && stats.recentOnlineOrders.length > 0 ? (
+                                            stats.recentOnlineOrders.map((ord, index) => (
+                                                <TableRow 
+                                                    key={index} 
+                                                    onClick={() => navigate('/orders')}
+                                                    className="hover:bg-cream/5 border-b border-gold/5 h-8 cursor-pointer transition-colors"
+                                                >
+                                                    <TableCell className="py-1 text-xs font-mono font-bold text-maroon font-sans">
+                                                        <span className="bg-cream/30 border border-gold/20 px-1.5 py-0.5 rounded text-[10px]">
+                                                            {ord.orderNumber}
+                                                        </span>
+                                                    </TableCell>
+                                                    <TableCell className="py-1 text-xs">
+                                                        <div className="font-semibold text-gray-800 leading-tight">{ord.customerName}</div>
+                                                        {ord.customerPhone && (
+                                                            <div className="text-[9px] text-gray-400 font-mono">{ord.customerPhone}</div>
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell className="py-1 text-xs text-gray-600">
+                                                        <div className="flex items-center gap-1 text-[10px]">
+                                                            <MapPin className="h-2.5 w-2.5 text-gray-400 flex-shrink-0" />
+                                                            <span className="truncate max-w-[110px]">{ord.city || ord.state || 'Storefront'}</span>
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell className="py-1 text-xs text-gray-700 max-w-[180px] truncate" title={ord.itemsSummary}>
+                                                        <span className="font-semibold text-maroon/90 font-mono text-[9px] mr-1">[{ord.itemsCount}x]</span>
+                                                        {ord.itemsSummary}
+                                                    </TableCell>
+                                                    <TableCell className="py-1 text-xs font-mono font-black text-right text-gray-800">
+                                                        ₹{ord.totalAmount.toLocaleString()}
+                                                    </TableCell>
+                                                    <TableCell className="py-1 text-center">
+                                                        <span className={`text-[8px] font-bold uppercase px-1.5 py-0.5 rounded border inline-block ${getOrderStatusBadge(ord.orderStatus)}`}>
+                                                            {ord.orderStatus.replace('_', ' ')}
+                                                        </span>
+                                                    </TableCell>
+                                                    <TableCell className="py-1 text-center">
+                                                        <span className={`text-[8px] font-bold uppercase px-1.5 py-0.5 rounded border inline-block ${getPaymentStatusBadge(ord.paymentStatus)}`}>
+                                                            {ord.paymentStatus} ({ord.paymentMethod})
+                                                        </span>
+                                                    </TableCell>
+                                                    <TableCell className="py-1 text-[10px] text-gray-500 font-mono text-right whitespace-nowrap">
+                                                        {new Date(ord.date).toLocaleDateString([], { month: 'short', day: 'numeric' })}{' '}
+                                                        {new Date(ord.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))
+                                        ) : (
+                                            <TableRow>
+                                                <TableCell colSpan={8} className="h-16 text-center text-xs text-gray-400 italic">
+                                                    No online customer orders placed yet
+                                                </TableCell>
+                                            </TableRow>
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+            </motion.div>
+
+            {/* Inventory Valuation & Revenue Performance Digest Section (No bulky graph!) */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                {/* Inventory Valuation & Critical Stock Health */}
+                <motion.div variants={itemVariants} className="lg:col-span-1">
+                    <Card className="border-gold/15 bg-white shadow-sm flex flex-col h-full">
+                        <CardHeader className="bg-cream/20 border-b border-gold/10 p-3 flex flex-row items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <Scale className="h-4 w-4 text-maroon" />
+                                <div>
+                                    <CardTitle className="text-xs font-bold text-maroon tracking-wider uppercase">Inventory Valuation</CardTitle>
+                                    <p className="text-[9px] text-gray-400">Current stock asset values & potential markup</p>
+                                </div>
+                            </div>
+                            <Link to="/inventory" className="text-[9px] font-bold text-maroon hover:underline uppercase flex items-center gap-0.5">
+                                <span>Catalog</span>
+                                <ChevronRight className="h-3 w-3" />
+                            </Link>
                         </CardHeader>
                         <CardContent className="p-3.5 space-y-3 flex-1 flex flex-col justify-between">
                             <div className="grid grid-cols-2 gap-3 text-center">
@@ -267,72 +523,149 @@ export default function DashboardPage() {
                                     <div className="text-xs font-black text-gray-800 mt-0.5">{stats?.totalCustomers || 0} users</div>
                                 </div>
                             </div>
+
+                            {/* Out of Stock & Critical Stock Restock Preview */}
+                            <div className="border-t border-gold/10 pt-2">
+                                <div className="flex items-center justify-between mb-1.5">
+                                    <div className="text-[8px] font-bold text-maroon/80 uppercase tracking-wider flex items-center gap-1">
+                                        <AlertTriangle className="h-2.5 w-2.5 text-amber-600" />
+                                        <span>Critical Restock Alerts (≤ 3 units)</span>
+                                    </div>
+                                    {stats?.outOfStockCount && stats.outOfStockCount > 0 ? (
+                                        <span className="text-[8px] font-bold text-red-700 bg-red-50 border border-red-200 px-1.5 py-0.2 rounded animate-pulse">
+                                            {stats.outOfStockCount} OOS
+                                        </span>
+                                    ) : null}
+                                </div>
+
+                                {stats?.criticalLowStockItems && stats.criticalLowStockItems.length > 0 ? (
+                                    <div className="space-y-1">
+                                        {stats.criticalLowStockItems.slice(0, 3).map((item, idx) => (
+                                            <div key={idx} className="flex items-center justify-between text-[10px] bg-cream/15 p-1 rounded border border-gold/10">
+                                                <div className="truncate max-w-[130px]" title={item.sareeName}>
+                                                    <span className="font-semibold text-gray-800">{item.sareeName}</span>
+                                                    <span className="text-[8px] text-gray-400 ml-1 font-mono">({item.sku})</span>
+                                                </div>
+                                                <div className="flex items-center gap-1">
+                                                    <span className={`text-[8px] font-bold font-mono px-1 py-0.2 rounded border ${item.stock === 0 ? 'bg-red-100 text-red-800 border-red-200' : 'bg-amber-100 text-amber-800 border-amber-200'}`}>
+                                                        {item.stock} left
+                                                    </span>
+                                                    <span className="text-[9px] font-mono font-bold text-gray-700">
+                                                        ₹{item.sellingPrice.toLocaleString()}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-[9px] text-emerald-700 italic bg-emerald-50/50 p-1 rounded text-center border border-emerald-100">
+                                        All inventory catalog stock levels are healthy!
+                                    </p>
+                                )}
+                            </div>
                         </CardContent>
                     </Card>
                 </motion.div>
 
-                {/* Sales Performance Trend Area Chart */}
+                {/* Sales & Channel Performance Digest (Replaces bulky graph with compact table!) */}
                 <motion.div variants={itemVariants} className="lg:col-span-2">
-                    <Card className="border-gold/15 bg-white shadow-sm h-[260px] flex flex-col">
+                    <Card className="border-gold/15 bg-white shadow-sm flex flex-col h-full">
                         <CardHeader className="bg-cream/20 border-b border-gold/10 p-3 flex flex-row items-center justify-between">
                             <div className="flex items-center gap-2">
                                 <TrendingUp className="h-4 w-4 text-maroon" />
                                 <div>
-                                    <CardTitle className="text-xs font-bold text-maroon tracking-wider uppercase">Sales Performance Revenue Trend</CardTitle>
-                                    <p className="text-[9px] text-gray-400">Total monthly revenue generated over last 6 months</p>
+                                    <CardTitle className="text-xs font-bold text-maroon tracking-wider uppercase">
+                                        Sales & Channel Performance Digest
+                                    </CardTitle>
+                                    <p className="text-[9px] text-gray-400">Monthly revenue history & omnichannel revenue contribution</p>
                                 </div>
                             </div>
                             <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/50 px-2 py-0.5 rounded uppercase font-mono">
-                                6 Month Trend
+                                6-Month Breakdown
                             </span>
                         </CardHeader>
-                        <CardContent className="p-2 pb-0 flex-1 relative overflow-hidden">
-                            {stats?.monthlySales && stats.monthlySales.length > 0 ? (
-                                <div className="w-full h-full min-h-[180px] -ml-4 pr-2">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <AreaChart
-                                            data={stats.monthlySales}
-                                            margin={{ top: 10, right: 5, left: 0, bottom: 5 }}
-                                        >
-                                            <defs>
-                                                <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
-                                                    <stop offset="5%" stopColor="#800000" stopOpacity={0.15}/>
-                                                    <stop offset="95%" stopColor="#800000" stopOpacity={0.01}/>
-                                                </linearGradient>
-                                            </defs>
-                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                                            <XAxis 
-                                                dataKey="month" 
-                                                stroke="#94a3b8" 
-                                                fontSize={9}
-                                                tickLine={false}
-                                                axisLine={false}
-                                            />
-                                            <YAxis 
-                                                stroke="#94a3b8" 
-                                                fontSize={9}
-                                                tickLine={false}
-                                                axisLine={false}
-                                                tickFormatter={(v) => `₹${v >= 1000 ? `${(v/1000).toFixed(0)}k` : v}`}
-                                            />
-                                            <Tooltip 
-                                                formatter={(value: any) => [`₹${Number(value).toLocaleString()}`, 'Revenue']}
-                                                contentStyle={{ fontSize: '10px', borderRadius: '6px', border: '1px solid #d4af37', background: 'rgba(255,255,255,0.95)' }}
-                                            />
-                                            <Area 
-                                                type="monotone" 
-                                                dataKey="sales" 
-                                                stroke="#800000" 
-                                                strokeWidth={2}
-                                                fillOpacity={1} 
-                                                fill="url(#colorSales)" 
-                                            />
-                                        </AreaChart>
-                                    </ResponsiveContainer>
+                        <CardContent className="p-3 space-y-3 flex-1 flex flex-col justify-between">
+                            {/* Monthly Breakdown Compact Table */}
+                            <div className="overflow-x-auto">
+                                <Table>
+                                    <TableHeader className="bg-cream/5">
+                                        <TableRow className="border-b border-gold/10 h-7">
+                                            <TableHead className="h-7 text-[8px] font-bold text-maroon py-1">Month</TableHead>
+                                            <TableHead className="h-7 text-[8px] font-bold text-maroon py-1 text-right">In-Store (POS)</TableHead>
+                                            <TableHead className="h-7 text-[8px] font-bold text-maroon py-1 text-right">Storefront (Online)</TableHead>
+                                            <TableHead className="h-7 text-[8px] font-bold text-maroon py-1 text-right">Total Revenue</TableHead>
+                                            <TableHead className="h-7 text-[8px] font-bold text-maroon py-1 text-right">Orders</TableHead>
+                                            <TableHead className="h-7 text-[8px] font-bold text-maroon py-1 w-24 text-center">Volume</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {stats?.monthlySales && stats.monthlySales.length > 0 ? (
+                                            stats.monthlySales.map((m, idx) => {
+                                                const maxSales = Math.max(...(stats?.monthlySales?.map(x => x.sales) || [1]), 1);
+                                                const pct = Math.min(100, Math.round((m.sales / maxSales) * 100));
+                                                return (
+                                                    <TableRow key={idx} className="h-7 border-b border-gold/5 hover:bg-cream/5">
+                                                        <TableCell className="py-1 font-bold text-gray-800 text-[10px]">{m.month}</TableCell>
+                                                        <TableCell className="py-1 text-right font-mono text-gray-600 text-[10px]">
+                                                            {formatCurrency(m.posSales)}
+                                                        </TableCell>
+                                                        <TableCell className="py-1 text-right font-mono text-indigo-700 text-[10px]">
+                                                            {formatCurrency(m.onlineSales)}
+                                                        </TableCell>
+                                                        <TableCell className="py-1 text-right font-mono font-black text-maroon text-xs">
+                                                            {formatCurrency(m.sales)}
+                                                        </TableCell>
+                                                        <TableCell className="py-1 text-right font-mono text-gray-500 text-[10px]">
+                                                            {m.totalOrders}
+                                                        </TableCell>
+                                                        <TableCell className="py-1">
+                                                            <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                                                                <div 
+                                                                    className="bg-maroon/70 h-full rounded-full transition-all duration-300"
+                                                                    style={{ width: `${pct}%` }}
+                                                                ></div>
+                                                            </div>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                );
+                                            })
+                                        ) : (
+                                            <TableRow>
+                                                <TableCell colSpan={6} className="h-16 text-center text-xs text-gray-400 italic">
+                                                    No monthly revenue records available
+                                                </TableCell>
+                                            </TableRow>
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </div>
+
+                            {/* Revenue Realization & Liabilities Footer */}
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 border-t border-gold/10 pt-2.5 text-xs">
+                                <div className="bg-cream/10 p-2 rounded border border-gold/10">
+                                    <div className="text-[8px] text-gray-400 font-semibold uppercase">In-Store POS Realized</div>
+                                    <div className="text-xs font-black text-green-800 mt-0.5">
+                                        {formatCurrency(stats?.posRevenue || 0)}
+                                    </div>
+                                    <div className="text-[8px] text-gray-400 mt-0.5">{stats?.posSalesCount || 0} completed receipts</div>
                                 </div>
-                            ) : (
-                                <div className="h-full flex items-center justify-center text-xs text-gray-400 italic">No sales history trend available</div>
-                            )}
+                                <div className="bg-cream/10 p-2 rounded border border-gold/10">
+                                    <div className="text-[8px] text-gray-400 font-semibold uppercase">Online Storefront Realized</div>
+                                    <div className="text-xs font-black text-indigo-800 mt-0.5">
+                                        {formatCurrency(stats?.onlineDeliveredRevenue || 0)}
+                                    </div>
+                                    <div className="text-[8px] text-gray-400 mt-0.5">{stats?.onlineOrdersDelivered || 0} delivered packages</div>
+                                </div>
+                                <div className="bg-cream/10 p-2 rounded border border-gold/10">
+                                    <div className="text-[8px] text-gray-400 font-semibold uppercase">Total Business Payables</div>
+                                    <div className="text-xs font-black text-purple-800 mt-0.5">
+                                        {formatCurrency((stats?.weaverOutstanding || 0) + (stats?.storeCreditOutstanding || 0))}
+                                    </div>
+                                    <div className="text-[8px] text-gray-400 mt-0.5">
+                                        Weaver: {formatCurrency(stats?.weaverOutstanding || 0)} | Credit: {formatCurrency(stats?.storeCreditOutstanding || 0)}
+                                    </div>
+                                </div>
+                            </div>
                         </CardContent>
                     </Card>
                 </motion.div>
@@ -576,6 +909,42 @@ export default function DashboardPage() {
                                         <p className="text-[10px] text-gray-400 italic text-center py-2">No fabrics recorded</p>
                                     )}
                                 </div>
+                            </div>
+
+                            {/* Storefront & Customer Engagement Pulse */}
+                            <div className="border-t border-gold/10 pt-2.5">
+                                <div className="text-[8px] font-bold text-maroon/75 uppercase tracking-widest mb-1.5 flex items-center justify-between">
+                                    <div className="flex items-center gap-1">
+                                        <Smartphone className="h-3 w-3" />
+                                        <span>Storefront Community Pulse</span>
+                                    </div>
+                                    <Link to="/reviews" className="text-[8px] font-bold text-maroon hover:underline flex items-center gap-0.5">
+                                        <span>Reviews</span>
+                                        <ChevronRight className="h-2.5 w-2.5" />
+                                    </Link>
+                                </div>
+                                <div className="grid grid-cols-2 gap-1.5 text-[10px]">
+                                    <div className="bg-cream/15 p-1.5 rounded border border-gold/10">
+                                        <div className="text-[8px] text-gray-400 font-semibold uppercase">PWA App Installs</div>
+                                        <div className="text-xs font-bold text-gray-800 mt-0.5 flex items-center gap-1">
+                                            <Smartphone className="h-3 w-3 text-indigo-600" />
+                                            <span>{stats?.pwaInstallsCount || 0} devices</span>
+                                        </div>
+                                    </div>
+                                    <div className="bg-cream/15 p-1.5 rounded border border-gold/10">
+                                        <div className="text-[8px] text-gray-400 font-semibold uppercase">Customer Rating</div>
+                                        <div className="text-xs font-bold text-gray-800 mt-0.5 flex items-center gap-1">
+                                            <Star className="h-3 w-3 text-amber-500 fill-amber-500" />
+                                            <span>{stats?.averageReviewRating || 5} ★ ({stats?.totalReviewsCount || 0})</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                {stats?.pendingReviewsCount && stats.pendingReviewsCount > 0 ? (
+                                    <div className="mt-1.5 bg-amber-50 border border-amber-200 text-amber-800 px-2 py-1 rounded text-[9px] flex items-center justify-between">
+                                        <span className="font-semibold">⚠️ {stats.pendingReviewsCount} Review(s) pending approval</span>
+                                        <Link to="/reviews" className="underline font-bold text-maroon">Review</Link>
+                                    </div>
+                                ) : null}
                             </div>
                         </CardContent>
                     </Card>
