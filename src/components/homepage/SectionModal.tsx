@@ -111,14 +111,15 @@ const SectionForm: React.FC<SectionFormProps> = ({
         try {
             let finalImageUrl = imageUrl;
 
-            // If banner style and new image selected, upload to ImageKit
-            if (displayStyle === 'banner' && imageFile) {
+            // If banner/split_feature style and new image selected, upload to ImageKit
+            const supportsImage = displayStyle === 'banner' || displayStyle === 'split_feature';
+            if (supportsImage && imageFile) {
                 setUploadingImage(true);
                 try {
                     finalImageUrl = await homepageSectionService.uploadBannerImage(imageFile);
-                    toast.success('Banner image uploaded to ImageKit');
+                    toast.success(displayStyle === 'banner' ? 'Banner image uploaded to ImageKit' : 'Feature image uploaded to ImageKit');
                 } catch (uploadErr: unknown) {
-                    const msg = uploadErr instanceof Error ? uploadErr.message : 'Banner upload failed';
+                    const msg = uploadErr instanceof Error ? uploadErr.message : 'Image upload failed';
                     toast.error(msg);
                     setSaving(false);
                     setUploadingImage(false);
@@ -134,7 +135,7 @@ const SectionForm: React.FC<SectionFormProps> = ({
                     subtitle,
                     collectionId,
                     displayStyle,
-                    imageUrl: displayStyle === 'banner' ? finalImageUrl : null,
+                    imageUrl: supportsImage ? finalImageUrl : null,
                     viewAllText,
                     viewAllUrl,
                     startAt: startAt ? new Date(startAt).toISOString() : null,
@@ -148,7 +149,7 @@ const SectionForm: React.FC<SectionFormProps> = ({
                     subtitle,
                     collectionId,
                     displayStyle,
-                    imageUrl: displayStyle === 'banner' ? finalImageUrl : null,
+                    imageUrl: supportsImage ? finalImageUrl : null,
                     viewAllText,
                     viewAllUrl,
                     startAt: startAt ? new Date(startAt).toISOString() : null,
@@ -249,15 +250,20 @@ const SectionForm: React.FC<SectionFormProps> = ({
                             </option>
                         ))}
                     </select>
+                    {DISPLAY_STYLE_OPTIONS.find((opt) => opt.value === displayStyle)?.description && (
+                        <p className="text-[10px] text-gray-500 mt-1">
+                            {DISPLAY_STYLE_OPTIONS.find((opt) => opt.value === displayStyle)?.description}
+                        </p>
+                    )}
                 </div>
 
-                {/* Banner Image Upload (Only shown when displayStyle is 'banner') */}
-                {displayStyle === 'banner' && (
+                {/* Banner / Feature Image Upload (Shown when displayStyle is 'banner' or 'split_feature') */}
+                {(displayStyle === 'banner' || displayStyle === 'split_feature') && (
                     <div className="p-4 rounded-xl border border-gold/30 bg-gradient-to-b from-cream/30 to-white space-y-3">
                         <div className="flex items-center justify-between">
                             <label className="text-[11px] font-bold uppercase tracking-wider text-gray-700 flex items-center gap-1.5">
                                 <ImageIcon className="h-4 w-4 text-maroon" />
-                                Banner Image (ImageKit Upload)
+                                {displayStyle === 'banner' ? 'Banner Image (ImageKit Upload)' : 'Split Feature Image (ImageKit Upload)'}
                             </label>
                             {imagePreview && (
                                 <button
@@ -283,7 +289,7 @@ const SectionForm: React.FC<SectionFormProps> = ({
                             <div className="relative group rounded-lg overflow-hidden border border-gold/25 aspect-[21/9] bg-gray-100 max-h-48">
                                 <img
                                     src={imagePreview}
-                                    alt="Banner preview"
+                                    alt="Section preview"
                                     className="w-full h-full object-cover"
                                 />
                                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
@@ -305,7 +311,7 @@ const SectionForm: React.FC<SectionFormProps> = ({
                             >
                                 <UploadCloud className="h-8 w-8 text-gold mx-auto mb-2" />
                                 <p className="text-xs font-semibold text-gray-700">
-                                    Click to select banner image
+                                    {displayStyle === 'banner' ? 'Click to select banner image' : 'Click to select split feature image'}
                                 </p>
                                 <p className="text-[10px] text-gray-400 mt-1">
                                     PNG, JPG, WebP. Automatically compressed & uploaded to ImageKit.

@@ -16,6 +16,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import type { HomepageSection } from '@/types/homepage';
+import { DISPLAY_STYLE_OPTIONS } from '@/types/homepage';
 import { homepageSectionService } from '@/services/homepageSectionService';
 import { ConfirmationDialog } from './ConfirmationDialog';
 import { toast } from 'sonner';
@@ -254,8 +255,8 @@ export const HomepageSectionsList: React.FC<HomepageSectionsListProps> = ({
                                         <GripVertical className="h-5 w-5" />
                                     </div>
 
-                                    {/* Banner Image Preview if style is banner */}
-                                    {section.displayStyle === 'banner' && section.imageUrl && (
+                                    {/* Image Preview if style is banner or split_feature, or has image */}
+                                    {(section.displayStyle === 'banner' || section.displayStyle === 'split_feature') && section.imageUrl && (
                                         <div className="w-16 h-11 rounded-lg overflow-hidden border border-gold/25 flex-shrink-0 bg-gray-100 hidden sm:block shadow-sm">
                                             <img
                                                 src={section.imageUrl}
@@ -320,7 +321,7 @@ export const HomepageSectionsList: React.FC<HomepageSectionsListProps> = ({
                                         {/* Metadata Row */}
                                         <div className="flex items-center gap-3 mt-1.5 text-[10.5px] text-gray-500 flex-wrap">
                                             <span className="capitalize text-gray-600 font-medium">
-                                                Style: {section.displayStyle.replace('_', ' ')}
+                                                Style: {DISPLAY_STYLE_OPTIONS.find((opt) => opt.value === section.displayStyle)?.label || section.displayStyle.replace(/_/g, ' ')}
                                             </span>
 
                                             <span>•</span>

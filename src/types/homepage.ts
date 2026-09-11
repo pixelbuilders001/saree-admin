@@ -50,12 +50,21 @@ export interface CollectionProductItem {
     };
 }
 
+export type HomepageDisplayStyle =
+    | 'banner'
+    | 'grid'
+    | 'carousel'
+    | 'featured'
+    | 'category_cards'
+    | 'split_feature'
+    | 'pinterest_grid';
+
 export interface HomepageSection {
     id: string;
     title: string;
     subtitle: string | null;
     collectionId: string;
-    displayStyle: string;
+    displayStyle: HomepageDisplayStyle | string;
     imageUrl?: string | null;
     viewAllText: string | null;
     viewAllUrl: string | null;
@@ -166,7 +175,18 @@ export const SORT_OPTIONS = [
     { label: 'Oldest First', value: 'oldest' },
 ];
 
-export const DISPLAY_STYLE_OPTIONS = [
-    { label: 'Product Grid', value: 'grid' },
-    { label: 'Banner Showcase', value: 'banner' },
+export interface DisplayStyleOption {
+    label: string;
+    value: HomepageDisplayStyle;
+    description: string;
+}
+
+export const DISPLAY_STYLE_OPTIONS: DisplayStyleOption[] = [
+    { label: 'Banner', value: 'banner', description: 'Hero or promotional banner showcasing a curated collection' },
+    { label: 'Grid', value: 'grid', description: 'Standard responsive product grid layout' },
+    { label: 'Carousel', value: 'carousel', description: 'Horizontally scrollable product slider' },
+    { label: 'Featured', value: 'featured', description: 'Spotlight highlight for top or seasonal picks' },
+    { label: 'Category Cards', value: 'category_cards', description: 'Visual category cards linking to collections' },
+    { label: 'Split Feature', value: 'split_feature', description: 'Side-by-side split layout with promotional media and products' },
+    { label: 'Pinterest Grid', value: 'pinterest_grid', description: 'Dynamic masonry / Pinterest-style staggered layout' },
 ];
