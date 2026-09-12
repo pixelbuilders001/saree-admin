@@ -192,7 +192,24 @@ export const storefrontService = {
             return [];
         }
 
-        const userIds = [...new Set((installsData || []).map((i: any) => i.user_id).filter(Boolean))];
+        // Deduplicate records where same user or same user_agent+platform was recorded within 5 minutes
+        const seen = new Set<string>();
+        const uniqueData = (installsData || []).filter((item: any) => {
+            const timeMs = item.created_at ? new Date(item.created_at).getTime() : 0;
+            // 5-minute bucket (300,000 ms)
+            const timeBucket = Math.floor(timeMs / 300000);
+            const userKey = item.user_id 
+                ? `user_${item.user_id}` 
+                : `ua_${item.user_agent || 'anon'}_${item.platform || 'unk'}`;
+            const key = `${userKey}_${timeBucket}`;
+            if (seen.has(key)) {
+                return false;
+            }
+            seen.add(key);
+            return true;
+        });
+
+        const userIds = [...new Set(uniqueData.map((i: any) => i.user_id).filter(Boolean))];
         let profiles: any[] = [];
         if (userIds.length > 0) {
             const { data: profilesData, error: profilesError } = await supabase
@@ -205,7 +222,7 @@ export const storefrontService = {
             }
         }
 
-        return (installsData || []).map((item: any) => {
+        return uniqueData.map((item: any) => {
             const profile = profiles.find((p: any) => p.id === item.user_id);
             return {
                 id: item.id,

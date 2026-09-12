@@ -142,7 +142,17 @@ export default function StorefrontReportsPage() {
         };
 
         installs.forEach(item => {
-            const plat = (item.platform || 'other').toLowerCase();
+            let plat = (item.platform || 'other').toLowerCase();
+            // Normalize platform names (e.g. from userAgent if legacy source names were recorded)
+            if (plat !== 'android' && plat !== 'ios' && plat !== 'windows' && plat !== 'mac' && plat !== 'linux') {
+                const ua = (item.userAgent || '').toLowerCase();
+                if (/android/.test(ua)) plat = 'android';
+                else if (/iphone|ipad|ipod/.test(ua)) plat = 'ios';
+                else if (/win/.test(ua)) plat = 'windows';
+                else if (/mac/.test(ua)) plat = 'mac';
+                else if (/linux/.test(ua)) plat = 'linux';
+            }
+
             if (platformCounts[plat] !== undefined) {
                 platformCounts[plat]++;
             } else {
@@ -644,7 +654,16 @@ Shree Banarasi Sarees Team`;
                             <TableBody>
                                 {pwaMetrics.recentInstalls.length > 0 ? (
                                     pwaMetrics.recentInstalls.map((inst) => {
-                                        const platformLower = (inst.platform || 'other').toLowerCase();
+                                        let platformLower = (inst.platform || 'other').toLowerCase();
+                                        if (platformLower !== 'android' && platformLower !== 'ios' && platformLower !== 'windows' && platformLower !== 'mac' && platformLower !== 'linux') {
+                                            const ua = (inst.userAgent || '').toLowerCase();
+                                            if (/android/.test(ua)) platformLower = 'android';
+                                            else if (/iphone|ipad|ipod/.test(ua)) platformLower = 'ios';
+                                            else if (/win/.test(ua)) platformLower = 'windows';
+                                            else if (/mac/.test(ua)) platformLower = 'mac';
+                                            else if (/linux/.test(ua)) platformLower = 'linux';
+                                        }
+
                                         const badgeStyle = 
                                             platformLower === 'android' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
                                             platformLower === 'ios' ? 'bg-blue-50 text-blue-700 border-blue-200' :
@@ -660,7 +679,7 @@ Shree Banarasi Sarees Team`;
                                                 </TableCell>
                                                 <TableCell className="py-2 text-xs text-center">
                                                     <span className={cn("inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold font-mono border uppercase", badgeStyle)}>
-                                                        {inst.platform || 'unknown'}
+                                                        {platformLower}
                                                     </span>
                                                 </TableCell>
                                                 <TableCell className="py-2 text-xs text-center font-mono text-gray-600">
