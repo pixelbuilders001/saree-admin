@@ -255,8 +255,8 @@ export const HomepageSectionsList: React.FC<HomepageSectionsListProps> = ({
                                         <GripVertical className="h-5 w-5" />
                                     </div>
 
-                                    {/* Image Preview if style is banner or split_feature, or has image */}
-                                    {(section.displayStyle === 'banner' || section.displayStyle === 'split_feature') && section.imageUrl && (
+                                    {/* Image Preview if section has image */}
+                                    {section.imageUrl && (
                                         <div className="w-16 h-11 rounded-lg overflow-hidden border border-gold/25 flex-shrink-0 bg-gray-100 hidden sm:block shadow-sm">
                                             <img
                                                 src={section.imageUrl}

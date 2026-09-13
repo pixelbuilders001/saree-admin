@@ -111,13 +111,19 @@ const SectionForm: React.FC<SectionFormProps> = ({
         try {
             let finalImageUrl = imageUrl;
 
-            // If banner/split_feature style and new image selected, upload to ImageKit
-            const supportsImage = displayStyle === 'banner' || displayStyle === 'split_feature';
+            // If banner/split_feature/offer_timer style and new image selected, upload to ImageKit
+            const supportsImage = displayStyle === 'banner' || displayStyle === 'split_feature' || displayStyle === 'offer_timer';
             if (supportsImage && imageFile) {
                 setUploadingImage(true);
                 try {
                     finalImageUrl = await homepageSectionService.uploadBannerImage(imageFile);
-                    toast.success(displayStyle === 'banner' ? 'Banner image uploaded to ImageKit' : 'Feature image uploaded to ImageKit');
+                    toast.success(
+                        displayStyle === 'banner'
+                            ? 'Banner image uploaded to ImageKit'
+                            : displayStyle === 'split_feature'
+                            ? 'Feature image uploaded to ImageKit'
+                            : 'Background image uploaded to ImageKit'
+                    );
                 } catch (uploadErr: unknown) {
                     const msg = uploadErr instanceof Error ? uploadErr.message : 'Image upload failed';
                     toast.error(msg);
@@ -135,7 +141,7 @@ const SectionForm: React.FC<SectionFormProps> = ({
                     subtitle,
                     collectionId,
                     displayStyle,
-                    imageUrl: supportsImage ? finalImageUrl : null,
+                    imageUrl: supportsImage ? (finalImageUrl || null) : null,
                     viewAllText,
                     viewAllUrl,
                     startAt: startAt ? new Date(startAt).toISOString() : null,
@@ -149,7 +155,7 @@ const SectionForm: React.FC<SectionFormProps> = ({
                     subtitle,
                     collectionId,
                     displayStyle,
-                    imageUrl: supportsImage ? finalImageUrl : null,
+                    imageUrl: supportsImage ? (finalImageUrl || null) : null,
                     viewAllText,
                     viewAllUrl,
                     startAt: startAt ? new Date(startAt).toISOString() : null,
@@ -257,13 +263,17 @@ const SectionForm: React.FC<SectionFormProps> = ({
                     )}
                 </div>
 
-                {/* Banner / Feature Image Upload (Shown when displayStyle is 'banner' or 'split_feature') */}
-                {(displayStyle === 'banner' || displayStyle === 'split_feature') && (
+                {/* Banner / Feature / Timer Image Upload (Shown when displayStyle is 'banner', 'split_feature', or 'offer_timer') */}
+                {(displayStyle === 'banner' || displayStyle === 'split_feature' || displayStyle === 'offer_timer') && (
                     <div className="p-4 rounded-xl border border-gold/30 bg-gradient-to-b from-cream/30 to-white space-y-3">
                         <div className="flex items-center justify-between">
                             <label className="text-[11px] font-bold uppercase tracking-wider text-gray-700 flex items-center gap-1.5">
                                 <ImageIcon className="h-4 w-4 text-maroon" />
-                                {displayStyle === 'banner' ? 'Banner Image (ImageKit Upload)' : 'Split Feature Image (ImageKit Upload)'}
+                                {displayStyle === 'banner'
+                                    ? 'Banner Image (ImageKit Upload)'
+                                    : displayStyle === 'split_feature'
+                                    ? 'Split Feature Image (ImageKit Upload)'
+                                    : 'Background Image (ImageKit Upload - Optional)'}
                             </label>
                             {imagePreview && (
                                 <button
@@ -402,6 +412,12 @@ const SectionForm: React.FC<SectionFormProps> = ({
                             />
                         </div>
                     </div>
+
+                    {displayStyle === 'offer_timer' && (
+                        <p className="text-[10.5px] text-amber-800 bg-amber-50 p-2 rounded border border-amber-200 mt-2.5">
+                            <strong>Note for Offer Timer:</strong> The <strong>End Date & Time</strong> determines the live countdown timer on the storefront. Make sure to specify an End Date & Time.
+                        </p>
+                    )}
                 </div>
 
                 {/* Active Toggle */}

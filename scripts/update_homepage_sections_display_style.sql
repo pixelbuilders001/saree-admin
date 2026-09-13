@@ -7,7 +7,7 @@
 ALTER TABLE public.homepage_sections 
 DROP CONSTRAINT IF EXISTS homepage_sections_display_style_check;
 
--- 2. Add updated check constraint with all 7 display styles
+-- 2. Add updated check constraint with all 8 display styles
 ALTER TABLE public.homepage_sections 
 ADD CONSTRAINT homepage_sections_display_style_check 
 CHECK (display_style IN (
@@ -17,5 +17,6 @@ CHECK (display_style IN (
     'featured',
     'category_cards',
     'split_feature',
-    'pinterest_grid'
+    'pinterest_grid',
+    'offer_timer'
 ));
