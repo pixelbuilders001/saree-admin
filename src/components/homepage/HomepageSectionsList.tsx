@@ -273,7 +273,11 @@ export const HomepageSectionsList: React.FC<HomepageSectionsListProps> = ({
                                             </h3>
 
                                             {/* Collection Badge */}
-                                            {section.collection ? (
+                                            {section.displayStyle === 'image_banner' ? (
+                                                <span className="inline-flex items-center gap-1 text-[9.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border bg-purple-50 text-purple-700 border-purple-200">
+                                                    Standalone Banner
+                                                </span>
+                                            ) : section.collection ? (
                                                 <span className={`inline-flex items-center gap-1 text-[9.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
                                                     isAuto
                                                         ? 'bg-maroon/5 text-maroon border-maroon/20'
@@ -341,7 +345,9 @@ export const HomepageSectionsList: React.FC<HomepageSectionsListProps> = ({
                                                 <>
                                                     <span>•</span>
                                                     <span className="text-maroon">
-                                                        CTA: {section.viewAllText || 'View All'} → {section.viewAllUrl}
+                                                        {section.displayStyle === 'image_banner'
+                                                            ? `Destination: ${section.viewAllUrl}`
+                                                            : `CTA: ${section.viewAllText || 'View All'} → ${section.viewAllUrl}`}
                                                     </span>
                                                 </>
                                             )}

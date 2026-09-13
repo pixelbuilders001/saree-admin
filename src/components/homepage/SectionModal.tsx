@@ -92,14 +92,21 @@ const SectionForm: React.FC<SectionFormProps> = ({
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        if (!title.trim()) {
-            toast.error('Please enter a section title');
-            return;
-        }
+        if (displayStyle === 'image_banner') {
+            if (!imageFile && !imageUrl) {
+                toast.error('Please select a banner image');
+                return;
+            }
+        } else {
+            if (!title.trim()) {
+                toast.error('Please enter a section title');
+                return;
+            }
 
-        if (!collectionId) {
-            toast.error('Please select a collection for this section');
-            return;
+            if (!collectionId) {
+                toast.error('Please select a collection for this section');
+                return;
+            }
         }
 
         if (startAt && endAt && new Date(startAt) > new Date(endAt)) {
@@ -111,14 +118,19 @@ const SectionForm: React.FC<SectionFormProps> = ({
         try {
             let finalImageUrl = imageUrl;
 
-            // If banner/split_feature/offer_timer style and new image selected, upload to ImageKit
-            const supportsImage = displayStyle === 'banner' || displayStyle === 'split_feature' || displayStyle === 'offer_timer';
+            // If banner/split_feature/offer_timer/image_banner style and new image selected, upload to ImageKit
+            const supportsImage =
+                displayStyle === 'banner' ||
+                displayStyle === 'split_feature' ||
+                displayStyle === 'offer_timer' ||
+                displayStyle === 'image_banner';
+
             if (supportsImage && imageFile) {
                 setUploadingImage(true);
                 try {
                     finalImageUrl = await homepageSectionService.uploadBannerImage(imageFile);
                     toast.success(
-                        displayStyle === 'banner'
+                        displayStyle === 'banner' || displayStyle === 'image_banner'
                             ? 'Banner image uploaded to ImageKit'
                             : displayStyle === 'split_feature'
                             ? 'Feature image uploaded to ImageKit'
@@ -135,15 +147,28 @@ const SectionForm: React.FC<SectionFormProps> = ({
                 }
             }
 
+            const effectiveTitle =
+                displayStyle === 'image_banner'
+                    ? (title.trim() || 'Image Banner')
+                    : title.trim();
+            const effectiveSubtitle =
+                displayStyle === 'image_banner' ? null : (subtitle.trim() || null);
+            const effectiveViewAllText =
+                displayStyle === 'image_banner' ? null : (viewAllText.trim() || null);
+            const effectiveCollectionId =
+                displayStyle === 'image_banner'
+                    ? (collectionId || collections[0]?.id || null)
+                    : collectionId;
+
             if (isEdit && sectionToEdit) {
                 await homepageSectionService.updateSection(sectionToEdit.id, {
-                    title,
-                    subtitle,
-                    collectionId,
+                    title: effectiveTitle,
+                    subtitle: effectiveSubtitle,
+                    collectionId: effectiveCollectionId,
                     displayStyle,
                     imageUrl: supportsImage ? (finalImageUrl || null) : null,
-                    viewAllText,
-                    viewAllUrl,
+                    viewAllText: effectiveViewAllText,
+                    viewAllUrl: viewAllUrl?.trim() || null,
                     startAt: startAt ? new Date(startAt).toISOString() : null,
                     endAt: endAt ? new Date(endAt).toISOString() : null,
                     isActive,
@@ -151,13 +176,13 @@ const SectionForm: React.FC<SectionFormProps> = ({
                 toast.success('Homepage section updated successfully');
             } else {
                 await homepageSectionService.createSection({
-                    title,
-                    subtitle,
-                    collectionId,
+                    title: effectiveTitle,
+                    subtitle: effectiveSubtitle,
+                    collectionId: effectiveCollectionId,
                     displayStyle,
                     imageUrl: supportsImage ? (finalImageUrl || null) : null,
-                    viewAllText,
-                    viewAllUrl,
+                    viewAllText: effectiveViewAllText,
+                    viewAllUrl: viewAllUrl?.trim() || null,
                     startAt: startAt ? new Date(startAt).toISOString() : null,
                     endAt: endAt ? new Date(endAt).toISOString() : null,
                     isActive,
@@ -179,65 +204,69 @@ const SectionForm: React.FC<SectionFormProps> = ({
     return (
         <form onSubmit={handleSave} className="flex flex-col flex-1 overflow-hidden">
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
-                {/* Section Title & Subtitle */}
-                <div className="space-y-3">
-                    <div>
-                        <label className="text-[11px] font-bold uppercase tracking-wider text-gray-700 block mb-1">
-                            Section Title <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                            type="text"
-                            value={title}
-                            onChange={(e) => setTitle(e.target.value)}
-                            placeholder="e.g. New Arrivals, Festive Collection, Editor's Picks"
-                            required
-                            className="w-full text-xs border border-gold/30 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-maroon text-gray-800 font-medium"
-                        />
-                    </div>
-
-                    <div>
-                        <label className="text-[11px] font-bold uppercase tracking-wider text-gray-700 block mb-1">
-                            Subtitle (Optional)
-                        </label>
-                        <input
-                            type="text"
-                            value={subtitle}
-                            onChange={(e) => setSubtitle(e.target.value)}
-                            placeholder="e.g. Handcrafted pure silk heritage sarees"
-                            className="w-full text-xs border border-gold/30 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-maroon text-gray-800"
-                        />
-                    </div>
-                </div>
-
-                {/* Collection Selector */}
-                <div className="bg-cream/15 p-3.5 rounded-xl border border-gold/25 space-y-2">
-                    <label className="text-[11px] font-bold uppercase tracking-wider text-gray-700 block">
-                        Collection <span className="text-red-500">*</span>
-                    </label>
-                    {collections.length === 0 ? (
-                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
-                            No collections available. Please create a collection first before creating a homepage section.
+                {/* Section Title & Subtitle (Hidden for Image Banner) */}
+                {displayStyle !== 'image_banner' && (
+                    <div className="space-y-3">
+                        <div>
+                            <label className="text-[11px] font-bold uppercase tracking-wider text-gray-700 block mb-1">
+                                Section Title <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                                type="text"
+                                value={title}
+                                onChange={(e) => setTitle(e.target.value)}
+                                placeholder="e.g. New Arrivals, Festive Collection, Editor's Picks"
+                                required
+                                className="w-full text-xs border border-gold/30 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-maroon text-gray-800 font-medium"
+                            />
                         </div>
-                    ) : (
-                        <select
-                            value={collectionId}
-                            onChange={(e) => setCollectionId(e.target.value)}
-                            required
-                            aria-label="Section Collection"
-                            className="w-full text-xs border border-gold/30 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-maroon text-gray-800 font-medium"
-                        >
-                            <option value="" disabled>Select Collection</option>
-                            {collections.map((col) => (
-                                <option key={col.id} value={col.id}>
-                                    {col.name} ({col.collectionType === 'automatic' ? 'Automatic' : 'Manual'}) {col.isActive ? '' : '• Inactive'}
-                                </option>
-                            ))}
-                        </select>
-                    )}
-                    <p className="text-[10px] text-gray-500">
-                        Connects this section to a reusable group of sarees defined by rules or manual selection.
-                    </p>
-                </div>
+
+                        <div>
+                            <label className="text-[11px] font-bold uppercase tracking-wider text-gray-700 block mb-1">
+                                Subtitle (Optional)
+                            </label>
+                            <input
+                                type="text"
+                                value={subtitle}
+                                onChange={(e) => setSubtitle(e.target.value)}
+                                placeholder="e.g. Handcrafted pure silk heritage sarees"
+                                className="w-full text-xs border border-gold/30 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-maroon text-gray-800"
+                            />
+                        </div>
+                    </div>
+                )}
+
+                {/* Collection Selector (Hidden for Image Banner) */}
+                {displayStyle !== 'image_banner' && (
+                    <div className="bg-cream/15 p-3.5 rounded-xl border border-gold/25 space-y-2">
+                        <label className="text-[11px] font-bold uppercase tracking-wider text-gray-700 block">
+                            Collection <span className="text-red-500">*</span>
+                        </label>
+                        {collections.length === 0 ? (
+                            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+                                No collections available. Please create a collection first before creating a homepage section.
+                            </div>
+                        ) : (
+                            <select
+                                value={collectionId}
+                                onChange={(e) => setCollectionId(e.target.value)}
+                                required
+                                aria-label="Section Collection"
+                                className="w-full text-xs border border-gold/30 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-maroon text-gray-800 font-medium"
+                            >
+                                <option value="" disabled>Select Collection</option>
+                                {collections.map((col) => (
+                                    <option key={col.id} value={col.id}>
+                                        {col.name} ({col.collectionType === 'automatic' ? 'Automatic' : 'Manual'}) {col.isActive ? '' : '• Inactive'}
+                                    </option>
+                                ))}
+                            </select>
+                        )}
+                        <p className="text-[10px] text-gray-500">
+                            Connects this section to a reusable group of sarees defined by rules or manual selection.
+                        </p>
+                    </div>
+                )}
 
                 {/* Display Style */}
                 <div>
@@ -263,17 +292,18 @@ const SectionForm: React.FC<SectionFormProps> = ({
                     )}
                 </div>
 
-                {/* Banner / Feature / Timer Image Upload (Shown when displayStyle is 'banner', 'split_feature', or 'offer_timer') */}
-                {(displayStyle === 'banner' || displayStyle === 'split_feature' || displayStyle === 'offer_timer') && (
+                {/* Banner / Feature / Timer / Image Banner Image Upload */}
+                {(displayStyle === 'banner' || displayStyle === 'split_feature' || displayStyle === 'offer_timer' || displayStyle === 'image_banner') && (
                     <div className="p-4 rounded-xl border border-gold/30 bg-gradient-to-b from-cream/30 to-white space-y-3">
                         <div className="flex items-center justify-between">
                             <label className="text-[11px] font-bold uppercase tracking-wider text-gray-700 flex items-center gap-1.5">
                                 <ImageIcon className="h-4 w-4 text-maroon" />
-                                {displayStyle === 'banner'
+                                {displayStyle === 'banner' || displayStyle === 'image_banner'
                                     ? 'Banner Image (ImageKit Upload)'
                                     : displayStyle === 'split_feature'
                                     ? 'Split Feature Image (ImageKit Upload)'
                                     : 'Background Image (ImageKit Upload - Optional)'}
+                                {displayStyle === 'image_banner' && <span className="text-red-500">*</span>}
                             </label>
                             {imagePreview && (
                                 <button
@@ -321,7 +351,11 @@ const SectionForm: React.FC<SectionFormProps> = ({
                             >
                                 <UploadCloud className="h-8 w-8 text-gold mx-auto mb-2" />
                                 <p className="text-xs font-semibold text-gray-700">
-                                    {displayStyle === 'banner' ? 'Click to select banner image' : 'Click to select split feature image'}
+                                    {displayStyle === 'banner' || displayStyle === 'image_banner'
+                                        ? 'Click to select banner image'
+                                        : displayStyle === 'split_feature'
+                                        ? 'Click to select split feature image'
+                                        : 'Click to select background image'}
                                 </p>
                                 <p className="text-[10px] text-gray-400 mt-1">
                                     PNG, JPG, WebP. Automatically compressed & uploaded to ImageKit.
@@ -331,24 +365,11 @@ const SectionForm: React.FC<SectionFormProps> = ({
                     </div>
                 )}
 
-                {/* View All Button Configuration */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 rounded-xl border border-gold/20 bg-white">
-                    <div>
-                        <label className="text-[11px] font-bold uppercase tracking-wider text-gray-700 block mb-1">
-                            View All Text
-                        </label>
-                        <input
-                            type="text"
-                            value={viewAllText}
-                            onChange={(e) => setViewAllText(e.target.value)}
-                            placeholder="View All"
-                            className="w-full text-xs border border-gold/30 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-maroon text-gray-800"
-                        />
-                    </div>
-
-                    <div>
-                        <label className="text-[11px] font-bold uppercase tracking-wider text-gray-700 block mb-1">
-                            View All URL
+                {/* View All / Destination URL Configuration */}
+                {displayStyle === 'image_banner' ? (
+                    <div className="p-3.5 rounded-xl border border-gold/20 bg-white space-y-1.5">
+                        <label className="text-[11px] font-bold uppercase tracking-wider text-gray-700 block">
+                            Destination URL (Optional)
                         </label>
                         <div className="relative">
                             <LinkIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
@@ -356,12 +377,46 @@ const SectionForm: React.FC<SectionFormProps> = ({
                                 type="text"
                                 value={viewAllUrl}
                                 onChange={(e) => setViewAllUrl(e.target.value)}
-                                placeholder="/collections/festive"
+                                placeholder="e.g. /collections/festive or https://..."
                                 className="w-full text-xs pl-8 pr-3 py-2 border border-gold/30 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-maroon text-gray-800"
                             />
                         </div>
+                        <p className="text-[10px] text-gray-500">
+                            Clicking anywhere on this banner navigates to this URL. Leave blank if not clickable.
+                        </p>
                     </div>
-                </div>
+                ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 rounded-xl border border-gold/20 bg-white">
+                        <div>
+                            <label className="text-[11px] font-bold uppercase tracking-wider text-gray-700 block mb-1">
+                                View All Text
+                            </label>
+                            <input
+                                type="text"
+                                value={viewAllText}
+                                onChange={(e) => setViewAllText(e.target.value)}
+                                placeholder="View All"
+                                className="w-full text-xs border border-gold/30 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-maroon text-gray-800"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="text-[11px] font-bold uppercase tracking-wider text-gray-700 block mb-1">
+                                View All URL
+                            </label>
+                            <div className="relative">
+                                <LinkIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                                <input
+                                    type="text"
+                                    value={viewAllUrl}
+                                    onChange={(e) => setViewAllUrl(e.target.value)}
+                                    placeholder="/collections/festive"
+                                    className="w-full text-xs pl-8 pr-3 py-2 border border-gold/30 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-maroon text-gray-800"
+                                />
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {/* Scheduling Configuration */}
                 <div className="p-3.5 rounded-xl border border-gold/25 bg-cream/10 space-y-3">
@@ -452,7 +507,7 @@ const SectionForm: React.FC<SectionFormProps> = ({
                 </Button>
                 <Button
                     type="submit"
-                    disabled={saving || uploadingImage || collections.length === 0}
+                    disabled={saving || uploadingImage || (displayStyle !== 'image_banner' && collections.length === 0)}
                     className="text-xs bg-maroon hover:bg-maroon-dark text-gold font-bold px-5 flex items-center gap-1.5"
                 >
                     {(saving || uploadingImage) && <Loader2 className="h-3.5 w-3.5 animate-spin" />}

@@ -58,7 +58,8 @@ export type HomepageDisplayStyle =
     | 'category_cards'
     | 'split_feature'
     | 'pinterest_grid'
-    | 'offer_timer';
+    | 'offer_timer'
+    | 'image_banner';
 
 export interface HomepageSection {
     id: string;
@@ -191,4 +192,5 @@ export const DISPLAY_STYLE_OPTIONS: DisplayStyleOption[] = [
     { label: 'Split Feature', value: 'split_feature', description: 'Side-by-side split layout with promotional media and products' },
     { label: 'Pinterest Grid', value: 'pinterest_grid', description: 'Dynamic masonry / Pinterest-style staggered layout' },
     { label: 'Offer Timer', value: 'offer_timer', description: 'Promotional countdown banner with end-date timer and featured products' },
+    { label: 'Image Banner', value: 'image_banner', description: 'Clickable standalone banner image linking directly to a destination URL' },
 ];

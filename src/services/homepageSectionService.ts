@@ -6,7 +6,7 @@ import { uploadToImageKit } from '@/services/imagekitService';
 export interface CreateHomepageSectionInput {
     title: string;
     subtitle?: string | null;
-    collectionId: string;
+    collectionId?: string | null;
     displayStyle?: string;
     imageUrl?: string | null;
     viewAllText?: string | null;
@@ -20,7 +20,7 @@ export interface CreateHomepageSectionInput {
 export interface UpdateHomepageSectionInput {
     title?: string;
     subtitle?: string | null;
-    collectionId?: string;
+    collectionId?: string | null;
     displayStyle?: string;
     imageUrl?: string | null;
     viewAllText?: string | null;
@@ -112,7 +112,7 @@ export const homepageSectionService = {
             .insert([{
                 title: input.title.trim(),
                 subtitle: input.subtitle?.trim() || null,
-                collection_id: input.collectionId,
+                collection_id: input.collectionId || null,
                 display_style: input.displayStyle || 'grid',
                 image_url: input.imageUrl || null,
                 view_all_text: input.viewAllText?.trim() || null,
@@ -136,7 +136,7 @@ export const homepageSectionService = {
 
         if (input.title !== undefined) payload.title = input.title.trim();
         if (input.subtitle !== undefined) payload.subtitle = input.subtitle?.trim() || null;
-        if (input.collectionId !== undefined) payload.collection_id = input.collectionId;
+        if (input.collectionId !== undefined) payload.collection_id = input.collectionId || null;
         if (input.displayStyle !== undefined) payload.display_style = input.displayStyle;
         if (input.imageUrl !== undefined) payload.image_url = input.imageUrl;
         if (input.viewAllText !== undefined) payload.view_all_text = input.viewAllText?.trim() || null;
