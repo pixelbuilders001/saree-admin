@@ -361,19 +361,34 @@ export const ordersService = {
         return ordersService.getOrderById(insertedOrder.id);
     },
 
-    updateOrderStatus: async (orderId: string, status: string, note?: string, orderItemId?: string): Promise<any> => {
+    updateOrderStatus: async (
+        orderId: string, 
+        status: string, 
+        note?: string, 
+        orderItemId?: string,
+        sendPush?: boolean
+    ): Promise<any> => {
         const defaultNote = orderItemId
             ? 'Item cancelled by admin'
             : (status === 'cancelled' ? 'Order cancelled by admin' : `Order ${status}`);
 
+        const statusLower = (status || '').toLowerCase();
+        // NEVER send push notification for 'processing'
+        const isProcessing = statusLower === 'processing' || statusLower.includes('process');
+        const allowedToPush = sendPush !== undefined ? (sendPush && !isProcessing) : !isProcessing;
+
         const payload: any = {
             order_id: orderId,
             status,
-            note: note || defaultNote
+            note: note || defaultNote,
+            send_push: allowedToPush
         };
         if (orderItemId) {
             payload.order_item_id = orderItemId;
         }
+
+        let result: any = null;
+        let edgePushHandled = false;
 
         try {
             const { data, error } = await supabase.functions.invoke('update-order-status', {
@@ -385,7 +400,8 @@ export const ordersService = {
                 throw error;
             }
 
-            return data;
+            result = data;
+            edgePushHandled = true;
         } catch (edgeErr) {
             console.warn('Fallback to direct database operations:', edgeErr);
 
@@ -513,46 +529,150 @@ export const ordersService = {
                     note: payload.note
                 }]);
 
-            // Trigger push notification if available
+            result = { success: true };
+        }
+
+        // ----------------------------------------------------
+        // TRIGGER PUSH NOTIFICATION FOR STATUS UPDATE
+        // Only trigger if allowedToPush is true AND edge function didn't already handle it
+        // NEVER send push for 'processing'
+        // ----------------------------------------------------
+        if (allowedToPush && !edgePushHandled) {
             try {
                 const { data: orderRow } = await supabase
                     .from('orders')
                     .select('*, order_items(*)')
                     .eq('id', orderId)
-                    .single();
+                    .maybeSingle();
 
-                if (orderRow && orderRow.user_id) {
-                    const statusLower = (status || '').toLowerCase();
-                    let stageKey: any = 'placed';
-                    if (statusLower.includes('confirm')) stageKey = 'confirmed';
-                    else if (statusLower.includes('pack')) stageKey = 'packed';
-                    else if (statusLower.includes('ship') || statusLower.includes('dispatch')) stageKey = 'shipped';
-                    else if (statusLower.includes('out_for_delivery') || statusLower.includes('out for delivery')) stageKey = 'out_for_delivery';
-                    else if (statusLower.includes('deliver')) stageKey = 'delivered';
-                    else if (statusLower.includes('cancel')) stageKey = 'cancelled';
+                if (orderRow) {
+                    let targetUserId = orderRow.user_id;
 
-                    const firstItemSnapshot = orderRow.order_items?.[0]?.product_snapshot;
-                    const firstItemImage = firstItemSnapshot?.images?.[0] || null;
-                    const targetUrl = `/account?orderId=${encodeURIComponent(orderRow.order_number)}`;
+                    // Fallback: If user_id is missing on order, resolve profile by customer phone
+                    if (!targetUserId && orderRow.customer_phone) {
+                        try {
+                            const cleanPhone = orderRow.customer_phone.replace(/\D/g, '').slice(-10);
+                            if (cleanPhone) {
+                                const { data: profile } = await supabase
+                                    .from('profiles')
+                                    .select('id')
+                                    .or(`phone_number.eq.${cleanPhone},phone_number.ilike.%${cleanPhone}%`)
+                                    .maybeSingle();
+                                if (profile?.id) {
+                                    targetUserId = profile.id;
+                                }
+                            }
+                        } catch (pErr) {
+                            console.warn('[Push Notification] Error looking up profile by phone:', pErr);
+                        }
+                    }
 
-                    await supabase.functions.invoke('send-push', {
+                    if (targetUserId) {
+                        // Strictly allow only verified customer milestone statuses:
+                        const PUSH_ALLOWED_STATUSES = ['confirmed', 'packed', 'shipped', 'out_for_delivery', 'delivered', 'cancelled'];
+                        let stageKey: string | null = null;
+                        if (statusLower.includes('confirm')) stageKey = 'confirmed';
+                        else if (statusLower.includes('pack')) stageKey = 'packed';
+                        else if (statusLower.includes('ship') || statusLower.includes('dispatch')) stageKey = 'shipped';
+                        else if (statusLower.includes('out') || statusLower.includes('transit')) stageKey = 'out_for_delivery';
+                        else if (statusLower.includes('deliver')) stageKey = 'delivered';
+                        else if (statusLower.includes('cancel')) stageKey = 'cancelled';
+
+                        // If not in allowed statuses (e.g. processing, placed, etc.), DO NOT SEND PUSH
+                        if (!stageKey || !PUSH_ALLOWED_STATUSES.includes(stageKey)) {
+                            console.log(`[Push Notification] Skipped push notification for status: ${status}`);
+                            return result;
+                        }
+
+                        const statusMap: Record<string, { title: string; body: string; imageFallback?: string }> = {
+                            confirmed: {
+                                title: 'Order Confirmed! 🪡',
+                                body: `Your order #${orderRow.order_number} has been verified and confirmed by our master weavers.`,
+                                imageFallback: '/notifications/order-confirmed.webp',
+                            },
+                            packed: {
+                                title: 'Order Packed! 🎁',
+                                body: `Your order #${orderRow.order_number} has been inspected and safely packed in our authentic fabric pouch.`,
+                                imageFallback: '/notifications/order-confirmed.webp',
+                            },
+                            shipped: {
+                                title: 'Order Dispatched! 🚚',
+                                body: `Your order #${orderRow.order_number} is on the way! Dispatched with our priority courier partner.`,
+                                imageFallback: '/notifications/order-confirmed.webp',
+                            },
+                            out_for_delivery: {
+                                title: 'Out for Delivery! 🛵',
+                                body: `Your order #${orderRow.order_number} is out for delivery! Our delivery partner will reach your doorstep shortly.`,
+                                imageFallback: '/notifications/out-for-delivery.webp',
+                            },
+                            delivered: {
+                                title: 'Order Delivered! ✨',
+                                body: `Your order #${orderRow.order_number} has been delivered. We hope you love your new Banarasi Saree!`,
+                                imageFallback: '/notifications/order-delivered.webp',
+                            },
+                            cancelled: {
+                                title: 'Order Cancelled',
+                                body: `Your order #${orderRow.order_number} has been cancelled.`,
+                            },
+                        };
+
+                        const notifInfo = statusMap[stageKey];
+                        if (!notifInfo) {
+                            return result;
+                        }
+
+                    const targetUrl = stageKey === 'delivered'
+                        ? `/review?orderId=${encodeURIComponent(orderRow.order_number)}`
+                        : `/account?orderId=${encodeURIComponent(orderRow.order_number)}`;
+
+                    let imageUrl: string | null = null;
+                    const firstItem = orderRow.order_items?.[0];
+                    if (firstItem?.product_snapshot) {
+                        try {
+                            const snap = typeof firstItem.product_snapshot === 'string'
+                                ? JSON.parse(firstItem.product_snapshot)
+                                : firstItem.product_snapshot;
+                            const snapImgs = snap?.images || [];
+                            imageUrl = typeof snapImgs[0] === 'string'
+                                ? snapImgs[0]
+                                : (snapImgs[0]?.image_url || snap?.image || null);
+                        } catch {}
+                    }
+                    if (!imageUrl && notifInfo.imageFallback) {
+                        imageUrl = notifInfo.imageFallback;
+                    }
+
+                    const pushRes = await supabase.functions.invoke('send-push', {
                         body: {
                             audience: 'user',
-                            target_user_id: orderRow.user_id,
+                            target_user_id: targetUserId,
                             order_status: stageKey,
                             order_number: orderRow.order_number,
                             customer_name: orderRow.customer_name || orderRow.shipping_address?.name,
                             total_amount: Number(orderRow.total_amount),
-                            image_url: firstItemImage,
+                            title: notifInfo.title,
+                            body: notifInfo.body,
+                            image_url: imageUrl,
                             notification_type: 'order',
                             url: targetUrl,
                         },
                     });
+
+                    if (pushRes.error) {
+                        console.warn('[Push Notification] send-push returned an error:', pushRes.error);
+                    } else {
+                        console.log('[Push Notification] Push notification sent successfully for order #', orderRow.order_number, pushRes.data);
+                    }
+                } else {
+                    console.warn('[Push Notification] Skipped push notification: order #', orderRow.order_number, 'has no associated user_id or profile.');
                 }
-            } catch (err) {
-                console.error('Failed to send push notification from admin update:', err);
             }
+        } catch (pushErr) {
+            console.error('[Push Notification] Exception while triggering push notification from admin update:', pushErr);
         }
+        }
+
+        return result;
     },
 
     cancelOrderItem: async (orderId: string, orderItemId: string, note = 'Item cancelled by admin'): Promise<any> => {

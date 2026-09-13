@@ -49,7 +49,9 @@ import {
     Tag,
     Percent,
     ShieldCheck,
-    Check
+    Check,
+    Bell,
+    BellOff
 } from 'lucide-react';
 import { cn, copyTextToClipboard } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -132,6 +134,7 @@ export default function OrdersPage() {
     const [statusNote, setStatusNote] = React.useState('');
     const [tempOrderStatus, setTempOrderStatus] = React.useState<string>('');
     const [tempPaymentStatus, setTempPaymentStatus] = React.useState<string>('');
+    const [sendPushNotification, setSendPushNotification] = React.useState<boolean>(false);
 
     // Receipt / Invoice Modal state
     const [isReceiptModalOpen, setIsReceiptModalOpen] = React.useState(false);
@@ -203,8 +206,8 @@ export default function OrdersPage() {
 
     // Mutations
     const updateStatusMutation = useMutation({
-        mutationFn: ({ orderId, status, note, orderItemId }: { orderId: string; status: string; note?: string; orderItemId?: string }) =>
-            ordersService.updateOrderStatus(orderId, status, note, orderItemId),
+        mutationFn: ({ orderId, status, note, orderItemId, sendPush }: { orderId: string; status: string; note?: string; orderItemId?: string; sendPush?: boolean }) =>
+            ordersService.updateOrderStatus(orderId, status, note, orderItemId, sendPush),
         onSuccess: (res: any) => {
             queryClient.invalidateQueries({ queryKey: ['orders'] });
             if (res?.cancelledEntireOrder) {
@@ -458,6 +461,8 @@ export default function OrdersPage() {
         if (selectedOrder) {
             setTempOrderStatus(selectedOrder.orderStatus);
             setTempPaymentStatus(selectedOrder.paymentStatus);
+            setSendPushNotification(false);
+            setStatusNote('');
         }
     }, [selectedOrderId, selectedOrder]);
 
@@ -2080,7 +2085,19 @@ export default function OrdersPage() {
                                                 {/* Order status form */}
                                                 <div className="space-y-2">
                                                     <label className="text-[9px] font-bold text-gray-500 uppercase">Change Fulfillment Status</label>
-                                                    <Select value={tempOrderStatus} onValueChange={setTempOrderStatus}>
+                                                    <Select
+                                                        value={tempOrderStatus}
+                                                        onValueChange={(val) => {
+                                                            setTempOrderStatus(val);
+                                                            if (val === 'processing' || val === 'placed' || val === 'packed') {
+                                                                setSendPushNotification(false);
+                                                            } else if (['shipped', 'out_for_delivery', 'delivered', 'confirmed'].includes(val)) {
+                                                                setSendPushNotification(true);
+                                                            } else {
+                                                                setSendPushNotification(false);
+                                                            }
+                                                        }}
+                                                    >
                                                         <SelectTrigger className="h-9 text-xs border-gold/30 bg-white">
                                                             <SelectValue />
                                                         </SelectTrigger>
@@ -2100,6 +2117,31 @@ export default function OrdersPage() {
                                                         onChange={e => setStatusNote(e.target.value)}
                                                     />
 
+                                                    <div className="flex items-center justify-between pt-0.5 pb-1">
+                                                        <label className={`flex items-center gap-1.5 select-none text-[11px] font-medium ${tempOrderStatus === 'processing' ? 'cursor-not-allowed opacity-60 text-gray-400' : 'cursor-pointer text-gray-700'}`}>
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={sendPushNotification && tempOrderStatus !== 'processing'}
+                                                                disabled={tempOrderStatus === 'processing'}
+                                                                onChange={e => setSendPushNotification(e.target.checked)}
+                                                                className="rounded border-gold/40 text-maroon focus:ring-maroon h-3.5 w-3.5 disabled:opacity-50"
+                                                            />
+                                                            <span className="flex items-center gap-1 text-[10.5px]">
+                                                                {sendPushNotification && tempOrderStatus !== 'processing' ? (
+                                                                    <Bell className="h-3 w-3 text-maroon fill-maroon/20" />
+                                                                ) : (
+                                                                    <BellOff className="h-3 w-3 text-gray-400" />
+                                                                )}
+                                                                Send push notification to customer
+                                                            </span>
+                                                        </label>
+                                                        {tempOrderStatus === 'processing' && (
+                                                            <span className="text-[9.5px] text-amber-700 font-medium bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                                                                Disabled for processing
+                                                            </span>
+                                                        )}
+                                                    </div>
+
                                                     <Button
                                                         size="sm"
                                                         className="w-full bg-maroon text-gold h-8 text-[10px] font-bold"
@@ -2107,7 +2149,8 @@ export default function OrdersPage() {
                                                         onClick={() => updateStatusMutation.mutate({
                                                             orderId: selectedOrder.id,
                                                             status: tempOrderStatus,
-                                                            note: statusNote
+                                                            note: statusNote,
+                                                            sendPush: sendPushNotification && tempOrderStatus !== 'processing'
                                                         })}
                                                     >
                                                         {updateStatusMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
