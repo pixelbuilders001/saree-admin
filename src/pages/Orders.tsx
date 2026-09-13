@@ -58,6 +58,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ReceiptModal } from '@/components/ReceiptModal';
+import { ShipmentTrackingCard } from '@/components/orders/ShipmentTrackingCard';
 import {
     Table,
     TableBody,
@@ -2191,6 +2192,15 @@ export default function OrdersPage() {
                                                 </div>
                                             </div>
                                         </div>
+
+                                        {/* Shipment & Parcel Tracking Checkpoints (shown when order has reached 'shipped' stage) */}
+                                        {currentFulfillmentIndex >= 4 && selectedOrder.orderStatus !== 'cancelled' && selectedOrder.orderStatus !== 'returned' && (
+                                            <ShipmentTrackingCard
+                                                orderId={selectedOrder.id}
+                                                updates={selectedOrder.shipmentTrackingUpdates}
+                                                orderNumber={selectedOrder.orderNumber}
+                                            />
+                                        )}
 
                                         {/* Status History Timeline */}
                                         <div className="border border-gold/10 p-3.5 rounded-lg space-y-3 bg-slate-50">

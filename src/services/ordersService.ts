@@ -58,6 +58,22 @@ export interface OrderStatusHistory {
     createdAt: string;
 }
 
+export interface ShipmentTrackingUpdate {
+    id: string;
+    orderId: string;
+    title: string;
+    subtitle?: string | null;
+    eventTime: string;
+    isHighlighted: boolean;
+    metadata?: {
+        next_stop?: string;
+        distance?: string;
+        eta?: string;
+        [key: string]: any;
+    };
+    createdAt: string;
+}
+
 export interface Order {
     id: string;
     orderNumber: string;
@@ -103,6 +119,7 @@ export interface Order {
     updatedAt: string;
     items?: OrderItem[];
     statusHistory?: OrderStatusHistory[];
+    shipmentTrackingUpdates?: ShipmentTrackingUpdate[];
 }
 
 export function mapOrderRow(data: any): Order {
@@ -199,6 +216,17 @@ export function mapOrderRow(data: any): Order {
         createdAt: h.created_at,
     })).sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
+    const shipmentTrackingUpdates: ShipmentTrackingUpdate[] = (data.shipment_tracking_updates || []).map((u: any) => ({
+        id: u.id,
+        orderId: u.order_id,
+        title: u.title,
+        subtitle: u.subtitle || null,
+        eventTime: u.event_time,
+        isHighlighted: u.is_highlighted === true,
+        metadata: typeof u.metadata === 'object' && u.metadata !== null ? u.metadata : {},
+        createdAt: u.created_at,
+    })).sort((a: any, b: any) => new Date(b.eventTime).getTime() - new Date(a.eventTime).getTime());
+
     return {
         id: data.id,
         orderNumber: data.order_number,
@@ -240,6 +268,7 @@ export function mapOrderRow(data: any): Order {
         updatedAt: data.updated_at,
         items,
         statusHistory,
+        shipmentTrackingUpdates,
     };
 }
 
@@ -250,7 +279,8 @@ export const ordersService = {
             .select(`
                 *,
                 order_items (*),
-                order_status_history (*)
+                order_status_history (*),
+                shipment_tracking_updates (*)
             `)
             .order('created_at', { ascending: false });
 
@@ -265,7 +295,8 @@ export const ordersService = {
             .select(`
                 *,
                 order_items (*),
-                order_status_history (*)
+                order_status_history (*),
+                shipment_tracking_updates (*)
             `)
             .eq('id', id)
             .single();
@@ -868,6 +899,51 @@ export const ordersService = {
                 if (error) throw error;
             }
         }
+    },
+
+    addShipmentTrackingUpdate: async (payload: {
+        orderId: string;
+        title: string;
+        subtitle?: string;
+        eventTime?: string;
+        isHighlighted?: boolean;
+        metadata?: Record<string, any>;
+    }): Promise<ShipmentTrackingUpdate> => {
+        const insertData: any = {
+            order_id: payload.orderId,
+            title: payload.title.trim(),
+            subtitle: payload.subtitle?.trim() || null,
+            event_time: payload.eventTime || new Date().toISOString(),
+            is_highlighted: payload.isHighlighted === true,
+            metadata: payload.metadata || {},
+        };
+
+        const { data, error } = await supabase
+            .from('shipment_tracking_updates')
+            .insert([insertData])
+            .select()
+            .single();
+
+        if (error) throw error;
+        return {
+            id: data.id,
+            orderId: data.order_id,
+            title: data.title,
+            subtitle: data.subtitle || null,
+            eventTime: data.event_time,
+            isHighlighted: data.is_highlighted === true,
+            metadata: typeof data.metadata === 'object' && data.metadata !== null ? data.metadata : {},
+            createdAt: data.created_at,
+        };
+    },
+
+    deleteShipmentTrackingUpdate: async (id: string): Promise<void> => {
+        const { error } = await supabase
+            .from('shipment_tracking_updates')
+            .delete()
+            .eq('id', id);
+
+        if (error) throw error;
     }
 };
 
