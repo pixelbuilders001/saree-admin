@@ -72,14 +72,39 @@ export const receiptService = {
         }
 
         // Table
-        const tableColumn = ["Sr No.", "Item Name", "Qty", "Price", "Total"];
-        const tableRows = sale.items.map((item, index) => [
-            index + 1,
-            item.sareeName,
-            item.quantity,
-            `Rs. ${item.sellingPrice.toLocaleString()}`,
-            `Rs. ${(item.quantity * item.sellingPrice).toLocaleString()}`
-        ]);
+        const itemsSubtotal = sale.items.reduce((acc, it) => acc + it.quantity * it.sellingPrice, 0);
+        const saleDiscount = Number(sale.discountAmount || (sale as any).discount_amount || (sale as any).discount || 0);
+        const hasDiscount = saleDiscount > 0 || sale.items.some(it => (it.mrp && it.mrp > it.sellingPrice));
+
+        const tableColumn = hasDiscount
+            ? ["Sr No.", "Item Name", "Qty", "Price", "Discount", "Total"]
+            : ["Sr No.", "Item Name", "Qty", "Price", "Total"];
+
+        const tableRows = sale.items.map((item, index) => {
+            const lineTotal = item.quantity * item.sellingPrice;
+            const itemAllocatedDisc = hasDiscount && saleDiscount > 0 && itemsSubtotal > 0
+                ? Math.round((saleDiscount * lineTotal / itemsSubtotal) * 100) / 100
+                : 0;
+            const netLineTotal = Math.max(0, lineTotal - itemAllocatedDisc);
+
+            if (hasDiscount) {
+                return [
+                    index + 1,
+                    item.sareeName,
+                    item.quantity,
+                    `Rs. ${item.sellingPrice.toLocaleString()}`,
+                    itemAllocatedDisc > 0 ? `-Rs. ${itemAllocatedDisc.toLocaleString()}` : '—',
+                    `Rs. ${netLineTotal.toLocaleString()}`
+                ];
+            }
+            return [
+                index + 1,
+                item.sareeName,
+                item.quantity,
+                `Rs. ${item.sellingPrice.toLocaleString()}`,
+                `Rs. ${lineTotal.toLocaleString()}`
+            ];
+        });
 
         autoTable(doc, {
             startY: 80,
@@ -108,10 +133,21 @@ export const receiptService = {
         const finalY = (doc as any).lastAutoTable.finalY + 10;
 
         let currentY = finalY;
+
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "normal");
+        drawText(`Subtotal: Rs. ${itemsSubtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, 190, currentY, { align: 'right' });
+        currentY += 6;
+
+        if (saleDiscount > 0) {
+            doc.setTextColor(185, 28, 28);
+            drawText(`Discount${sale.discountPercentage ? ` (${sale.discountPercentage}%)` : ''}: -Rs. ${saleDiscount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, 190, currentY, { align: 'right' });
+            doc.setTextColor(0);
+            currentY += 6;
+        }
+
         if (sale.isGstApplied) {
-            doc.setFontSize(10);
-            doc.setFont("helvetica", "normal");
-            drawText(`Taxable Amount: Rs. ${(sale.taxableAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, 190, currentY, { align: 'right' });
+            drawText(`Taxable Amount: Rs. ${(sale.taxableAmount || (itemsSubtotal - saleDiscount)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, 190, currentY, { align: 'right' });
             currentY += 6;
             drawText(`CGST @ ${sale.cgstRate || 2.5}%: Rs. ${(sale.cgstAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, 190, currentY, { align: 'right' });
             currentY += 6;
@@ -438,11 +474,36 @@ export const receiptService = {
         // Table
         const gstRate = order.gstRate ?? 5;
         const items = (order.items || []).filter(i => (i.itemStatus || '').toLowerCase() !== 'cancelled');
-        const tableColumn = ["#", "Item Description", "HSN", "Qty", "Price", "Taxable", "GST", "Total"];
+        const orderDiscount = Number(order.discount || (order as any).discount_amount || (order as any).couponDiscount || 0);
+        const hasDiscount = orderDiscount > 0 || items.some(it => (it.discountAmount && it.discountAmount > 0));
+
+        const tableColumn = hasDiscount
+            ? ["#", "Item Description", "HSN", "Qty", "Price", "Discount", "Taxable", "GST", "Total"]
+            : ["#", "Item Description", "HSN", "Qty", "Price", "Taxable", "GST", "Total"];
+
         const tableRows = items.map((item, idx) => {
-            const itemPrice = Number(item.totalPrice || item.unitPrice * item.quantity);
+            const lineGross = Number(item.unitPrice) * Number(item.quantity);
+            let itemDiscount = Number(item.discountAmount || 0);
+            if (!itemDiscount && orderDiscount > 0 && Number(order.subtotal || 0) > 0) {
+                itemDiscount = Math.round((orderDiscount * lineGross / Number(order.subtotal)) * 100) / 100;
+            }
+            const itemPrice = Number(item.totalPrice || Math.max(0, lineGross - itemDiscount));
             const itemTaxable = Number(item.taxableValue ?? Math.round(itemPrice / (1 + gstRate / 100)));
             const itemGst = Number(item.gstAmount ?? Math.max(0, itemPrice - itemTaxable));
+
+            if (hasDiscount) {
+                return [
+                    idx + 1,
+                    item.productName + (item.sku ? ` (${item.sku})` : ''),
+                    item.hsnCode || '5208',
+                    item.quantity,
+                    `Rs. ${Number(item.unitPrice).toLocaleString('en-IN')}`,
+                    itemDiscount > 0 ? `-Rs. ${itemDiscount.toLocaleString('en-IN')}` : '—',
+                    `Rs. ${itemTaxable.toLocaleString('en-IN')}`,
+                    `Rs. ${itemGst.toLocaleString('en-IN')}`,
+                    `Rs. ${itemPrice.toLocaleString('en-IN')}`
+                ];
+            }
             return [
                 idx + 1,
                 item.productName + (item.sku ? ` (${item.sku})` : ''),
@@ -469,7 +530,17 @@ export const receiptService = {
                 halign: 'center'
             },
             alternateRowStyles: { fillColor: [253, 250, 245] },
-            columnStyles: {
+            columnStyles: hasDiscount ? {
+                0: { halign: 'center', cellWidth: 8 },
+                1: { cellWidth: 54 },
+                2: { halign: 'center', cellWidth: 14 },
+                3: { halign: 'center', cellWidth: 10 },
+                4: { halign: 'right', cellWidth: 20 },
+                5: { halign: 'right', cellWidth: 20 },
+                6: { halign: 'right', cellWidth: 20 },
+                7: { halign: 'right', cellWidth: 18 },
+                8: { halign: 'right', cellWidth: 22 },
+            } : {
                 0: { halign: 'center', cellWidth: 10 },
                 1: { cellWidth: 60 },
                 2: { halign: 'center', cellWidth: 16 },
@@ -523,7 +594,16 @@ export const receiptService = {
             finalY += 4.5;
         };
 
+        const totalAddons = items.reduce((sum, item) => {
+            const itemAddons = Array.isArray(item.addons) ? item.addons : [];
+            const addonsPerUnit = itemAddons.reduce((aSum, a) => aSum + (Number(a.price) || 0), 0);
+            return sum + addonsPerUnit * (Number(item.quantity) || 1);
+        }, 0);
+
         printSummaryLine("Items Subtotal:", `Rs. ${subtotal.toLocaleString('en-IN')}`);
+        if (totalAddons > 0) {
+            printSummaryLine("Tailoring / Add-ons:", `+Rs. ${totalAddons.toLocaleString('en-IN')}`);
+        }
         if (discount > 0) {
             printSummaryLine(`Discount ${order.couponCode ? `(${order.couponCode})` : ''}:`, `-Rs. ${discount.toLocaleString('en-IN')}`);
         }

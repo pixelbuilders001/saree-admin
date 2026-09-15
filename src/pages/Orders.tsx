@@ -2020,7 +2020,12 @@ export default function OrdersPage() {
                                                                                     {item.quantity}
                                                                                 </TableCell>
                                                                                 <TableCell className={cn("py-2 text-xs text-right font-mono", isItemCancelled && "line-through text-gray-400")}>
-                                                                                    ₹{item.unitPrice.toLocaleString()}
+                                                                                    <div className="flex flex-col items-end">
+                                                                                        {Boolean(item.mrp && item.mrp > item.unitPrice) && (
+                                                                                            <span className="text-[10px] text-gray-400 line-through">₹{item.mrp?.toLocaleString()}</span>
+                                                                                        )}
+                                                                                        <span>₹{item.unitPrice.toLocaleString()}</span>
+                                                                                    </div>
                                                                                 </TableCell>
                                                                                 <TableCell className={cn("py-2 text-xs text-right font-mono text-gray-600", isItemCancelled && "line-through text-gray-400")}>
                                                                                     ₹{itemTaxable.toLocaleString()}
@@ -2029,7 +2034,14 @@ export default function OrdersPage() {
                                                                                     ₹{itemGst.toLocaleString()}
                                                                                 </TableCell>
                                                                                 <TableCell className={cn("py-2 text-xs text-right font-mono font-bold text-gray-900", isItemCancelled && "line-through text-gray-400")}>
-                                                                                    ₹{item.totalPrice.toLocaleString()}
+                                                                                    <div className="flex flex-col items-end">
+                                                                                        <span>₹{item.totalPrice.toLocaleString()}</span>
+                                                                                        {Boolean(item.discountAmount && item.discountAmount > 0) && (
+                                                                                            <span className="text-[9px] font-semibold text-emerald-700 font-sans">
+                                                                                                -₹{item.discountAmount?.toLocaleString()}
+                                                                                            </span>
+                                                                                        )}
+                                                                                    </div>
                                                                                 </TableCell>
                                                                                 <TableCell className="py-2 text-center">
                                                                                     {canCancelItem ? (
@@ -2070,55 +2082,103 @@ export default function OrdersPage() {
                                                                     <span>Totals reflect active items only. Cancelled items have been deducted.</span>
                                                                 </div>
                                                             )}
-                                                            <div className="space-y-1.5">
-                                                                <div className="flex justify-between">
-                                                                    <span className="text-gray-500">Items Subtotal</span>
-                                                                    <span className="font-mono font-medium">₹{selectedOrder.subtotal.toLocaleString()}</span>
-                                                                </div>
-                                                                {selectedOrder.discount > 0 && (
-                                                                    <div className="flex justify-between text-rose-600 font-medium">
-                                                                        <span className="flex items-center gap-1">
-                                                                            Coupon Discount
-                                                                            {selectedOrder.couponCode && (
-                                                                                <span className="text-[9px] font-mono uppercase bg-rose-100 px-1.5 py-0.2 rounded text-rose-800">
-                                                                                    {selectedOrder.couponCode}
-                                                                                </span>
-                                                                            )}
-                                                                        </span>
-                                                                        <span className="font-mono">-₹{selectedOrder.discount.toLocaleString()}</span>
-                                                                    </div>
-                                                                )}
-                                                                <div className="flex justify-between">
-                                                                    <span className="text-gray-500">Shipping Charges</span>
-                                                                    <span className="font-mono font-medium">
-                                                                        {selectedOrder.shippingFee > 0 ? `₹${selectedOrder.shippingFee.toLocaleString()}` : <span className="text-emerald-600 font-semibold uppercase text-[10px]">FREE</span>}
-                                                                    </span>
-                                                                </div>
-                                                                {selectedOrder.isGift && (
-                                                                    <div className="flex justify-between text-pink-700">
-                                                                        <span className="flex items-center gap-1">🎁 Gift Packaging & Ribbon</span>
-                                                                        <span className="font-mono font-medium">+₹100</span>
-                                                                    </div>
-                                                                )}
-                                                                <div className="border-t border-dashed border-gold/20 pt-1.5 flex justify-between text-[11px] text-gray-500">
-                                                                    <span>Taxable Amount (Base)</span>
-                                                                    <span className="font-mono">₹{taxableAmt.toLocaleString()}</span>
-                                                                </div>
-                                                                <div className="flex justify-between text-[11px] text-gray-500">
-                                                                    <span>
-                                                                        {isIntraState ? 'GST (CGST 2.5% + SGST 2.5%)' : `GST (IGST 5% - ${posState})`}
-                                                                    </span>
-                                                                    <span className="font-mono">₹{totalGstAmt.toLocaleString()}</span>
-                                                                </div>
-                                                            </div>
+                                                            {(() => {
+                                                                const activeItems = (selectedOrder.items || []).filter(i => (i.itemStatus || '').toLowerCase() !== 'cancelled');
+                                                                const orderItemsForCalc = activeItems.length > 0 ? activeItems : (selectedOrder.items || []);
 
-                                                            <div className="flex justify-between items-center font-bold text-maroon border-t border-gold/20 pt-2.5">
-                                                                <div>
-                                                                    <div className="text-sm">Grand Total</div>
-                                                                    <div className="text-[9px] font-normal text-gray-500 uppercase tracking-wider">Inclusive of all taxes & delivery</div>
-                                                                </div>
-                                                                <span className="font-mono text-lg text-maroon font-extrabold">₹{selectedOrder.totalAmount.toLocaleString()}</span>
-                                                            </div>
+                                                                const orderTotalMrp = orderItemsForCalc.reduce((sum, i) => sum + (Number(i.mrp || i.unitPrice) * (Number(i.quantity) || 1)), 0);
+                                                                const sareeSubtotal = orderItemsForCalc.reduce((sum, i) => sum + (Number(i.unitPrice) * (Number(i.quantity) || 1)), 0);
+                                                                const itemsDiscountSum = orderItemsForCalc.reduce((sum, i) => sum + (Number(i.discountAmount) || 0), 0);
+                                                                const orderProductDiscount = itemsDiscountSum > 0 ? itemsDiscountSum : Math.max(0, orderTotalMrp - sareeSubtotal);
+
+                                                                const addonsTotal = orderItemsForCalc.reduce((sum, item) => {
+                                                                    const itemAddons = Array.isArray(item.addons) ? item.addons : [];
+                                                                    const addonsPerUnit = itemAddons.reduce((aSum, a) => aSum + (Number(a.price) || 0), 0);
+                                                                    return sum + addonsPerUnit * (Number(item.quantity) || 1);
+                                                                }, 0);
+
+                                                                const totalOrderSavings = orderProductDiscount + Number(selectedOrder.discount || 0);
+
+                                                                return (
+                                                                    <>
+                                                                        <div className="space-y-1.5">
+                                                                            {orderTotalMrp > 0 && (
+                                                                                <div className="flex justify-between">
+                                                                                    <span className="text-gray-500">MRP</span>
+                                                                                    <span className="font-mono font-medium">₹{orderTotalMrp.toLocaleString()}</span>
+                                                                                </div>
+                                                                            )}
+                                                                            {orderProductDiscount > 0 && (
+                                                                                <div className="flex justify-between text-emerald-700 font-medium">
+                                                                                    <span>Product Discount</span>
+                                                                                    <span className="font-mono">-₹{orderProductDiscount.toLocaleString()}</span>
+                                                                                </div>
+                                                                            )}
+                                                                            <div className="flex justify-between">
+                                                                                <span className="text-gray-500">Saree Subtotal</span>
+                                                                                <span className="font-mono font-medium">₹{sareeSubtotal.toLocaleString()}</span>
+                                                                            </div>
+                                                                            {addonsTotal > 0 && (
+                                                                                <div className="flex justify-between text-amber-900 font-medium">
+                                                                                    <span className="flex items-center gap-1">
+                                                                                        <Scissors className="h-3 w-3 text-amber-700" /> Tailoring / Add-ons
+                                                                                    </span>
+                                                                                    <span className="font-mono">+₹{addonsTotal.toLocaleString()}</span>
+                                                                                </div>
+                                                                            )}
+                                                                            {selectedOrder.discount > 0 && (
+                                                                                <div className="flex justify-between text-rose-600 font-medium">
+                                                                                    <span className="flex items-center gap-1">
+                                                                                        Coupon Discount
+                                                                                        {selectedOrder.couponCode && (
+                                                                                            <span className="text-[9px] font-mono uppercase bg-rose-100 px-1.5 py-0.2 rounded text-rose-800">
+                                                                                                {selectedOrder.couponCode}
+                                                                                            </span>
+                                                                                        )}
+                                                                                    </span>
+                                                                                    <span className="font-mono">-₹{selectedOrder.discount.toLocaleString()}</span>
+                                                                                </div>
+                                                                            )}
+                                                                            <div className="flex justify-between">
+                                                                                <span className="text-gray-500">Shipping Charges</span>
+                                                                                <span className="font-mono font-medium">
+                                                                                    {selectedOrder.shippingFee > 0 ? `₹${selectedOrder.shippingFee.toLocaleString()}` : <span className="text-emerald-600 font-semibold uppercase text-[10px]">FREE</span>}
+                                                                                </span>
+                                                                            </div>
+                                                                            {selectedOrder.isGift && (
+                                                                                <div className="flex justify-between text-pink-700">
+                                                                                    <span className="flex items-center gap-1">🎁 Gift Packaging & Ribbon</span>
+                                                                                    <span className="font-mono font-medium">+₹100</span>
+                                                                                </div>
+                                                                            )}
+                                                                            <div className="border-t border-dashed border-gold/20 pt-1.5 flex justify-between text-[11px] text-gray-500">
+                                                                                <span>Taxable Amount (Base)</span>
+                                                                                <span className="font-mono">₹{taxableAmt.toLocaleString()}</span>
+                                                                            </div>
+                                                                            <div className="flex justify-between text-[11px] text-gray-500">
+                                                                                <span>
+                                                                                    {isIntraState ? 'GST (CGST 2.5% + SGST 2.5%)' : `GST (IGST 5% - ${posState})`}
+                                                                                </span>
+                                                                                <span className="font-mono">₹{totalGstAmt.toLocaleString()}</span>
+                                                                            </div>
+                                                                        </div>
+
+                                                                        <div className="flex justify-between items-center font-bold text-maroon border-t border-gold/20 pt-2.5">
+                                                                            <div>
+                                                                                <div className="text-sm">Grand Total</div>
+                                                                                <div className="text-[9px] font-normal text-gray-500 uppercase tracking-wider">Inclusive of all taxes & delivery</div>
+                                                                            </div>
+                                                                            <span className="font-mono text-lg text-maroon font-extrabold">₹{selectedOrder.totalAmount.toLocaleString()}</span>
+                                                                        </div>
+
+                                                                        {totalOrderSavings > 0 && (
+                                                                            <div className="bg-emerald-50 text-emerald-800 border border-emerald-200/60 rounded-md p-2 text-center text-[11px] font-semibold font-sans">
+                                                                                🎉 Total Savings on this order: ₹{totalOrderSavings.toLocaleString()}
+                                                                            </div>
+                                                                        )}
+                                                                    </>
+                                                                );
+                                                            })()}
 
                                                             {/* Invoice & Receipt Actions */}
                                                             <div className="pt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">

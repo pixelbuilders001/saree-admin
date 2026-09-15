@@ -12,6 +12,8 @@ export interface ReceiptItem {
     sellingPrice: number;
     hsnCode?: string;
     addons?: ReceiptItemAddon[];
+    discountAmount?: number;
+    discountPercentage?: number;
 }
 
 export interface ReceiptData {
@@ -90,6 +92,15 @@ export function decodeReceiptData(encoded: string): ReceiptData | null {
  */
 export function mapSaleToReceiptData(saleOrOrder: any): ReceiptData {
     const rawItems = saleOrOrder.items || saleOrOrder.order_items || saleOrOrder.sale_items || [];
+    const discountAmount = Number(
+        saleOrOrder.discountAmount ??
+        saleOrOrder.discount_amount ??
+        saleOrOrder.discount ??
+        saleOrOrder.couponDiscount ??
+        saleOrOrder.coupon_discount ??
+        0
+    );
+
     const items: ReceiptItem[] = rawItems.map((i: any) => {
         let snap = i.product_snapshot || i.productSnapshot;
         if (typeof snap === 'string') {
@@ -97,9 +108,7 @@ export function mapSaleToReceiptData(saleOrOrder: any): ReceiptData {
         }
         const sareeName = i.sareeName || i.product_name || i.productName || snap?.saree_name || snap?.name || i.name || 'Pure Silk Banarasi Saree';
         const qty = Math.abs(Number(i.quantity || 1));
-        const sellingPrice = Number(i.sellingPrice ?? i.unit_price ?? i.unitPrice ?? i.price ?? snap?.selling_price ?? 0);
-        const mrpVal = Number(i.mrp ?? snap?.mrp ?? snap?.price ?? (sellingPrice > 0 ? sellingPrice : 0));
-        const hsnCode = i.hsnCode || i.hsn_code || snap?.hsn_code || '5208';
+        const rawSellingPrice = Number(i.sellingPrice ?? i.unit_price ?? i.unitPrice ?? i.price ?? snap?.selling_price ?? 0);
         const rawAddons = i.addons || snap?.addons || snap?.selectedAddons || i.selectedAddons;
         const addons: ReceiptItemAddon[] = Array.isArray(rawAddons)
             ? rawAddons.map((a: any) => ({
@@ -110,6 +119,21 @@ export function mapSaleToReceiptData(saleOrOrder: any): ReceiptData {
             }))
             : [];
 
+        const addonsUnit = addons.reduce((sum, a) => sum + (Number(a.price) || 0), 0);
+        const sellingPrice = (addonsUnit > 0 && rawSellingPrice > addonsUnit) ? (rawSellingPrice - addonsUnit) : rawSellingPrice;
+        const snapMrp = Number(snap?.mrp ?? snap?.price ?? 0);
+        const snapDiscount = Number(snap?.discount_amount ?? 0);
+        let mrpVal = Number(i.mrp ?? snapMrp);
+        if (mrpVal <= sellingPrice && snapDiscount > 0) {
+            mrpVal = sellingPrice + snapDiscount;
+        }
+        if (mrpVal <= 0) {
+            mrpVal = sellingPrice;
+        }
+
+        const hsnCode = i.hsnCode || i.hsn_code || snap?.hsn_code || '5208';
+        const explicitItemDiscount = Number(i.discountAmount ?? i.discount_amount ?? 0);
+
         return {
             sareeName: (i.item_status === 'cancelled' || i.itemStatus === 'cancelled') ? `[Cancelled] ${sareeName}` : sareeName,
             quantity: qty,
@@ -117,6 +141,7 @@ export function mapSaleToReceiptData(saleOrOrder: any): ReceiptData {
             sellingPrice,
             hsnCode,
             addons: addons.length > 0 ? addons : undefined,
+            discountAmount: explicitItemDiscount > 0 ? explicitItemDiscount : undefined,
         };
     });
 
@@ -144,9 +169,34 @@ export function mapSaleToReceiptData(saleOrOrder: any): ReceiptData {
     }
 
     const calculatedSubtotal = items.reduce((s, it) => s + it.quantity * it.sellingPrice, 0);
-    const subtotal = saleOrOrder.subtotal != null ? Number(saleOrOrder.subtotal) : calculatedSubtotal;
+    const subtotal = calculatedSubtotal > 0 ? calculatedSubtotal : (saleOrOrder.subtotal != null && Number(saleOrOrder.subtotal) > 0 ? Number(saleOrOrder.subtotal) : 0);
     const totalAmount = Number(saleOrOrder.totalAmount ?? saleOrOrder.total_amount ?? saleOrOrder.total ?? 0);
-    const discountAmount = Number(saleOrOrder.discountAmount ?? saleOrOrder.discount_amount ?? saleOrOrder.discount ?? 0);
+
+    // If order/sale has an overall discount but items don't have individual discountAmount, allocate pro-rata
+    const hasItemDiscounts = items.some(it => (it.discountAmount || 0) > 0);
+    if (!hasItemDiscounts && discountAmount > 0 && calculatedSubtotal > 0) {
+        let allocatedSum = 0;
+        items.forEach((it, idx) => {
+            if (idx === items.length - 1) {
+                it.discountAmount = Math.max(0, Math.round((discountAmount - allocatedSum) * 100) / 100);
+            } else {
+                const itemPortion = Math.round((discountAmount * (it.quantity * it.sellingPrice) / calculatedSubtotal) * 100) / 100;
+                it.discountAmount = itemPortion;
+                allocatedSum += itemPortion;
+            }
+        });
+    }
+
+    // Set discountPercentage on items
+    items.forEach(it => {
+        const itemMrpTotal = it.quantity * (it.mrp || it.sellingPrice);
+        const itemProdDisc = Math.max(0, itemMrpTotal - (it.quantity * it.sellingPrice));
+        const totalLineDisc = itemProdDisc + Number(it.discountAmount || 0);
+        if (itemMrpTotal > 0 && totalLineDisc > 0) {
+            it.discountPercentage = parseFloat(((totalLineDisc / itemMrpTotal) * 100).toFixed(1));
+        }
+    });
+
     const discountPercentage = saleOrOrder.discountPercentage != null
         ? Number(saleOrOrder.discountPercentage)
         : (saleOrOrder.discount_percentage != null

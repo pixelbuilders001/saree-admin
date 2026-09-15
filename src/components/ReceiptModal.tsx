@@ -55,16 +55,36 @@ export function ReceiptModal({ isOpen, onClose, sale }: ReceiptModalProps) {
         window.open(phone ? `https://wa.me/91${phone}?text=${message}` : `https://wa.me/?text=${message}`, '_blank');
     };
 
-    const itemsSubtotal = Number(receiptData.subtotal != null ? receiptData.subtotal : (sale.subtotal || totalAmount));
+    const discountAmount = Number(
+        receiptData.discountAmount ||
+        sale.discountAmount ||
+        sale.discount_amount ||
+        sale.discount ||
+        sale.couponDiscount ||
+        0
+    );
+    const shippingFee = Number(receiptData.shippingFee || sale.shippingFee || sale.shipping_fee || sale.shippingCharge || 0);
+    const giftWrapCharge = Number(receiptData.giftWrapCharge || sale.giftWrapCharge || sale.gift_wrap_charge || 0);
+    const itemsSubtotal = Number(
+        receiptData.subtotal != null && receiptData.subtotal > 0
+            ? receiptData.subtotal
+            : (sale.subtotal != null && Number(sale.subtotal) > 0
+                ? Number(sale.subtotal)
+                : (receiptData.items && receiptData.items.length > 0
+                    ? receiptData.items.reduce((s, it) => s + it.quantity * it.sellingPrice, 0)
+                    : (totalAmount + discountAmount - shippingFee - giftWrapCharge)))
+    );
+    const totalAddons = (receiptData.items || []).reduce((sum, item) => {
+        const itemAddons = Array.isArray(item.addons) ? item.addons : [];
+        const addonsPerUnit = itemAddons.reduce((aSum, a) => aSum + (Number(a.price) || 0), 0);
+        return sum + addonsPerUnit * (item.quantity || 1);
+    }, 0);
     const taxableValue = receiptData.taxableAmount != null ? Number(receiptData.taxableAmount) : null;
     const cgstAmt = Number(receiptData.cgstAmount || 0);
     const sgstAmt = Number(receiptData.sgstAmount || 0);
     const igstAmt = Number(receiptData.igstAmount || 0);
     const totalGstAmt = Number(receiptData.totalGst || (cgstAmt + sgstAmt + igstAmt));
     const gstRate = Number(receiptData.gstRate || sale.gstRate || 5);
-    const shippingFee = Number(receiptData.shippingFee || sale.shippingFee || sale.shipping_fee || 0);
-    const giftWrapCharge = Number(receiptData.giftWrapCharge || sale.giftWrapCharge || sale.gift_wrap_charge || 0);
-    const discountAmount = Number(receiptData.discountAmount || sale.discountAmount || sale.discount || 0);
     const paymentMode = receiptData.paymentMode || sale.paymentMode || sale.paymentMethod || 'Paid';
 
     return (
@@ -123,16 +143,25 @@ export function ReceiptModal({ isOpen, onClose, sale }: ReceiptModalProps) {
                                 </span>
                             </div>
 
+                            {totalAddons > 0 && (
+                                <div className="flex justify-between text-amber-900">
+                                    <span>Tailoring / Add-ons</span>
+                                    <span className="font-medium">
+                                        + ₹{totalAddons.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </span>
+                                </div>
+                            )}
+
                             {discountAmount > 0 && (
                                 <div className="flex justify-between text-[#b91c1c]">
-                                    <span>Discount</span>
+                                    <span>{receiptData.appliedVoucherCode ? `Discount / Coupon (${receiptData.appliedVoucherCode})` : 'Discount'}</span>
                                     <span className="font-medium">
                                         − ₹{discountAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                     </span>
                                 </div>
                             )}
 
-                            {Number(receiptData.appliedVoucherAmount || 0) > 0 && (
+                            {Number(receiptData.appliedVoucherAmount || 0) > 0 && Number(receiptData.appliedVoucherAmount) !== discountAmount && (
                                 <div className="flex justify-between text-[#b91c1c]">
                                     <span>Voucher ({receiptData.appliedVoucherCode})</span>
                                     <span className="font-medium">

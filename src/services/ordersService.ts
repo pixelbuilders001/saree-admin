@@ -37,6 +37,7 @@ export interface OrderItem {
     sku?: string;
     barcode?: string;
     quantity: number;
+    mrp?: number;
     unitPrice: number;
     totalPrice: number;
     productSnapshot?: any;
@@ -176,9 +177,26 @@ export function mapOrderRow(data: any): Order {
         }
         const snapImages = snap?.images || snap?.image_urls || [];
         const imageUrl = snap?.image || snap?.primary_image || (Array.isArray(snapImages) && snapImages.length > 0 ? (typeof snapImages[0] === 'string' ? snapImages[0] : snapImages[0]?.imageUrl || snapImages[0]?.url) : null);
-        const unitPrice = Number(item.unit_price || snap?.selling_price || 0);
+        const rawUnitPrice = Number(item.unit_price || snap?.selling_price || 0);
         const quantity = Number(item.quantity || 1);
-        const totalPrice = Number(item.total_price || (unitPrice * quantity));
+        const rawAddons = item.addons || snap?.addons || snap?.selectedAddons || item.selectedAddons;
+        const addons: OrderItemAddon[] | undefined = Array.isArray(rawAddons)
+            ? rawAddons.map((a: any) => ({
+                id: String(a.id || ''),
+                title: String(a.title || a.name || 'Tailoring Add-on'),
+                price: Number(a.price || 0),
+                size: a.size ? String(a.size) : undefined,
+            }))
+            : undefined;
+        const addonsUnit = addons ? addons.reduce((sum, a) => sum + (Number(a.price) || 0), 0) : 0;
+        const unitPrice = (addonsUnit > 0 && rawUnitPrice > addonsUnit) ? (rawUnitPrice - addonsUnit) : rawUnitPrice;
+
+        let snapMrp = Number(snap?.mrp ?? snap?.price ?? item.mrp ?? 0);
+        const itemDiscount = item.discount_amount != null ? Number(item.discount_amount) : Number(snap?.discount_amount ?? 0);
+        if (snapMrp <= unitPrice && itemDiscount > 0) snapMrp = unitPrice + itemDiscount;
+        const mrp = snapMrp > unitPrice ? snapMrp : (snapMrp > 0 ? snapMrp : unitPrice);
+
+        const totalPrice = Number(unitPrice * quantity);
         const itemGstRate = Number(item.gst_rate || snap?.gst_rate || gstRate);
         const itemTaxable = item.taxable_value != null
             ? Number(item.taxable_value)
@@ -195,6 +213,7 @@ export function mapOrderRow(data: any): Order {
             sku: item.sku || snap?.sku,
             barcode: item.barcode || snap?.barcode,
             quantity,
+            mrp,
             unitPrice,
             totalPrice,
             productSnapshot: snap,
@@ -206,21 +225,14 @@ export function mapOrderRow(data: any): Order {
             sgstAmount: item.sgst_amount != null ? Number(item.sgst_amount) : (isIntraState ? Math.round(itemGstAmt / 2 * 100) / 100 : 0),
             igstAmount: item.igst_amount != null ? Number(item.igst_amount) : (!isIntraState ? itemGstAmt : 0),
             gstAmount: itemGstAmt,
-            discountAmount: item.discount_amount != null ? Number(item.discount_amount) : 0,
+            discountAmount: itemDiscount,
             productNameSnapshot: item.product_name_snapshot || snap?.saree_name,
             imageUrl,
             color: item.color || snap?.color || snap?.primary_color,
             size: item.size || snap?.size,
             fabric: item.fabric || snap?.fabric,
             createdAt: item.created_at,
-            addons: Array.isArray(item.addons || snap?.addons || snap?.selectedAddons || item.selectedAddons)
-                ? (item.addons || snap?.addons || snap?.selectedAddons || item.selectedAddons).map((a: any) => ({
-                    id: String(a.id || ''),
-                    title: String(a.title || a.name || 'Tailoring Add-on'),
-                    price: Number(a.price || 0),
-                    size: a.size ? String(a.size) : undefined,
-                }))
-                : undefined,
+            addons,
         };
     });
 
@@ -247,6 +259,9 @@ export function mapOrderRow(data: any): Order {
         return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
     });
 
+    const calculatedSareeSubtotal = items.reduce((s, it) => s + it.totalPrice, 0);
+    const finalSubtotal = calculatedSareeSubtotal > 0 ? calculatedSareeSubtotal : subtotal;
+
     return {
         id: data.id,
         orderNumber: data.order_number,
@@ -255,7 +270,7 @@ export function mapOrderRow(data: any): Order {
         customerPhone: data.customer_phone || shippingAddress.phone || '',
         customerEmail: data.customer_email || shippingAddress.email || undefined,
         shippingAddress,
-        subtotal,
+        subtotal: finalSubtotal,
         shippingFee,
         discount,
         totalAmount,
