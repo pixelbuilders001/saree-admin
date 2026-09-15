@@ -42,8 +42,20 @@ import {
     Sparkles,
     Check,
     Timer,
-    Store
+    Store,
+    Scissors
 } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+    DialogFooter
+} from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
+import { addonsService, type ProductAddon } from '@/services/addonsService';
 import {
     Table,
     TableBody,
@@ -74,13 +86,31 @@ const passwordSchema = z.object({
 type PasswordFormValues = z.infer<typeof passwordSchema>;
 
 export default function SettingsPage() {
-    const [activeTab, setActiveTab] = React.useState<'delivery' | 'payments' | 'security' | 'system'>('delivery');
+    const [searchParams, setSearchParams] = useSearchParams();
+    const [activeTab, setActiveTab] = React.useState<'delivery' | 'payments' | 'security' | 'system' | 'addons'>(() => {
+        const tab = new URLSearchParams(window.location.search).get('tab');
+        if (tab === 'addons') return 'addons';
+        if (tab === 'payments' || tab === 'security' || tab === 'system') return tab;
+        return 'delivery';
+    });
     const [showPassword, setShowPassword] = React.useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = React.useState(false);
 
     const { logout, user } = useAuthStore();
     const isStaff = user?.role === 'staff';
     const queryClient = useQueryClient();
+
+    React.useEffect(() => {
+        const tab = searchParams.get('tab');
+        if (tab && ['delivery', 'payments', 'security', 'system', 'addons'].includes(tab)) {
+            setActiveTab(tab as any);
+        }
+    }, [searchParams]);
+
+    const handleSelectTab = (tab: 'delivery' | 'payments' | 'security' | 'system' | 'addons') => {
+        setActiveTab(tab);
+        setSearchParams({ tab }, { replace: true });
+    };
 
     // UPI Terminal State
     const [upiSettings, setUpiSettings] = React.useState<UpiSetting[]>([]);
@@ -94,6 +124,22 @@ export default function SettingsPage() {
     const [isLoadingDelivery, setIsLoadingDelivery] = React.useState(true);
     const [isSavingDelivery, setIsSavingDelivery] = React.useState(false);
     const [isDetectingLocation, setIsDetectingLocation] = React.useState(false);
+
+    // Tailoring Addons State
+    const [addons, setAddons] = React.useState<ProductAddon[]>([]);
+    const [isLoadingAddons, setIsLoadingAddons] = React.useState(true);
+    const [isSavingAddon, setIsSavingAddon] = React.useState(false);
+    const [addonModalOpen, setAddonModalOpen] = React.useState(false);
+    const [editingAddon, setEditingAddon] = React.useState<ProductAddon | null>(null);
+
+    // Form fields for addon modal
+    const [addonFormId, setAddonFormId] = React.useState('');
+    const [addonFormTitle, setAddonFormTitle] = React.useState('');
+    const [addonFormPrice, setAddonFormPrice] = React.useState<number | string>(0);
+    const [addonFormDescription, setAddonFormDescription] = React.useState('');
+    const [addonFormRequiresSize, setAddonFormRequiresSize] = React.useState(false);
+    const [addonFormIsActive, setAddonFormIsActive] = React.useState(true);
+    const [addonFormDisplayOrder, setAddonFormDisplayOrder] = React.useState<number | string>(1);
 
     const fetchUpiSettings = async () => {
         setIsLoadingUpi(true);
@@ -119,10 +165,137 @@ export default function SettingsPage() {
         }
     };
 
+    const fetchAddons = async () => {
+        setIsLoadingAddons(true);
+        try {
+            const data = await addonsService.getAddons();
+            setAddons(data);
+        } catch (err: any) {
+            toast.error(err?.message || 'Failed to load tailoring add-ons');
+        } finally {
+            setIsLoadingAddons(false);
+        }
+    };
+
     React.useEffect(() => {
         fetchUpiSettings();
         fetchDeliverySettings();
+        fetchAddons();
     }, []);
+
+    const handleOpenCreateAddon = () => {
+        if (isStaff) {
+            toast.error('Unauthorized: Staff cannot manage tailoring add-ons');
+            return;
+        }
+        setEditingAddon(null);
+        setAddonFormId('');
+        setAddonFormTitle('');
+        setAddonFormPrice(0);
+        setAddonFormDescription('');
+        setAddonFormRequiresSize(false);
+        setAddonFormIsActive(true);
+        setAddonFormDisplayOrder(addons.length + 1);
+        setAddonModalOpen(true);
+    };
+
+    const handleOpenEditAddon = (addon: ProductAddon) => {
+        if (isStaff) {
+            toast.error('Unauthorized: Staff cannot manage tailoring add-ons');
+            return;
+        }
+        setEditingAddon(addon);
+        setAddonFormId(addon.id);
+        setAddonFormTitle(addon.title);
+        setAddonFormPrice(addon.price);
+        setAddonFormDescription(addon.description || '');
+        setAddonFormRequiresSize(addon.requires_size);
+        setAddonFormIsActive(addon.is_active);
+        setAddonFormDisplayOrder(addon.display_order);
+        setAddonModalOpen(true);
+    };
+
+    const handleSaveAddon = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (isStaff) {
+            toast.error('Unauthorized: Staff cannot manage tailoring add-ons');
+            return;
+        }
+        if (!addonFormTitle.trim()) {
+            toast.error('Service title is required');
+            return;
+        }
+        if (!editingAddon && !addonFormId.trim()) {
+            toast.error('Service ID (slug) is required');
+            return;
+        }
+
+        setIsSavingAddon(true);
+        try {
+            const numPrice = Math.max(0, Number(addonFormPrice) || 0);
+            const numOrder = Number(addonFormDisplayOrder) || 1;
+
+            if (editingAddon) {
+                await addonsService.updateAddon(editingAddon.id, {
+                    title: addonFormTitle.trim(),
+                    price: numPrice,
+                    description: addonFormDescription.trim() || null,
+                    requires_size: addonFormRequiresSize,
+                    is_active: addonFormIsActive,
+                    display_order: numOrder,
+                });
+                toast.success(`Updated tailoring service: "${addonFormTitle.trim()}"`);
+            } else {
+                await addonsService.createAddon({
+                    id: addonFormId.trim(),
+                    title: addonFormTitle.trim(),
+                    price: numPrice,
+                    description: addonFormDescription.trim() || null,
+                    requires_size: addonFormRequiresSize,
+                    is_active: addonFormIsActive,
+                    display_order: numOrder,
+                });
+                toast.success(`Created tailoring service: "${addonFormTitle.trim()}"`);
+            }
+            setAddonModalOpen(false);
+            fetchAddons();
+        } catch (err: any) {
+            toast.error(err?.message || 'Failed to save tailoring service');
+        } finally {
+            setIsSavingAddon(false);
+        }
+    };
+
+    const handleToggleAddon = async (addon: ProductAddon) => {
+        if (isStaff) {
+            toast.error('Unauthorized: Staff cannot manage tailoring add-ons');
+            return;
+        }
+        try {
+            await addonsService.toggleActive(addon.id, addon.is_active);
+            toast.success(`Service "${addon.title}" ${!addon.is_active ? 'activated' : 'deactivated'}`);
+            fetchAddons();
+        } catch (err: any) {
+            toast.error(err?.message || 'Failed to toggle status');
+        }
+    };
+
+    const handleDeleteAddon = async (addon: ProductAddon) => {
+        if (isStaff) {
+            toast.error('Unauthorized: Staff cannot delete tailoring services');
+            return;
+        }
+        if (!confirm(`Are you sure you want to delete "${addon.title}"? This cannot be undone.`)) {
+            return;
+        }
+        try {
+            await addonsService.deleteAddon(addon.id);
+            toast.success(`Deleted tailoring service "${addon.title}"`);
+            fetchAddons();
+        } catch (err: any) {
+            toast.error(err?.message || 'Failed to delete service');
+        }
+    };
 
     // Delivery Constraint Validations matching DB constraints
     const isExpressDistValid = Number(deliverySettings.express_max_km) > 0;
@@ -324,6 +497,7 @@ export default function SettingsPage() {
 
     const navItems = [
         { key: 'delivery' as const, icon: Truck, title: 'Delivery & Shipping', sub: 'Zones, rates & SLAs' },
+        { key: 'addons' as const, icon: Scissors, title: 'Tailoring & Add-ons', sub: 'Fall/pico, stitching & pricing' },
         { key: 'payments' as const, icon: QrCode, title: 'UPI Payment Terminals', sub: 'QR checkout accounts' },
         { key: 'security' as const, icon: KeyRound, title: 'Security & Credentials', sub: 'Password & access' },
         { key: 'system' as const, icon: Terminal, title: 'Diagnostics & Audits', sub: 'Runtime & cache' },
@@ -380,7 +554,7 @@ export default function SettingsPage() {
                         {navItems.map((item) => (
                             <button
                                 key={item.key}
-                                onClick={() => setActiveTab(item.key)}
+                                onClick={() => handleSelectTab(item.key)}
                                 className={cn(
                                     "flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border cursor-pointer whitespace-nowrap",
                                     activeTab === item.key
@@ -450,7 +624,7 @@ export default function SettingsPage() {
                         {navItems.map((item) => (
                             <button
                                 key={item.key}
-                                onClick={() => setActiveTab(item.key)}
+                                onClick={() => handleSelectTab(item.key)}
                                 className={cn(
                                     "w-full text-left p-2.5 rounded-lg transition-all flex items-center gap-2.5 text-xs cursor-pointer group",
                                     activeTab === item.key
@@ -1033,6 +1207,212 @@ export default function SettingsPage() {
                             </motion.div>
                         )}
 
+                        {activeTab === 'addons' && (
+                            <motion.div
+                                key="addons"
+                                initial={{ opacity: 0, y: 4 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -4 }}
+                                transition={{ duration: 0.15 }}
+                                className="space-y-4"
+                            >
+                                <Card className="border-gold/20 shadow-sm hover:shadow-md transition-shadow bg-white overflow-hidden">
+                                    <CardHeader className="bg-gradient-to-r from-cream/40 via-white to-transparent border-b border-gold/10 p-4">
+                                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                                            <div className="flex items-center gap-2.5">
+                                                <div className="p-2 bg-amber-50 text-amber-800 rounded-lg border border-amber-200 shadow-2xs">
+                                                    <Scissors className="h-5 w-5" />
+                                                </div>
+                                                <div>
+                                                    <CardTitle className="text-sm md:text-base font-bold text-maroon flex items-center gap-2 font-serif">
+                                                        Tailoring & Add-on Services
+                                                    </CardTitle>
+                                                    <CardDescription className="text-xs text-gray-500">
+                                                        Manage fall/pico, blouse stitching, pricing fees, and workshop sizing requirements
+                                                    </CardDescription>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <Button
+                                                    type="button"
+                                                    onClick={fetchAddons}
+                                                    variant="outline"
+                                                    size="sm"
+                                                    disabled={isLoadingAddons}
+                                                    className="h-8 text-xs border-gold/20 hover:bg-cream/20 text-maroon gap-1.5 cursor-pointer"
+                                                >
+                                                    <RefreshCw className={cn("h-3.5 w-3.5", isLoadingAddons && "animate-spin")} />
+                                                    Sync
+                                                </Button>
+                                                <Button
+                                                    type="button"
+                                                    onClick={handleOpenCreateAddon}
+                                                    size="sm"
+                                                    className="h-8 text-xs bg-gradient-to-r from-maroon to-maroon-dark text-gold hover:opacity-95 shadow-sm gap-1.5 cursor-pointer"
+                                                >
+                                                    <Plus className="h-3.5 w-3.5" />
+                                                    New Service
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    </CardHeader>
+                                    <CardContent className="p-4 space-y-4">
+                                        {/* Mini-KPIs for Addons */}
+                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                            <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80">
+                                                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Total Services</span>
+                                                <span className="text-base font-bold font-mono text-gray-900">{addons.length}</span>
+                                                <span className="text-[10px] text-gray-400 block truncate">Catalog entries</span>
+                                            </div>
+                                            <div className="bg-emerald-50/70 p-2.5 rounded-lg border border-emerald-200">
+                                                <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider block">Active Live</span>
+                                                <span className="text-base font-bold font-mono text-emerald-800">
+                                                    {addons.filter(a => a.is_active).length}
+                                                </span>
+                                                <span className="text-[10px] text-emerald-600 block truncate">Storefront checkout</span>
+                                            </div>
+                                            <div className="bg-amber-50/70 p-2.5 rounded-lg border border-amber-200">
+                                                <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wider block">Requires Sizing</span>
+                                                <span className="text-base font-bold font-mono text-amber-800">
+                                                    {addons.filter(a => a.requires_size).length}
+                                                </span>
+                                                <span className="text-[10px] text-amber-600 block truncate">Workshop tailor</span>
+                                            </div>
+                                            <div className="bg-purple-50/70 p-2.5 rounded-lg border border-purple-200">
+                                                <span className="text-[10px] font-bold text-purple-700 uppercase tracking-wider block">Avg. Service Fee</span>
+                                                <span className="text-base font-bold font-mono text-purple-800">
+                                                    ₹{addons.length > 0 ? Math.round(addons.reduce((sum, a) => sum + a.price, 0) / addons.length) : 0}
+                                                </span>
+                                                <span className="text-[10px] text-purple-600 block truncate">Per saree order</span>
+                                            </div>
+                                        </div>
+
+                                        {/* Table of Addons */}
+                                        {isLoadingAddons ? (
+                                            <div className="py-12 flex flex-col items-center justify-center gap-2 text-gray-400">
+                                                <Loader2 className="h-6 w-6 animate-spin text-maroon" />
+                                                <span className="text-xs">Loading tailoring services...</span>
+                                            </div>
+                                        ) : addons.length === 0 ? (
+                                            <div className="py-10 text-center border-2 border-dashed border-gold/20 rounded-xl bg-cream/10 space-y-2">
+                                                <Scissors className="h-8 w-8 text-amber-600/60 mx-auto" />
+                                                <p className="text-xs font-semibold text-gray-700">No tailoring add-ons found</p>
+                                                <p className="text-[11px] text-gray-500 max-w-sm mx-auto">
+                                                    Click "New Service" to create your first add-on like Fall & Pico or Custom Blouse Stitching.
+                                                </p>
+                                                <Button
+                                                    type="button"
+                                                    onClick={handleOpenCreateAddon}
+                                                    size="sm"
+                                                    className="text-xs bg-maroon text-gold gap-1 mt-2 cursor-pointer"
+                                                >
+                                                    <Plus className="h-3.5 w-3.5" /> Add Service
+                                                </Button>
+                                            </div>
+                                        ) : (
+                                            <div className="border border-gold/15 rounded-lg overflow-hidden bg-white">
+                                                <div className="overflow-x-auto">
+                                                    <Table>
+                                                        <TableHeader className="bg-slate-50">
+                                                            <TableRow className="border-b border-gold/10">
+                                                                <TableHead className="text-[10px] font-bold text-gray-500 uppercase py-2">Service</TableHead>
+                                                                <TableHead className="text-[10px] font-bold text-gray-500 uppercase py-2">Fee (₹)</TableHead>
+                                                                <TableHead className="text-[10px] font-bold text-gray-500 uppercase py-2 text-center">Sizing</TableHead>
+                                                                <TableHead className="text-[10px] font-bold text-gray-500 uppercase py-2 text-center">Order</TableHead>
+                                                                <TableHead className="text-[10px] font-bold text-gray-500 uppercase py-2 text-center">Storefront</TableHead>
+                                                                <TableHead className="text-[10px] font-bold text-gray-500 uppercase py-2 text-right">Actions</TableHead>
+                                                            </TableRow>
+                                                        </TableHeader>
+                                                        <TableBody>
+                                                            {addons.map((addon) => (
+                                                                <TableRow key={addon.id} className="border-b border-gold/5 hover:bg-cream/15">
+                                                                    <TableCell className="py-2.5">
+                                                                        <div className="space-y-0.5">
+                                                                            <div className="flex items-center gap-1.5">
+                                                                                <Scissors className="h-3.5 w-3.5 text-amber-700 shrink-0" />
+                                                                                <span className="font-bold text-xs text-gray-900">{addon.title}</span>
+                                                                                <span className="font-mono text-[9px] text-gray-500 bg-gray-100 px-1.5 py-0.2 rounded border border-gray-200">
+                                                                                    {addon.id}
+                                                                                </span>
+                                                                            </div>
+                                                                            {addon.description && (
+                                                                                <p className="text-[11px] text-gray-500 line-clamp-1 pl-5">
+                                                                                    {addon.description}
+                                                                                </p>
+                                                                            )}
+                                                                        </div>
+                                                                    </TableCell>
+                                                                    <TableCell className="py-2.5 font-mono font-bold text-xs text-maroon">
+                                                                        {addon.price > 0 ? `₹${addon.price}` : <span className="text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded text-[10px]">Free</span>}
+                                                                    </TableCell>
+                                                                    <TableCell className="py-2.5 text-center">
+                                                                        {addon.requires_size ? (
+                                                                            <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-50 text-amber-800 border border-amber-300">
+                                                                                Size Required
+                                                                            </span>
+                                                                        ) : (
+                                                                            <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-bold bg-slate-100 text-gray-500">
+                                                                                Standard
+                                                                            </span>
+                                                                        )}
+                                                                    </TableCell>
+                                                                    <TableCell className="py-2.5 text-center font-mono text-xs text-gray-600">
+                                                                        #{addon.display_order}
+                                                                    </TableCell>
+                                                                    <TableCell className="py-2.5 text-center">
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => handleToggleAddon(addon)}
+                                                                            className="cursor-pointer transition-opacity hover:opacity-80 inline-flex items-center gap-1"
+                                                                            title={addon.is_active ? 'Click to deactivate' : 'Click to activate'}
+                                                                        >
+                                                                            {addon.is_active ? (
+                                                                                <ToggleRight className="h-5 w-5 text-emerald-600" />
+                                                                            ) : (
+                                                                                <ToggleLeft className="h-5 w-5 text-gray-400" />
+                                                                            )}
+                                                                            <span className={cn(
+                                                                                "text-[10px] font-bold",
+                                                                                addon.is_active ? "text-emerald-700" : "text-gray-400"
+                                                                            )}>
+                                                                                {addon.is_active ? 'Live' : 'Paused'}
+                                                                            </span>
+                                                                        </button>
+                                                                    </TableCell>
+                                                                    <TableCell className="py-2.5 text-right">
+                                                                        <div className="flex items-center justify-end gap-1">
+                                                                            <Button
+                                                                                type="button"
+                                                                                variant="ghost"
+                                                                                size="sm"
+                                                                                onClick={() => handleOpenEditAddon(addon)}
+                                                                                className="h-7 px-2 text-xs text-gray-600 hover:text-maroon hover:bg-cream/40 cursor-pointer"
+                                                                            >
+                                                                                Edit
+                                                                            </Button>
+                                                                            <Button
+                                                                                type="button"
+                                                                                variant="ghost"
+                                                                                size="sm"
+                                                                                onClick={() => handleDeleteAddon(addon)}
+                                                                                className="h-7 px-2 text-xs text-rose-600 hover:text-rose-800 hover:bg-rose-50 cursor-pointer"
+                                                                            >
+                                                                                <Trash2 className="h-3.5 w-3.5" />
+                                                                            </Button>
+                                                                        </div>
+                                                                    </TableCell>
+                                                                </TableRow>
+                                                            ))}
+                                                        </TableBody>
+                                                    </Table>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </CardContent>
+                                </Card>
+                            </motion.div>
+                        )}
+
                         {activeTab === 'security' && (
                             <motion.div
                                 key="security"
@@ -1379,6 +1759,142 @@ export default function SettingsPage() {
                 </div>
 
             </div>
+
+            {/* Create / Edit Tailoring Addon Dialog */}
+            <Dialog open={addonModalOpen} onOpenChange={setAddonModalOpen}>
+                <DialogContent className="max-w-md bg-white border-gold/20 shadow-2xl p-5">
+                    <DialogHeader>
+                        <DialogTitle className="text-base font-bold font-serif text-maroon flex items-center gap-2">
+                            <Scissors className="h-4 w-4 text-amber-700" />
+                            {editingAddon ? 'Edit Tailoring Service' : 'New Tailoring Service'}
+                        </DialogTitle>
+                        <DialogDescription className="text-xs text-gray-500">
+                            {editingAddon
+                                ? 'Update pricing, description, and workshop sizing options for this add-on.'
+                                : 'Add a new workshop tailoring option for customers at checkout.'}
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <form onSubmit={handleSaveAddon} className="space-y-3.5 pt-2">
+                        {!editingAddon && (
+                            <div className="space-y-1">
+                                <label className="text-[11px] font-bold text-gray-700 uppercase tracking-wide">
+                                    Service ID (Slug) *
+                                </label>
+                                <Input
+                                    value={addonFormId}
+                                    onChange={(e) => setAddonFormId(e.target.value.toLowerCase().replace(/\s+/g, '_'))}
+                                    placeholder="e.g. blouse_unstitched or fall_pico"
+                                    className="h-8 text-xs font-mono border-gold/20"
+                                    required
+                                />
+                                <p className="text-[10px] text-gray-400">Unique identifier used by database & cart engine.</p>
+                            </div>
+                        )}
+
+                        <div className="space-y-1">
+                            <label className="text-[11px] font-bold text-gray-700 uppercase tracking-wide">
+                                Service Title *
+                            </label>
+                            <Input
+                                value={addonFormTitle}
+                                onChange={(e) => setAddonFormTitle(e.target.value)}
+                                placeholder="e.g. Unstitched Blouse Piece"
+                                className="h-8 text-xs border-gold/20"
+                                required
+                            />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                                <label className="text-[11px] font-bold text-gray-700 uppercase tracking-wide">
+                                    Unit Fee (₹) *
+                                </label>
+                                <Input
+                                    type="number"
+                                    min="0"
+                                    step="1"
+                                    value={addonFormPrice}
+                                    onChange={(e) => setAddonFormPrice(e.target.value)}
+                                    placeholder="0"
+                                    className="h-8 text-xs font-mono border-gold/20"
+                                    required
+                                />
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-[11px] font-bold text-gray-700 uppercase tracking-wide">
+                                    Display Order
+                                </label>
+                                <Input
+                                    type="number"
+                                    min="1"
+                                    step="1"
+                                    value={addonFormDisplayOrder}
+                                    onChange={(e) => setAddonFormDisplayOrder(e.target.value)}
+                                    placeholder="1"
+                                    className="h-8 text-xs font-mono border-gold/20"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="space-y-1">
+                            <label className="text-[11px] font-bold text-gray-700 uppercase tracking-wide">
+                                Description
+                            </label>
+                            <Textarea
+                                value={addonFormDescription}
+                                onChange={(e) => setAddonFormDescription(e.target.value)}
+                                placeholder="Explain what the workshop provides (e.g. includes matching fall with hand pico)..."
+                                className="text-xs min-h-[60px] border-gold/20 resize-none"
+                                rows={2}
+                            />
+                        </div>
+
+                        <div className="space-y-2 pt-1 border-t border-gold/10">
+                            <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-gray-700">
+                                <input
+                                    type="checkbox"
+                                    checked={addonFormRequiresSize}
+                                    onChange={(e) => setAddonFormRequiresSize(e.target.checked)}
+                                    className="h-4 w-4 rounded border-gray-300 text-maroon focus:ring-gold"
+                                />
+                                <span>Requires Customer Sizing Selection (e.g. 32 to 44)</span>
+                            </label>
+                            <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-gray-700">
+                                <input
+                                    type="checkbox"
+                                    checked={addonFormIsActive}
+                                    onChange={(e) => setAddonFormIsActive(e.target.checked)}
+                                    className="h-4 w-4 rounded border-gray-300 text-maroon focus:ring-gold"
+                                />
+                                <span>Visible & Active on Storefront Checkout</span>
+                            </label>
+                        </div>
+
+                        <DialogFooter className="pt-2 gap-2">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setAddonModalOpen(false)}
+                                disabled={isSavingAddon}
+                                className="h-8 text-xs border-gold/20 cursor-pointer"
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                type="submit"
+                                size="sm"
+                                disabled={isSavingAddon}
+                                className="h-8 text-xs bg-gradient-to-r from-maroon to-maroon-dark text-gold hover:opacity-95 shadow-sm gap-1.5 cursor-pointer"
+                            >
+                                {isSavingAddon && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                                {editingAddon ? 'Save Changes' : 'Create Service'}
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
         </motion.div>
     );
 }

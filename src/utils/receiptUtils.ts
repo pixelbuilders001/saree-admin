@@ -1,9 +1,17 @@
+export interface ReceiptItemAddon {
+    id?: string;
+    title: string;
+    price: number;
+    size?: string;
+}
+
 export interface ReceiptItem {
     sareeName: string;
     quantity: number;
     mrp: number;
     sellingPrice: number;
     hsnCode?: string;
+    addons?: ReceiptItemAddon[];
 }
 
 export interface ReceiptData {
@@ -92,6 +100,15 @@ export function mapSaleToReceiptData(saleOrOrder: any): ReceiptData {
         const sellingPrice = Number(i.sellingPrice ?? i.unit_price ?? i.unitPrice ?? i.price ?? snap?.selling_price ?? 0);
         const mrpVal = Number(i.mrp ?? snap?.mrp ?? snap?.price ?? (sellingPrice > 0 ? sellingPrice : 0));
         const hsnCode = i.hsnCode || i.hsn_code || snap?.hsn_code || '5208';
+        const rawAddons = i.addons || snap?.addons || snap?.selectedAddons || i.selectedAddons;
+        const addons: ReceiptItemAddon[] = Array.isArray(rawAddons)
+            ? rawAddons.map((a: any) => ({
+                id: a.id ? String(a.id) : undefined,
+                title: String(a.title || a.name || 'Tailoring Add-on'),
+                price: Number(a.price || 0),
+                size: a.size ? String(a.size) : undefined,
+            }))
+            : [];
 
         return {
             sareeName: (i.item_status === 'cancelled' || i.itemStatus === 'cancelled') ? `[Cancelled] ${sareeName}` : sareeName,
@@ -99,6 +116,7 @@ export function mapSaleToReceiptData(saleOrOrder: any): ReceiptData {
             mrp: mrpVal > 0 ? mrpVal : sellingPrice,
             sellingPrice,
             hsnCode,
+            addons: addons.length > 0 ? addons : undefined,
         };
     });
 

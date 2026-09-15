@@ -150,9 +150,7 @@ export default function ReceiptView() {
                         taxable_amount, gst_amount, cgst_amount, sgst_amount, igst_amount, gst_rate, place_of_supply,
                         invoice_number, invoice_date,
                         gift_wrap_charge,
-                        order_items (
-                            id, order_id, inventory_id, product_name, product_name_snapshot, sku, barcode, quantity, unit_price, discount_amount, taxable_value, gst_rate, cgst_amount, sgst_amount, igst_amount, gst_amount, total_price, product_snapshot, item_status
-                        )
+                        order_items (*)
                     `);
                 if (isUuid) {
                     query = query.eq('id', decodedInvoice);
@@ -175,6 +173,15 @@ export default function ReceiptView() {
                         const rawSareeName = i.product_name || i.product_name_snapshot || snap?.saree_name || snap?.name || 'Pure Silk Banarasi Saree';
                         const sareeName = (i.item_status === 'cancelled') ? `[Cancelled] ${rawSareeName}` : rawSareeName;
                         const mrpVal = snapMrp > unitPrice ? snapMrp : (snapMrp > 0 ? snapMrp : unitPrice);
+                        const rawAddons = i.addons || snap?.addons || snap?.selectedAddons || i.selectedAddons;
+                        const addons = Array.isArray(rawAddons)
+                            ? rawAddons.map((a: any) => ({
+                                id: a.id ? String(a.id) : undefined,
+                                title: String(a.title || a.name || 'Tailoring Add-on'),
+                                price: Number(a.price || 0),
+                                size: a.size ? String(a.size) : undefined,
+                            }))
+                            : undefined;
 
                         return {
                             sareeName,
@@ -182,6 +189,7 @@ export default function ReceiptView() {
                             mrp: mrpVal,
                             sellingPrice: unitPrice,
                             hsnCode: i.hsn_code || snap?.hsn_code || '5208',
+                            addons: addons && addons.length > 0 ? addons : undefined,
                         };
                     });
 
@@ -470,6 +478,15 @@ export default function ReceiptView() {
                                                 <div>{item.sareeName}</div>
                                                 {item.hsnCode && (
                                                     <div style={{ fontSize: '11px', color: '#666', marginTop: '2px' }}>HSN: {item.hsnCode}</div>
+                                                )}
+                                                {item.addons && item.addons.length > 0 && (
+                                                    <div style={{ marginTop: '5px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                                        {item.addons.map((addon, aIdx) => (
+                                                            <div key={aIdx} style={{ fontSize: '11px', color: '#9a3412', background: '#fff7ed', padding: '2px 6px', borderRadius: '3px', display: 'inline-block', width: 'fit-content', border: '1px solid #fed7aa', fontWeight: '500' }}>
+                                                                + {addon.title}{addon.size ? ` (Size: ${addon.size})` : ''} {addon.price > 0 ? `[₹${addon.price}]` : '[Free]'}
+                                                            </div>
+                                                        ))}
+                                                    </div>
                                                 )}
                                             </td>
                                             <td style={{ padding: '11px 6px', textAlign: 'center' }}>{item.quantity}</td>

@@ -57,7 +57,9 @@ export const ShipmentTrackingCard: React.FC<ShipmentTrackingCardProps> = ({
             const metadata: Record<string, any> = {};
             if (nextStop.trim()) metadata.next_stop = nextStop.trim();
             if (distance.trim()) metadata.distance = distance.trim();
-            if (eta.trim()) metadata.eta = eta.trim();
+            if (eta.trim()) {
+                metadata.eta = eta.trim().replace(/^(\s*expected\s+(by|on|at)?\s*:?\s*)+/i, '').trim();
+            }
 
             return ordersService.addShipmentTrackingUpdate({
                 orderId,

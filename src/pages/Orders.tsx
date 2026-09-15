@@ -51,7 +51,8 @@ import {
     ShieldCheck,
     Check,
     Bell,
-    BellOff
+    BellOff,
+    Scissors
 } from 'lucide-react';
 import { cn, copyTextToClipboard } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -1249,6 +1250,11 @@ export default function OrdersPage() {
                                                     <div className="flex items-center gap-2">
                                                         <span className="text-[10px] font-mono text-maroon font-bold">{order.orderNumber}</span>
                                                         {order.isGift && <span className="inline-flex items-center gap-0.5 text-[8px] font-bold px-1 py-0.5 rounded-full bg-pink-50 text-pink-700 border border-pink-200"><Gift className="h-2 w-2" />Gift</span>}
+                                                        {order.items?.some(i => i.addons && i.addons.length > 0 && (i.itemStatus || '').toLowerCase() !== 'cancelled') && (
+                                                            <span className="inline-flex items-center gap-0.5 text-[8px] font-bold uppercase px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-300">
+                                                                <Scissors className="h-2 w-2 text-amber-700" /> Tailoring
+                                                            </span>
+                                                        )}
                                                     </div>
                                                     <div className="flex items-center gap-2">
                                                         <span className={`inline-flex items-center gap-1 text-[9px] font-bold uppercase px-2 py-0.5 rounded-full border ${getPaymentStatusBadgeClass(order.paymentStatus)}`}>
@@ -1322,11 +1328,16 @@ export default function OrdersPage() {
                                                 >
                                                     <TableCell className="py-1 px-3">
                                                         <div className="flex flex-col gap-0.5">
-                                                            <div className="flex items-center gap-1.5">
+                                                            <div className="flex items-center gap-1.5 flex-wrap">
                                                                 <span className="text-xs font-mono font-bold text-maroon">{order.orderNumber}</span>
                                                                 {order.isGift && (
                                                                     <span className="inline-flex items-center gap-0.5 text-[8px] font-bold uppercase tracking-wider px-1 py-0.2 rounded-full border bg-pink-50 text-pink-700 border-pink-200 whitespace-nowrap">
                                                                         <Gift className="h-2 w-2" /> Gift
+                                                                    </span>
+                                                                )}
+                                                                {order.items?.some(i => i.addons && i.addons.length > 0 && (i.itemStatus || '').toLowerCase() !== 'cancelled') && (
+                                                                    <span className="inline-flex items-center gap-0.5 text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full border bg-amber-50 text-amber-800 border-amber-300 whitespace-nowrap shadow-xs" title="Workshop Tailoring Required">
+                                                                        <Scissors className="h-2.5 w-2.5 text-amber-700" /> Tailoring
                                                                     </span>
                                                                 )}
                                                             </div>
@@ -1862,6 +1873,64 @@ export default function OrdersPage() {
                                                         </div>
                                                     </div>
 
+                                                    {/* Workshop Tailoring Work Order Banner */}
+                                                    {(() => {
+                                                        const workshopItems = selectedOrder.items?.filter(
+                                                            i => (i.addons && i.addons.length > 0) && (i.itemStatus || '').toLowerCase() !== 'cancelled'
+                                                        ) || [];
+                                                        if (workshopItems.length === 0) return null;
+
+                                                        return (
+                                                            <div className="rounded-lg border-2 border-amber-300 bg-amber-50/80 p-3.5 shadow-sm space-y-2.5">
+                                                                <div className="flex items-start gap-2.5">
+                                                                    <div className="h-8 w-8 rounded-full bg-amber-200 text-amber-900 flex items-center justify-center shrink-0 mt-0.5">
+                                                                        <Scissors className="h-4 w-4" />
+                                                                    </div>
+                                                                    <div className="min-w-0 flex-1">
+                                                                        <div className="flex items-center gap-2 flex-wrap">
+                                                                            <h4 className="text-xs font-bold text-amber-950 uppercase tracking-wide">
+                                                                                Tailoring Services Required ({workshopItems.length} {workshopItems.length === 1 ? 'item' : 'items'})
+                                                                            </h4>
+                                                                            <span className="text-[9px] font-bold bg-amber-200/80 text-amber-900 px-2 py-0.5 rounded-full uppercase tracking-wider font-mono">
+                                                                                Workshop Work Order
+                                                                            </span>
+                                                                        </div>
+                                                                        <p className="text-[11px] text-amber-900/80 mt-0.5">
+                                                                            Custom stitching or fall/pico required before packing and courier dispatch.
+                                                                        </p>
+                                                                    </div>
+                                                                </div>
+
+                                                                <div className="space-y-1.5 pt-1">
+                                                                    {workshopItems.map((wItem) => (
+                                                                        <div key={wItem.id} className="bg-white/90 rounded-md p-2 border border-amber-200/80 text-xs flex items-center justify-between flex-wrap gap-2">
+                                                                            <span className="font-semibold text-gray-800 truncate max-w-[280px]">
+                                                                                {wItem.productName} (x{wItem.quantity})
+                                                                            </span>
+                                                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                                                                {wItem.addons?.map((addon, aIdx) => (
+                                                                                    <span
+                                                                                        key={aIdx}
+                                                                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[10px] font-medium border border-amber-300 shadow-2xs"
+                                                                                    >
+                                                                                        <Scissors className="h-2.5 w-2.5 text-amber-700" />
+                                                                                        <span className="font-semibold">{addon.title}</span>
+                                                                                        {addon.size && (
+                                                                                            <span className="bg-amber-200/70 text-amber-950 px-1 rounded font-bold">
+                                                                                                Size: {addon.size}
+                                                                                            </span>
+                                                                                        )}
+                                                                                        <span className="font-mono text-amber-800">₹{addon.price}</span>
+                                                                                    </span>
+                                                                                ))}
+                                                                            </div>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })()}
+
                                                     {/* Order Items Registry */}
                                                     <div className="border border-gold/15 rounded-lg overflow-hidden bg-white">
                                                         <div className="bg-cream/15 p-2.5 border-b border-gold/10 text-[10px] font-bold text-maroon uppercase tracking-wider flex items-center gap-1.5">
@@ -1927,6 +1996,23 @@ export default function OrdersPage() {
                                                                                                 {item.color && <span className="bg-slate-100 px-1 py-0.2 rounded">Color: {item.color}</span>}
                                                                                                 {item.size && <span className="bg-slate-100 px-1 py-0.2 rounded">Size: {item.size}</span>}
                                                                                             </div>
+                                                                                            {item.addons && item.addons.length > 0 && (
+                                                                                                <div className="flex flex-wrap items-center gap-1 pt-1">
+                                                                                                    {item.addons.map((addon, aIdx) => (
+                                                                                                        <span
+                                                                                                            key={aIdx}
+                                                                                                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium bg-amber-50 text-amber-900 border border-amber-200"
+                                                                                                        >
+                                                                                                            <Scissors className="h-2.5 w-2.5 text-amber-700" />
+                                                                                                            <span>{addon.title}</span>
+                                                                                                            {addon.size && (
+                                                                                                                <span className="font-bold text-amber-950">({addon.size})</span>
+                                                                                                            )}
+                                                                                                            <span className="font-mono text-[8px] text-amber-700 font-semibold">+₹{addon.price}</span>
+                                                                                                        </span>
+                                                                                                    ))}
+                                                                                                </div>
+                                                                                            )}
                                                                                         </div>
                                                                                     </div>
                                                                                 </TableCell>

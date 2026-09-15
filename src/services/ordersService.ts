@@ -22,6 +22,13 @@ export interface ShippingAddress {
     [key: string]: any;
 }
 
+export interface OrderItemAddon {
+    id: string;
+    title: string;
+    price: number;
+    size?: string;
+}
+
 export interface OrderItem {
     id: string;
     orderId: string;
@@ -48,6 +55,7 @@ export interface OrderItem {
     color?: string;
     size?: string;
     fabric?: string;
+    addons?: OrderItemAddon[];
 }
 
 export interface OrderStatusHistory {
@@ -205,6 +213,14 @@ export function mapOrderRow(data: any): Order {
             size: item.size || snap?.size,
             fabric: item.fabric || snap?.fabric,
             createdAt: item.created_at,
+            addons: Array.isArray(item.addons || snap?.addons || snap?.selectedAddons || item.selectedAddons)
+                ? (item.addons || snap?.addons || snap?.selectedAddons || item.selectedAddons).map((a: any) => ({
+                    id: String(a.id || ''),
+                    title: String(a.title || a.name || 'Tailoring Add-on'),
+                    price: Number(a.price || 0),
+                    size: a.size ? String(a.size) : undefined,
+                }))
+                : undefined,
         };
     });
 
@@ -225,7 +241,11 @@ export function mapOrderRow(data: any): Order {
         isHighlighted: u.is_highlighted === true,
         metadata: typeof u.metadata === 'object' && u.metadata !== null ? u.metadata : {},
         createdAt: u.created_at,
-    })).sort((a: any, b: any) => new Date(b.eventTime).getTime() - new Date(a.eventTime).getTime());
+    })).sort((a: any, b: any) => {
+        const timeDiff = new Date(a.eventTime || a.createdAt).getTime() - new Date(b.eventTime || b.createdAt).getTime();
+        if (timeDiff !== 0) return timeDiff;
+        return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+    });
 
     return {
         id: data.id,
