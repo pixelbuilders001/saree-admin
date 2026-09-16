@@ -4,6 +4,13 @@ import { creditService } from './creditService';
 
 import { calculateGst } from '@/config/gstConfig';
 
+export interface SaleItemAddon {
+    id?: string;
+    title: string;
+    price: number;
+    size?: string;
+}
+
 export interface SaleItem {
     sareeId: string;
     sareeName: string;
@@ -13,6 +20,7 @@ export interface SaleItem {
     discountAmount?: number;
     discountPercentage?: number;
     hsnCode?: string;
+    addons?: SaleItemAddon[];
 }
 
 export interface Sale {
@@ -222,7 +230,9 @@ export const salesService = {
                 throw new Error(`Insufficient stock for ${saree.saree_name} (Available: ${currentStock})`);
             }
 
-            const rowAmount = item.quantity * item.sellingPrice;
+            const addonsUnitPrice = (item.addons || []).reduce((sum, a) => sum + (Number(a.price) || 0), 0);
+            const unitPriceWithAddons = item.sellingPrice + addonsUnitPrice;
+            const rowAmount = item.quantity * unitPriceWithAddons;
             const purchasePrice = Number(saree.purchase_price || 0);
             const rowProfit = rowAmount - (item.quantity * purchasePrice);
 
@@ -293,12 +303,15 @@ export const salesService = {
 
             if (stockUpdateError) throw stockUpdateError;
 
-            // Prepare item record
+            const addonsUnitPrice = (item.addons || []).reduce((sum, a) => sum + (Number(a.price) || 0), 0);
+            const unitPriceWithAddons = item.sellingPrice + addonsUnitPrice;
+
+            // Prepare item record (unit price reflects saree + tailoring add-ons)
             saleItemsToInsert.push({
                 sale_id: insertedSale.id,
                 saree_id: item.sareeId,
                 quantity: item.quantity,
-                selling_price: item.sellingPrice
+                selling_price: unitPriceWithAddons
             });
         }
 
@@ -317,7 +330,13 @@ export const salesService = {
         return {
             saleId: getFriendlyId(insertedSale.id, false),
             invoiceNumber,
-            items: sale.items,
+            items: sale.items.map(item => {
+                const addonsUnitPrice = (item.addons || []).reduce((sum, a) => sum + (Number(a.price) || 0), 0);
+                return {
+                    ...item,
+                    sellingPrice: item.sellingPrice + addonsUnitPrice,
+                };
+            }),
             subtotal: totalAmount,
             totalAmount: grandTotal,
             profit: netProfit,

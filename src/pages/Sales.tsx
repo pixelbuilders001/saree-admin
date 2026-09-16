@@ -31,6 +31,10 @@ import {
     Edit2,
     Percent,
     Calculator,
+    Scissors,
+    X,
+    Check,
+    Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -41,7 +45,8 @@ import { ReceiptModal } from '@/components/ReceiptModal';
 import { BarcodeScanner } from '@/components/sales/BarcodeScanner';
 import { RemoteScannerLink } from '@/components/sales/RemoteScannerLink';
 import { playBeep } from '@/lib/audio';
-import type { Sale } from '@/services/salesService';
+import type { Sale, SaleItemAddon } from '@/services/salesService';
+import { addonsService, type ProductAddon } from '@/services/addonsService';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import QRCode from 'react-qr-code';
 import { settingsService, type UpiSetting } from '@/services/settingsService';
@@ -109,7 +114,11 @@ export default function SalesPage() {
         mrp: number;
         discountAmount: number;
         discountPercentage: number;
+        addons?: SaleItemAddon[];
     }>>([]);
+    const [addonModalItemIndex, setAddonModalItemIndex] = React.useState<number | null>(null);
+    const [customAddonSizes, setCustomAddonSizes] = React.useState<Record<string, string>>({});
+    const [customAddonPrices, setCustomAddonPrices] = React.useState<Record<string, number>>({});
     const [lastCompletedSale, setLastCompletedSale] = React.useState<Sale | null>(null);
     const [isReceiptModalOpen, setIsReceiptModalOpen] = React.useState(false);
     const [isScannerOpen, setIsScannerOpen] = React.useState(false);
@@ -134,8 +143,6 @@ export default function SalesPage() {
         return id;
     });
 
-
-
     const queryClient = useQueryClient();
 
     const { data: sarees, isLoading: isLoadingSarees } = useQuery({
@@ -153,6 +160,17 @@ export default function SalesPage() {
         queryFn: settingsService.getUpiSettings,
         staleTime: 60_000,
     });
+
+    const { data: availableAddons = [], isLoading: isLoadingAddons } = useQuery<ProductAddon[]>({
+        queryKey: ['productAddons'],
+        queryFn: addonsService.getAddons,
+        staleTime: 60_000,
+    });
+
+    const activeAddons = React.useMemo(
+        () => availableAddons.filter(a => a.is_active),
+        [availableAddons]
+    );
 
     const { data: activeStaff = [] } = useQuery<Staff[]>({
         queryKey: ['activeStaff'],
@@ -342,7 +360,10 @@ export default function SalesPage() {
         setCart(newCart);
     };
 
-    const subtotal = cart.reduce((sum, item) => sum + ((item.mrp || item.sellingPrice) * item.quantity), 0);
+    const getItemAddonsUnit = (item: (typeof cart)[0]) => (item.addons || []).reduce((sum, a) => sum + (Number(a.price) || 0), 0);
+    const cartAddonsTotal = cart.reduce((sum, item) => sum + (getItemAddonsUnit(item) * item.quantity), 0);
+    const sareesMrpSubtotal = cart.reduce((sum, item) => sum + ((item.mrp || item.sellingPrice) * item.quantity), 0);
+    const subtotal = sareesMrpSubtotal + cartAddonsTotal;
     const itemDiscountAmount = cart.reduce((sum, item) => sum + (Math.max(0, (item.mrp || item.sellingPrice) - item.sellingPrice) * item.quantity), 0);
     const cartItemTotal = subtotal - itemDiscountAmount;
 
@@ -360,6 +381,88 @@ export default function SalesPage() {
     const cartTotal = gstData.grandTotal;
     const appliedVoucherAmount = appliedVoucher ? Math.min(appliedVoucher.amount, Math.max(0, cartTotal)) : 0;
     const netPayable = Math.max(0, cartTotal - appliedVoucherAmount);
+
+    const handleToggleAddon = (itemIndex: number, addon: ProductAddon) => {
+        setCart(prev => {
+            const next = [...prev];
+            const currentItem = next[itemIndex];
+            if (!currentItem) return prev;
+
+            const existingAddons = currentItem.addons ? [...currentItem.addons] : [];
+            const existingIdx = existingAddons.findIndex(a => a.id === addon.id || a.title.toLowerCase() === addon.title.toLowerCase());
+
+            if (existingIdx > -1) {
+                existingAddons.splice(existingIdx, 1);
+                toast.info(`Removed ${addon.title}`);
+            } else {
+                const userPrice = customAddonPrices[addon.id] != null ? customAddonPrices[addon.id] : addon.price;
+                const userSize = customAddonSizes[addon.id] || (addon.requires_size ? '38' : undefined);
+                existingAddons.push({
+                    id: addon.id,
+                    title: addon.title,
+                    price: userPrice,
+                    size: userSize,
+                });
+                toast.success(`Added ${addon.title} (+₹${userPrice})`);
+            }
+
+            next[itemIndex] = {
+                ...currentItem,
+                addons: existingAddons,
+            };
+            return next;
+        });
+    };
+
+    const handleUpdateAddonSize = (itemIndex: number, addonId: string, size: string) => {
+        setCustomAddonSizes(prev => ({ ...prev, [addonId]: size }));
+        setCart(prev => {
+            const next = [...prev];
+            const currentItem = next[itemIndex];
+            if (!currentItem || !currentItem.addons) return prev;
+
+            next[itemIndex] = {
+                ...currentItem,
+                addons: currentItem.addons.map(a => (a.id === addonId ? { ...a, size } : a)),
+            };
+            return next;
+        });
+    };
+
+    const handleUpdateAddonPrice = (itemIndex: number, addonId: string, price: number) => {
+        setCustomAddonPrices(prev => ({ ...prev, [addonId]: price }));
+        if (isNaN(price) || price < 0) return;
+        setCart(prev => {
+            const next = [...prev];
+            const currentItem = next[itemIndex];
+            if (!currentItem || !currentItem.addons) return prev;
+
+            next[itemIndex] = {
+                ...currentItem,
+                addons: currentItem.addons.map(a => (a.id === addonId ? { ...a, price } : a)),
+            };
+            return next;
+        });
+    };
+
+    const handleRemoveAddonFromCartItem = (itemIndex: number, addonIdx: number) => {
+        setCart(prev => {
+            const next = [...prev];
+            const currentItem = next[itemIndex];
+            if (!currentItem || !currentItem.addons) return prev;
+
+            const existingAddons = [...currentItem.addons];
+            const removed = existingAddons.splice(addonIdx, 1);
+            next[itemIndex] = {
+                ...currentItem,
+                addons: existingAddons,
+            };
+            if (removed[0]) {
+                toast.info(`Removed ${removed[0].title}`);
+            }
+            return next;
+        });
+    };
 
     const handleSaveItemPrice = (index: number, newPrice: number) => {
         if (isNaN(newPrice) || newPrice < 0) return;
@@ -407,7 +510,8 @@ export default function SalesPage() {
                     purchasePrice: saree.purchasePrice,
                     mrp: saree.mrp || saree.sellingPrice,
                     discountAmount: saree.discountAmount || 0,
-                    discountPercentage: saree.discountPercentage || 0
+                    discountPercentage: saree.discountPercentage || 0,
+                    addons: []
                 }];
             }
         });
@@ -1017,15 +1121,26 @@ export default function SalesPage() {
                             <span>Remote<span className="hidden min-[400px]:inline"> Scan</span></span>
                         </Button>
                         {cart.length > 0 && (
-                            <button
-                                type="button"
-                                onClick={() => setCart([])}
-                                className="text-[10px] text-gold/80 hover:text-white bg-gold/10 hover:bg-gold/20 border border-gold/20 px-2 py-0.5 rounded transition-colors font-medium flex items-center gap-1"
-                                title="Clear all cart items"
-                            >
-                                <Trash2 className="h-3 w-3" />
-                                Clear
-                            </button>
+                            <div className="flex items-center gap-1">
+                                <button
+                                    type="button"
+                                    onClick={() => setAddonModalItemIndex(0)}
+                                    className="text-[10px] text-gold/90 hover:text-white bg-gold/15 hover:bg-gold/25 border border-gold/30 px-2 py-0.5 rounded transition-colors font-medium flex items-center gap-1"
+                                    title="Manage tailoring & add-on services"
+                                >
+                                    <Scissors className="h-3 w-3 text-gold" />
+                                    <span>Add-ons</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setCart([])}
+                                    className="text-[10px] text-gold/80 hover:text-white bg-gold/10 hover:bg-gold/20 border border-gold/20 px-2 py-0.5 rounded transition-colors font-medium flex items-center gap-1"
+                                    title="Clear all cart items"
+                                >
+                                    <Trash2 className="h-3 w-3" />
+                                    Clear
+                                </button>
+                            </div>
                         )}
                     </div>
                 </div>
@@ -1147,6 +1262,47 @@ export default function SalesPage() {
                                                 <span className="text-gray-500">MRP ₹{item.mrp}</span>
                                             )}
                                         </div>
+
+                                        {/* Selected Add-ons / Tailoring Badges */}
+                                        {item.addons && item.addons.length > 0 && (
+                                            <div className="flex flex-wrap gap-1 mt-1.5">
+                                                {item.addons.map((addon, aIdx) => (
+                                                    <span
+                                                        key={aIdx}
+                                                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 border border-amber-200/90 text-[10px] text-amber-900 font-medium shadow-2xs"
+                                                    >
+                                                        <Scissors className="h-2.5 w-2.5 text-amber-700 shrink-0" />
+                                                        <span className="font-semibold truncate max-w-[110px]">{addon.title}</span>
+                                                        {addon.size && <span className="text-amber-700 font-mono text-[9px]">({addon.size})</span>}
+                                                        <span className="font-bold text-amber-900 font-mono shrink-0">+₹{addon.price}</span>
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleRemoveAddonFromCartItem(index, aIdx);
+                                                            }}
+                                                            className="text-amber-500 hover:text-red-600 rounded p-0.2 ml-0.5 transition-colors"
+                                                            title="Remove service"
+                                                        >
+                                                            <X className="h-2.5 w-2.5" />
+                                                        </button>
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
+
+                                        {/* Add Tailoring / Add-on Options Button */}
+                                        <div className="mt-1">
+                                            <button
+                                                type="button"
+                                                onClick={() => setAddonModalItemIndex(index)}
+                                                className="inline-flex items-center gap-1 text-[10px] font-semibold text-maroon hover:text-maroon-dark bg-gold/10 hover:bg-gold/20 border border-gold/30 hover:border-gold/50 px-1.5 py-0.5 rounded transition-all"
+                                                title="Add blouse stitching, fall/pico, or tailoring services"
+                                            >
+                                                <Scissors className="h-2.5 w-2.5 text-gold-dark shrink-0" />
+                                                <span>{item.addons && item.addons.length > 0 ? '+ Add more services' : '+ Tailoring / Add-ons'}</span>
+                                            </button>
+                                        </div>
                                     </div>
 
                                     <div className="flex items-center gap-1.5 shrink-0">
@@ -1188,7 +1344,9 @@ export default function SalesPage() {
 
                                         {/* Price & Actions */}
                                         <div className="flex items-center gap-1">
-                                            <span className="font-bold text-xs text-maroon w-14 text-right font-mono">₹{(item.sellingPrice * item.quantity).toLocaleString()}</span>
+                                            <span className="font-bold text-xs text-maroon w-16 text-right font-mono">
+                                                ₹{((item.sellingPrice + getItemAddonsUnit(item)) * item.quantity).toLocaleString()}
+                                            </span>
                                             <button
                                                 type="button"
                                                 title="Edit item price / discount"
@@ -1392,9 +1550,18 @@ export default function SalesPage() {
                         {/* Complete Price Breakup Summary */}
                         <div className="bg-white rounded-lg border border-stone-200/90 p-2.5 text-xs space-y-1 shadow-xs">
                             <div className="flex justify-between text-stone-600">
-                                <span>Subtotal (MRP)</span>
-                                <span className="font-mono font-medium">₹{subtotal.toLocaleString('en-IN')}</span>
+                                <span>Sarees Subtotal (MRP)</span>
+                                <span className="font-mono font-medium">₹{sareesMrpSubtotal.toLocaleString('en-IN')}</span>
                             </div>
+                            {cartAddonsTotal > 0 && (
+                                <div className="flex justify-between text-amber-900 text-[11px] font-semibold">
+                                    <span className="flex items-center gap-1">
+                                        <Scissors className="h-3 w-3 text-amber-700 shrink-0" />
+                                        <span>Tailoring &amp; Add-ons</span>
+                                    </span>
+                                    <span className="font-mono font-bold">+₹{cartAddonsTotal.toLocaleString('en-IN')}</span>
+                                </div>
+                            )}
                             {itemDiscountAmount > 0 && (
                                 <div className="flex justify-between text-emerald-700 text-[11px]">
                                     <span>Item Discount</span>
@@ -1489,6 +1656,210 @@ export default function SalesPage() {
                     isOpen={isRemoteLinkOpen}
                     onClose={() => setIsRemoteLinkOpen(false)}
                 />
+
+                {/* Tailoring & Add-on Services Dialog */}
+                <Dialog
+                    open={addonModalItemIndex !== null}
+                    onOpenChange={(open) => {
+                        if (!open) setAddonModalItemIndex(null);
+                    }}
+                >
+                    <DialogContent className="sm:max-w-lg border-gold/20 shadow-2xl p-4 bg-[#FAF7F0] max-h-[85vh] flex flex-col">
+                        <DialogHeader className="border-b border-gold/15 pb-2.5 shrink-0">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <div className="p-1.5 bg-maroon text-gold rounded-lg shadow-xs">
+                                        <Scissors className="h-4 w-4" />
+                                    </div>
+                                    <div>
+                                        <DialogTitle className="text-sm font-serif font-bold text-maroon">
+                                            Tailoring &amp; Add-on Services
+                                        </DialogTitle>
+                                        <p className="text-[11px] text-stone-600 mt-0.5">
+                                            Add fall &amp; pico, blouse stitching, or custom tailoring
+                                        </p>
+                                    </div>
+                                </div>
+                                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-gold/15 text-maroon border border-gold/30">
+                                    {activeAddons.length} Active Services
+                                </span>
+                            </div>
+
+                            {/* Item Switcher if multiple sarees in cart */}
+                            {cart.length > 1 && addonModalItemIndex !== null && (
+                                <div className="mt-2.5 pt-2 border-t border-stone-200/60">
+                                    <div className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider mb-1">
+                                        Attach service to saree:
+                                    </div>
+                                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                                        {cart.map((cartItm, cIdx) => (
+                                            <button
+                                                key={cIdx}
+                                                type="button"
+                                                onClick={() => setAddonModalItemIndex(cIdx)}
+                                                className={cn(
+                                                    "px-2.5 py-1 rounded-md text-xs font-semibold whitespace-nowrap transition-all border",
+                                                    addonModalItemIndex === cIdx
+                                                        ? "bg-maroon text-gold border-maroon shadow-xs"
+                                                        : "bg-white text-stone-600 border-stone-200 hover:border-gold/60"
+                                                )}
+                                            >
+                                                #{cIdx + 1} {cartItm.sareeName.slice(0, 16)}...
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {addonModalItemIndex !== null && cart[addonModalItemIndex] && (
+                                <div className="mt-1.5 flex items-center justify-between bg-white/70 px-2.5 py-1.5 rounded-lg border border-stone-200/70 text-xs">
+                                    <div className="flex items-center gap-1.5 truncate">
+                                        <span className="font-mono text-[10px] bg-stone-100 px-1 py-0.5 rounded border border-stone-200 text-stone-600">
+                                            {cart[addonModalItemIndex].sareeId}
+                                        </span>
+                                        <span className="font-bold text-stone-800 truncate">
+                                            {cart[addonModalItemIndex].sareeName}
+                                        </span>
+                                    </div>
+                                    <span className="font-mono font-bold text-maroon text-[11px] shrink-0 ml-2">
+                                        Base: ₹{cart[addonModalItemIndex].sellingPrice.toLocaleString()}
+                                    </span>
+                                </div>
+                            )}
+                        </DialogHeader>
+
+                        {/* Services List (Scrollable) */}
+                        <div className="flex-1 overflow-y-auto py-2 space-y-2.5 pr-1">
+                            {isLoadingAddons ? (
+                                <div className="flex items-center justify-center py-8 text-stone-500 text-xs gap-2">
+                                    <Loader2 className="h-4 w-4 animate-spin text-maroon" />
+                                    <span>Loading add-ons...</span>
+                                </div>
+                            ) : activeAddons.length === 0 ? (
+                                <div className="text-center py-8 px-4 bg-white rounded-xl border border-dashed border-stone-200 space-y-2">
+                                    <Scissors className="h-8 w-8 mx-auto text-stone-300" />
+                                    <p className="text-xs font-semibold text-stone-700">No active add-on services found</p>
+                                    <p className="text-[11px] text-stone-500 max-w-xs mx-auto">
+                                        You can configure Fall &amp; Pico, Blouse Stitching, and other services under Settings &gt; Tailoring &amp; Add-on Services.
+                                    </p>
+                                </div>
+                            ) : addonModalItemIndex !== null && cart[addonModalItemIndex] ? (
+                                activeAddons.map((addon) => {
+                                    const currentCartItem = cart[addonModalItemIndex];
+                                    const currentAddons = currentCartItem?.addons || [];
+                                    const existing = currentAddons.find(a => a.id === addon.id || a.title.toLowerCase() === addon.title.toLowerCase());
+                                    const isSelected = !!existing;
+                                    const currentPrice = existing ? existing.price : (customAddonPrices[addon.id] ?? addon.price);
+                                    const currentSize = existing?.size || customAddonSizes[addon.id] || (addon.requires_size ? '38' : undefined);
+
+                                    return (
+                                        <div
+                                            key={addon.id}
+                                            className={cn(
+                                                "border rounded-xl p-3 transition-all",
+                                                isSelected
+                                                    ? "border-maroon/50 bg-amber-50/50 shadow-xs"
+                                                    : "border-stone-200 bg-white hover:border-gold/40"
+                                            )}
+                                        >
+                                            <div className="flex items-start justify-between gap-2.5">
+                                                <div className="flex items-start gap-2.5 flex-1 min-w-0">
+                                                    <input
+                                                        type="checkbox"
+                                                        id={`addon-${addon.id}`}
+                                                        checked={isSelected}
+                                                        onChange={() => handleToggleAddon(addonModalItemIndex, addon)}
+                                                        className="mt-0.5 h-4 w-4 rounded border-stone-300 text-maroon focus:ring-maroon cursor-pointer"
+                                                    />
+                                                    <label htmlFor={`addon-${addon.id}`} className="cursor-pointer flex-1 min-w-0">
+                                                        <div className="flex items-center gap-2 flex-wrap">
+                                                            <span className="font-bold text-xs text-stone-900">{addon.title}</span>
+                                                            {addon.requires_size && (
+                                                                <span className="text-[9px] font-mono font-medium px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 border border-amber-200">
+                                                                    Size Required
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        {addon.description && (
+                                                            <p className="text-[11px] text-stone-500 mt-0.5 leading-relaxed">{addon.description}</p>
+                                                        )}
+                                                    </label>
+                                                </div>
+
+                                                <div className="flex items-center gap-1 shrink-0">
+                                                    <span className="text-[11px] text-stone-400 font-bold">₹</span>
+                                                    <input
+                                                        type="number"
+                                                        value={currentPrice}
+                                                        onChange={(e) => {
+                                                            const val = parseFloat(e.target.value);
+                                                            handleUpdateAddonPrice(addonModalItemIndex, addon.id, isNaN(val) ? 0 : val);
+                                                        }}
+                                                        className="w-18 h-7 text-xs font-mono font-bold px-1.5 text-right border border-stone-200 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-maroon"
+                                                        placeholder={String(addon.price)}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            {/* Size Picker for Services Requiring Sizing */}
+                                            {isSelected && addon.requires_size && (
+                                                <div className="mt-2.5 pt-2 border-t border-amber-200/60 flex flex-wrap items-center gap-1.5 text-xs">
+                                                    <span className="text-[10px] font-bold text-amber-900 shrink-0">Blouse Size:</span>
+                                                    {['Free Size', '32', '34', '36', '38', '40', '42', '44', 'Custom'].map((sz) => (
+                                                        <button
+                                                            key={sz}
+                                                            type="button"
+                                                            onClick={() => handleUpdateAddonSize(addonModalItemIndex, addon.id, sz)}
+                                                            className={cn(
+                                                                "px-2 py-0.5 rounded text-[10px] font-semibold border transition-all",
+                                                                currentSize === sz
+                                                                    ? "bg-maroon text-gold border-maroon shadow-2xs"
+                                                                    : "bg-white text-stone-600 border-stone-200 hover:border-maroon/30"
+                                                            )}
+                                                        >
+                                                            {sz}
+                                                        </button>
+                                                    ))}
+                                                    {currentSize === 'Custom' && (
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Custom (e.g. 36 Bust / 14 Length)"
+                                                            defaultValue={existing?.size === 'Custom' ? '' : existing?.size}
+                                                            onBlur={(e) => {
+                                                                if (e.target.value.trim()) {
+                                                                    handleUpdateAddonSize(addonModalItemIndex, addon.id, e.target.value.trim());
+                                                                }
+                                                            }}
+                                                            className="h-6 text-[10px] px-2 border border-stone-200 rounded bg-white text-stone-800 flex-1 min-w-[130px] focus:outline-none focus:ring-1 focus:ring-maroon"
+                                                        />
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })
+                            ) : null}
+                        </div>
+
+                        {/* Modal Footer */}
+                        {addonModalItemIndex !== null && cart[addonModalItemIndex] && (
+                            <div className="flex items-center justify-between pt-2.5 border-t border-stone-200 shrink-0">
+                                <div className="text-xs">
+                                    <span className="text-stone-500">Selected for this saree: </span>
+                                    <span className="font-bold text-maroon">
+                                        {(cart[addonModalItemIndex].addons || []).length} services (+₹{(cart[addonModalItemIndex].addons || []).reduce((s, a) => s + (Number(a.price) || 0), 0).toLocaleString()})
+                                    </span>
+                                </div>
+                                <Button
+                                    className="bg-maroon hover:bg-maroon-dark text-gold font-bold text-xs h-8.5 px-4"
+                                    onClick={() => setAddonModalItemIndex(null)}
+                                >
+                                    Done
+                                </Button>
+                            </div>
+                        )}
+                    </DialogContent>
+                </Dialog>
 
                 <Dialog open={isUPIModalOpen} onOpenChange={setIsUPIModalOpen}>
                     <DialogContent className="sm:max-w-md border-gold/20 shadow-2xl p-4">

@@ -25,6 +25,8 @@ import {
     Clock,
     ImageIcon,
     Copy,
+    Check,
+    XCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -270,6 +272,83 @@ export default function InventoryPage() {
         (currentPage - 1) * itemsPerPage,
         currentPage * itemsPerPage
     );
+
+    const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
+    const [isBulkUpdating, setIsBulkUpdating] = React.useState(false);
+
+    const isAllSelected = paginatedSarees.length > 0 && paginatedSarees.every(s => selectedIds.has(s.id));
+    const isSomeSelected = paginatedSarees.some(s => selectedIds.has(s.id)) && !isAllSelected;
+
+    const handleSelectAllOnPage = (checked: boolean) => {
+        setSelectedIds(prev => {
+            const next = new Set(prev);
+            if (checked) {
+                paginatedSarees.forEach(s => next.add(s.id));
+            } else {
+                paginatedSarees.forEach(s => next.delete(s.id));
+            }
+            return next;
+        });
+    };
+
+    const toggleSelectRow = (id: string, e?: React.MouseEvent) => {
+        e?.stopPropagation();
+        setSelectedIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) {
+                next.delete(id);
+            } else {
+                next.add(id);
+            }
+            return next;
+        });
+    };
+
+    const clearSelection = () => {
+        setSelectedIds(new Set());
+    };
+
+    const handleBulkStatus = async (status: 'active' | 'inactive') => {
+        if (selectedIds.size === 0) return;
+        try {
+            setIsBulkUpdating(true);
+            const ids = Array.from(selectedIds);
+            await inventoryService.bulkUpdateStatus(ids, status);
+            toast.success(`Marked ${ids.length} saree${ids.length > 1 ? 's' : ''} as ${status}`);
+            if (viewingSaree && selectedIds.has(viewingSaree.id)) {
+                setViewingSaree(prev => prev ? { ...prev, status } : null);
+            }
+            queryClient.invalidateQueries({ queryKey: ['sarees'] });
+            clearSelection();
+        } catch (error) {
+            console.error('Bulk update status error:', error);
+            toast.error('Failed to update status for selected sarees');
+        } finally {
+            setIsBulkUpdating(false);
+        }
+    };
+
+    const handleSingleStatusUpdate = async (id: string, newStatus: 'active' | 'inactive', e?: React.MouseEvent) => {
+        e?.stopPropagation();
+        try {
+            await inventoryService.bulkUpdateStatus([id], newStatus);
+            toast.success(`Saree marked as ${newStatus}`);
+            if (viewingSaree && viewingSaree.id === id) {
+                setViewingSaree(prev => prev ? { ...prev, status: newStatus } : null);
+            }
+            queryClient.invalidateQueries({ queryKey: ['sarees'] });
+        } catch (error) {
+            console.error('Failed to update status:', error);
+            toast.error('Failed to update status');
+        }
+    };
+
+    const copyToClipboard = (text: string, label: string, e?: React.MouseEvent) => {
+        e?.stopPropagation();
+        if (!text) return;
+        navigator.clipboard.writeText(text);
+        toast.success(`Copied ${label}: ${text}`);
+    };
 
     const handleDelete = async (id: string) => {
         if (confirm('Are you sure you want to delete this saree?')) {
@@ -736,11 +815,63 @@ export default function InventoryPage() {
                     </CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
+                    {/* Bulk Actions Banner */}
+                    {selectedIds.size > 0 && (
+                        <div className="bg-gradient-to-r from-maroon via-maroon-dark to-maroon text-gold px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 border-b border-gold/30 shadow-inner">
+                            <div className="flex items-center gap-2.5">
+                                <span className="bg-gold/20 text-gold text-xs font-bold px-2.5 py-1 rounded-full border border-gold/30 font-mono">
+                                    {selectedIds.size} row{selectedIds.size > 1 ? 's' : ''} selected
+                                </span>
+                                <span className="text-xs text-cream/90 font-medium hidden sm:inline">Bulk Status:</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <Button
+                                    size="sm"
+                                    disabled={isBulkUpdating}
+                                    onClick={() => handleBulkStatus('active')}
+                                    className="h-8 px-3 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white gap-1.5 shadow-sm border border-emerald-400/30 cursor-pointer"
+                                >
+                                    {isBulkUpdating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                                    Mark Active
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    disabled={isBulkUpdating}
+                                    onClick={() => handleBulkStatus('inactive')}
+                                    className="h-8 px-3 text-xs font-semibold bg-gray-700 hover:bg-gray-600 text-cream gap-1.5 shadow-sm border border-gray-500/30 cursor-pointer"
+                                >
+                                    {isBulkUpdating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <XCircle className="h-3.5 w-3.5" />}
+                                    Mark Inactive
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={clearSelection}
+                                    className="h-8 px-2.5 text-xs text-cream/70 hover:text-white hover:bg-white/10 cursor-pointer"
+                                >
+                                    Deselect All
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+
                     <Table>
                         <TableHeader className="bg-cream/20 border-b border-gold/10">
                             <TableRow className="hover:bg-transparent">
-                                <TableHead className="sticky left-0 bg-cream/20 z-40 h-10 text-[10px] font-bold text-maroon py-1 px-3 border-r border-gold/10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] w-[64px] min-w-[64px]">ID</TableHead>
-                                <TableHead className="sticky left-[64px] bg-cream/20 z-30 h-10 text-[10px] font-bold text-maroon py-1 px-3 border-r border-gold/10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] min-w-[220px] max-w-[220px]">Name</TableHead>
+                                <TableHead className="sticky left-0 bg-cream/20 z-40 h-10 w-[38px] min-w-[38px] max-w-[38px] p-0 text-center border-r border-gold/10">
+                                    <input
+                                        type="checkbox"
+                                        className="rounded border-gold/40 text-maroon focus:ring-maroon cursor-pointer h-4 w-4 align-middle"
+                                        checked={isAllSelected}
+                                        ref={el => {
+                                            if (el) el.indeterminate = isSomeSelected;
+                                        }}
+                                        onChange={(e) => handleSelectAllOnPage(e.target.checked)}
+                                        title="Select all on this page"
+                                    />
+                                </TableHead>
+                                <TableHead className="sticky left-[38px] bg-cream/20 z-30 h-10 text-[10px] font-bold text-maroon py-1 px-3 border-r border-gold/10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] w-[70px] min-w-[70px]">ID</TableHead>
+                                <TableHead className="sticky left-[108px] bg-cream/20 z-20 h-10 text-[10px] font-bold text-maroon py-1 px-3 border-r border-gold/10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] min-w-[220px] max-w-[220px]">Name</TableHead>
                                 <TableHead className="h-10 text-[10px] font-bold text-maroon py-1 whitespace-nowrap">Category</TableHead>
                                 <TableHead className="h-10 text-[10px] font-bold text-maroon py-1 whitespace-nowrap">Fabric</TableHead>
                                 <TableHead className="h-10 text-[10px] font-bold text-maroon py-1 whitespace-nowrap">Color</TableHead>
@@ -759,14 +890,14 @@ export default function InventoryPage() {
                         <TableBody>
                             {isLoading ? (
                                 <TableRow>
-                                    <TableCell colSpan={15} className="h-48 text-center text-maroon/50 text-xs italic">
+                                    <TableCell colSpan={16} className="h-48 text-center text-maroon/50 text-xs italic">
                                         <Loader2 className="h-6 w-6 animate-spin mx-auto mb-1" />
                                         Loading inventory database...
                                     </TableCell>
                                 </TableRow>
                             ) : paginatedSarees?.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={15} className="h-32 text-center">
+                                    <TableCell colSpan={16} className="h-32 text-center">
                                         <div className="flex flex-col items-center gap-2 py-4">
                                             <div className="p-3 bg-gray-100 rounded-full">
                                                 <Search className="h-5 w-5 text-gray-400" />
@@ -780,18 +911,45 @@ export default function InventoryPage() {
                                 paginatedSarees?.map((saree) => (
                                     <TableRow
                                         key={saree.id}
-                                        className="hover:bg-cream/40 border-b border-gold/5 h-14 group transition-colors cursor-pointer"
+                                        className={cn(
+                                            "border-b border-gold/5 h-14 group transition-colors cursor-pointer",
+                                            selectedIds.has(saree.id) ? "bg-amber-50/50 hover:bg-amber-100/50" : "hover:bg-cream/40"
+                                        )}
                                         onClick={() => setViewingSaree(saree)}
                                     >
-                                        <TableCell className="sticky left-0 bg-white group-hover:bg-cream/40 transition-colors z-20 py-1 px-3 text-xs font-mono font-bold text-maroon border-r border-gold/10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] w-[64px] min-w-[64px]">{saree.id}</TableCell>
-                                        <TableCell className="sticky left-[64px] bg-white group-hover:bg-cream/40 transition-colors z-20 py-1 px-3 text-xs font-semibold text-gray-800 border-r border-gold/10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] min-w-[220px] max-w-[220px]" title={saree.description || undefined}>
+                                        <TableCell
+                                            className="sticky left-0 bg-white group-hover:bg-cream/40 transition-colors z-30 w-[38px] min-w-[38px] max-w-[38px] p-0 text-center border-r border-gold/10"
+                                            onClick={(e) => e.stopPropagation()}
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                className="rounded border-gold/40 text-maroon focus:ring-maroon cursor-pointer h-4 w-4 align-middle"
+                                                checked={selectedIds.has(saree.id)}
+                                                onChange={() => toggleSelectRow(saree.id)}
+                                            />
+                                        </TableCell>
+                                        <TableCell className="sticky left-[38px] bg-white group-hover:bg-cream/40 transition-colors z-20 py-1 px-2.5 text-xs font-mono font-bold text-maroon border-r border-gold/10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] w-[70px] min-w-[70px]">
+                                            <div className="flex items-center justify-between gap-1 group/id">
+                                                <span className="truncate">{saree.id}</span>
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => copyToClipboard(saree.id, 'ID', e)}
+                                                    className="opacity-0 group-hover/id:opacity-100 p-1 hover:bg-gold/20 rounded text-gray-400 hover:text-maroon transition-opacity cursor-pointer"
+                                                    title="Copy ID"
+                                                >
+                                                    <Copy className="h-3 w-3" />
+                                                </button>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell className="sticky left-[108px] bg-white group-hover:bg-cream/40 transition-colors z-10 py-1 px-3 text-xs font-semibold text-gray-800 border-r border-gold/10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] min-w-[220px] max-w-[220px]" title={saree.description || undefined}>
                                             <div className="flex items-center gap-2.5">
                                                 {saree.images && saree.images.length > 0 ? (
                                                     <img
                                                         src={saree.images.find(img => img.isPrimary)?.imageUrl || saree.images[0].imageUrl}
                                                         alt={saree.sareeName}
                                                         className="h-10 w-10 object-cover rounded-lg border border-gold/20 cursor-pointer hover:scale-105 transition-transform shadow-sm"
-                                                        onClick={() => {
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
                                                             setGalleryState({ images: saree.images || [], title: saree.sareeName });
                                                             const primaryIdx = saree.images?.findIndex(img => img.isPrimary) ?? -1;
                                                             setGalleryActiveIndex(primaryIdx !== -1 ? primaryIdx : 0);
@@ -806,14 +964,34 @@ export default function InventoryPage() {
                                                 <div className="min-w-0 flex-1">
                                                     <span className="font-semibold block truncate max-w-[140px]">{saree.sareeName}</span>
                                                     {saree.designCode && (
-                                                        <span className="inline-block text-[9px] font-mono text-purple-800 bg-purple-50 px-1 py-0.2 rounded border border-purple-200 tracking-wider truncate max-w-[140px] font-bold mt-0.5" title={`Design Code: ${saree.designCode}`}>
-                                                            {saree.designCode}
-                                                        </span>
+                                                        <div className="flex items-center gap-1 mt-0.5 group/dc">
+                                                            <span className="inline-block text-[9px] font-mono text-purple-800 bg-purple-50 px-1 py-0.2 rounded border border-purple-200 tracking-wider truncate max-w-[120px] font-bold" title={`Design Code: ${saree.designCode}`}>
+                                                                {saree.designCode}
+                                                            </span>
+                                                            <button
+                                                                type="button"
+                                                                onClick={(e) => copyToClipboard(saree.designCode!, 'Design Code', e)}
+                                                                className="opacity-40 hover:opacity-100 p-0.5 hover:bg-purple-100 rounded text-purple-700 transition-opacity cursor-pointer"
+                                                                title="Copy Design Code"
+                                                            >
+                                                                <Copy className="h-2.5 w-2.5" />
+                                                            </button>
+                                                        </div>
                                                     )}
                                                     {saree.sku && (
-                                                        <span className="block text-[9px] text-gray-400 font-mono tracking-wider truncate max-w-[140px]" title={`SKU: ${saree.sku}`}>
-                                                            SKU: {saree.sku}
-                                                        </span>
+                                                        <div className="flex items-center gap-1 group/sku">
+                                                            <span className="block text-[9px] text-gray-400 font-mono tracking-wider truncate max-w-[120px]" title={`SKU: ${saree.sku}`}>
+                                                                SKU: {saree.sku}
+                                                            </span>
+                                                            <button
+                                                                type="button"
+                                                                onClick={(e) => copyToClipboard(saree.sku!, 'SKU', e)}
+                                                                className="opacity-40 hover:opacity-100 p-0.5 hover:bg-gray-100 rounded text-gray-500 transition-opacity cursor-pointer"
+                                                                title="Copy SKU"
+                                                            >
+                                                                <Copy className="h-2.5 w-2.5" />
+                                                            </button>
+                                                        </div>
                                                     )}
                                                 </div>
                                             </div>
@@ -891,16 +1069,21 @@ export default function InventoryPage() {
                                                 </span>
                                             )}
                                         </TableCell>
-                                        <TableCell className="py-1 text-xs whitespace-nowrap">
-                                            <span className={cn(
-                                                "inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border",
-                                                saree.status === 'active'
-                                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                                    : "bg-gray-50 text-gray-500 border-gray-200"
-                                            )}>
+                                        <TableCell className="py-1 text-xs whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                                            <button
+                                                type="button"
+                                                onClick={(e) => handleSingleStatusUpdate(saree.id, saree.status === 'active' ? 'inactive' : 'active', e)}
+                                                title={`Click to switch to ${saree.status === 'active' ? 'inactive' : 'active'}`}
+                                                className={cn(
+                                                    "inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border transition-all hover:scale-105 cursor-pointer shadow-xs",
+                                                    saree.status === 'active'
+                                                        ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                                                        : "bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100"
+                                                )}
+                                            >
                                                 <span className={cn("h-1.5 w-1.5 rounded-full", saree.status === 'active' ? 'bg-emerald-500' : 'bg-gray-400')} />
                                                 {saree.status}
-                                            </span>
+                                            </button>
                                         </TableCell>
                                         <TableCell className="py-1 text-[10px] font-mono text-gray-500 whitespace-nowrap">
                                             <div className="truncate max-w-[120px]" title={`Created by: ${saree.createdBy || 'system'} | Updated by: ${saree.updatedBy || 'system'}`}>
@@ -917,6 +1100,20 @@ export default function InventoryPage() {
                                                 </DropdownMenuTrigger>
                                                 <DropdownMenuContent align="end" className="border-gold/20 shadow-lg">
                                                     <DropdownMenuLabel className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Stock Actions</DropdownMenuLabel>
+                                                    <DropdownMenuItem
+                                                        className="gap-2 cursor-pointer text-xs font-medium"
+                                                        onClick={() => handleSingleStatusUpdate(saree.id, saree.status === 'active' ? 'inactive' : 'active')}
+                                                    >
+                                                        {saree.status === 'active' ? (
+                                                            <>
+                                                                <XCircle className="h-3.5 w-3.5 text-gray-500" /> Mark Inactive
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Mark Active
+                                                            </>
+                                                        )}
+                                                    </DropdownMenuItem>
                                                     <DropdownMenuItem
                                                         className="gap-2 cursor-pointer text-xs font-medium"
                                                         onClick={() => {
@@ -1173,15 +1370,58 @@ export default function InventoryPage() {
                                     )}
                                     <div className="min-w-0 flex-1">
                                         <h2 className="font-bold text-maroon font-serif text-base leading-tight">{s.sareeName}</h2>
-                                        <div className="flex flex-wrap gap-1.5 mt-1.5">
-                                            {s.designCode && <span className="text-[10px] font-mono bg-purple-50 text-purple-800 border border-purple-200 px-1.5 py-0.5 rounded font-bold">{s.designCode}</span>}
-                                            {s.sku && <span className="text-[10px] font-mono bg-gray-50 text-gray-600 border border-gray-200 px-1.5 py-0.5 rounded">SKU: {s.sku}</span>}
-                                            <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded border', s.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-gray-50 text-gray-500 border-gray-200')}>
+                                        <div className="flex flex-wrap gap-1.5 mt-1.5 items-center">
+                                            {s.designCode && (
+                                                <span className="inline-flex items-center gap-1 text-[10px] font-mono bg-purple-50 text-purple-800 border border-purple-200 px-1.5 py-0.5 rounded font-bold">
+                                                    {s.designCode}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => copyToClipboard(s.designCode!, 'Design Code')}
+                                                        className="hover:text-purple-950 p-0.5 rounded transition-colors cursor-pointer"
+                                                        title="Copy Design Code"
+                                                    >
+                                                        <Copy className="h-2.5 w-2.5" />
+                                                    </button>
+                                                </span>
+                                            )}
+                                            {s.sku && (
+                                                <span className="inline-flex items-center gap-1 text-[10px] font-mono bg-gray-50 text-gray-600 border border-gray-200 px-1.5 py-0.5 rounded">
+                                                    SKU: {s.sku}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => copyToClipboard(s.sku!, 'SKU')}
+                                                        className="hover:text-black p-0.5 rounded transition-colors cursor-pointer"
+                                                        title="Copy SKU"
+                                                    >
+                                                        <Copy className="h-2.5 w-2.5" />
+                                                    </button>
+                                                </span>
+                                            )}
+                                            <button
+                                                type="button"
+                                                onClick={() => handleSingleStatusUpdate(s.id, s.status === 'active' ? 'inactive' : 'active')}
+                                                className={cn(
+                                                    'inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded border transition-transform hover:scale-105 cursor-pointer',
+                                                    s.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
+                                                )}
+                                                title={`Click to switch to ${s.status === 'active' ? 'inactive' : 'active'}`}
+                                            >
+                                                <span className={cn("h-1.5 w-1.5 rounded-full", s.status === 'active' ? 'bg-emerald-500' : 'bg-gray-400')} />
                                                 {s.status?.toUpperCase()}
-                                            </span>
+                                            </button>
                                         </div>
                                     </div>
-                                    <span className="text-[10px] font-mono text-gray-400 shrink-0">#{s.id}</span>
+                                    <div className="flex items-center gap-1 text-[11px] font-mono text-gray-500 shrink-0 bg-gray-100 px-2 py-1 rounded border border-gray-200">
+                                        <span>#{s.id}</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => copyToClipboard(s.id, 'ID')}
+                                            className="hover:text-maroon p-0.5 rounded transition-colors cursor-pointer"
+                                            title="Copy ID"
+                                        >
+                                            <Copy className="h-3 w-3" />
+                                        </button>
+                                    </div>
                                 </div>
 
                                 {/* Import & Image Status Bar */}
@@ -1218,11 +1458,26 @@ export default function InventoryPage() {
                                             { label: 'HSN Code', value: s.hsnCode || '—' },
                                             { label: 'Category ID', value: s.categoryId || '—' },
                                             { label: 'Occasion', value: s.occasion || '—' },
+                                            { label: 'Blouse Piece', value: s.hasBlouse === true ? 'With Blouse' : s.hasBlouse === false ? 'Without Blouse' : '—' },
+                                            { label: 'Barcode', value: s.barcode || '—', copyable: !!s.barcode },
                                             { label: 'GST Rate', value: s.gstRate !== undefined && s.gstRate !== null ? `${s.gstRate}%` : '—' },
-                                        ].map(({ label, value }) => (
+                                            { label: 'GST Type', value: s.priceIncludesGst ? 'Price Includes GST' : 'Exclusive of GST' },
+                                        ].map(({ label, value, copyable }: any) => (
                                             <div key={label} className="bg-gray-50 rounded-lg px-3 py-2">
                                                 <div className="text-[9px] font-bold uppercase tracking-wider text-gray-400">{label}</div>
-                                                <div className="text-xs font-semibold text-gray-800 truncate mt-0.5" title={value}>{value}</div>
+                                                <div className="flex items-center justify-between gap-1 mt-0.5">
+                                                    <div className="text-xs font-semibold text-gray-800 truncate" title={value}>{value}</div>
+                                                    {copyable && value !== '—' && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => copyToClipboard(value, label)}
+                                                            className="p-0.5 hover:bg-gray-200 rounded text-gray-400 hover:text-gray-700 transition-colors cursor-pointer"
+                                                            title={`Copy ${label}`}
+                                                        >
+                                                            <Copy className="h-3 w-3" />
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </div>
                                         ))}
                                     </div>

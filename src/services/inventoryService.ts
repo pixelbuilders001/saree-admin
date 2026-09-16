@@ -40,6 +40,7 @@ export interface Saree {
     occasion?: string;
     gstRate?: number;
     priceIncludesGst?: boolean;
+    hasBlouse?: boolean | null;
 }
 
 export interface BulkImportItemResult {
@@ -84,6 +85,7 @@ export interface BulkImportRowInput {
     occasion?: string;
     gstRate?: number;
     priceIncludesGst?: boolean;
+    hasBlouse?: boolean | null;
 }
 
 export interface DuplicatePiecesOptions {
@@ -165,7 +167,8 @@ export const inventoryService = {
             discountPercentage: item.discount_percentage ? Number(item.discount_percentage) : 0,
             occasion: item.occasion || '',
             gstRate: item.gst_rate !== null && item.gst_rate !== undefined ? Number(item.gst_rate) : undefined,
-            priceIncludesGst: item.price_includes_gst ?? false,
+            priceIncludesGst: item.price_includes_gst ?? true,
+            hasBlouse: item.has_blouse !== undefined ? item.has_blouse : null,
             images: (item.inventory_images || []).map((img: any) => ({
                 id: img.id,
                 inventoryId: img.inventory_id,
@@ -220,7 +223,8 @@ export const inventoryService = {
             discountPercentage: data.discount_percentage ? Number(data.discount_percentage) : 0,
             occasion: data.occasion || '',
             gstRate: data.gst_rate !== null && data.gst_rate !== undefined ? Number(data.gst_rate) : undefined,
-            priceIncludesGst: data.price_includes_gst ?? false,
+            priceIncludesGst: data.price_includes_gst ?? true,
+            hasBlouse: data.has_blouse !== undefined ? data.has_blouse : null,
             images: (data.inventory_images || []).map((img: any) => ({
                 id: img.id,
                 inventoryId: img.inventory_id,
@@ -274,6 +278,7 @@ export const inventoryService = {
         // Generate a random ID (e.g. S-XXXX) for standard inventory item
         const randId = 'S' + Math.floor(1000 + Math.random() * 9000);
         const userEmail = useAuthStore.getState().user?.email || 'system';
+        const finalBarcode = saree.barcode && saree.barcode.trim() ? saree.barcode.trim() : randId;
         const newSaree = {
             id: randId,
             saree_name: saree.sareeName,
@@ -281,15 +286,15 @@ export const inventoryService = {
             category_id: saree.categoryId || null,
             design_code: saree.designCode ? saree.designCode.trim().toUpperCase() : null,
             hsn_code: saree.hsnCode ? saree.hsnCode.trim() : null,
-            sku: saree.sku || null,
-            description: saree.description || null,
+            sku: saree.sku ? saree.sku.trim() : null,
+            description: saree.description ? saree.description.trim() : null,
             fabric: saree.fabric,
             color: saree.color,
             purchase_price: saree.purchasePrice,
             selling_price: saree.sellingPrice,
             stock: saree.stock,
-            rack_no: saree.rackNo,
-            barcode: saree.barcode || randId,
+            rack_no: saree.rackNo ? saree.rackNo.trim() : null,
+            barcode: finalBarcode,
             status: saree.status || 'active',
             created_by: userEmail,
             updated_by: userEmail,
@@ -297,8 +302,9 @@ export const inventoryService = {
             discount_amount: saree.discountAmount || 0,
             discount_percentage: saree.discountPercentage || 0,
             occasion: saree.occasion ? saree.occasion.trim() : null,
-            gst_rate: saree.gstRate !== undefined ? saree.gstRate : null,
-            price_includes_gst: saree.priceIncludesGst ?? false,
+            gst_rate: saree.gstRate !== undefined && saree.gstRate !== null ? saree.gstRate : 0,
+            price_includes_gst: saree.priceIncludesGst !== undefined ? saree.priceIncludesGst : true,
+            has_blouse: saree.hasBlouse !== undefined ? saree.hasBlouse : null,
         };
 
         const { data, error } = await supabase
@@ -387,7 +393,8 @@ export const inventoryService = {
             discountPercentage: data.discount_percentage ? Number(data.discount_percentage) : 0,
             occasion: data.occasion || '',
             gstRate: data.gst_rate !== null && data.gst_rate !== undefined ? Number(data.gst_rate) : undefined,
-            priceIncludesGst: data.price_includes_gst ?? false,
+            priceIncludesGst: data.price_includes_gst ?? true,
+            hasBlouse: data.has_blouse !== undefined ? data.has_blouse : null,
             images: uploadedImages
         };
     },
@@ -420,15 +427,16 @@ export const inventoryService = {
         if (saree.purchasePrice !== undefined) updateData.purchase_price = saree.purchasePrice;
         if (saree.sellingPrice !== undefined) updateData.selling_price = saree.sellingPrice;
         if (saree.stock !== undefined) updateData.stock = saree.stock;
-        if (saree.rackNo !== undefined) updateData.rack_no = saree.rackNo;
-        if (saree.barcode !== undefined) updateData.barcode = saree.barcode;
+        if (saree.rackNo !== undefined) updateData.rack_no = saree.rackNo ? saree.rackNo.trim() : null;
+        if (saree.barcode !== undefined) updateData.barcode = saree.barcode ? saree.barcode.trim() : null;
         if (saree.status !== undefined) updateData.status = saree.status;
         if (saree.mrp !== undefined) updateData.mrp = saree.mrp;
         if (saree.discountAmount !== undefined) updateData.discount_amount = saree.discountAmount;
         if (saree.discountPercentage !== undefined) updateData.discount_percentage = saree.discountPercentage;
         if (saree.occasion !== undefined) updateData.occasion = saree.occasion ? saree.occasion.trim() : null;
-        if (saree.gstRate !== undefined) updateData.gst_rate = saree.gstRate !== null ? saree.gstRate : null;
+        if (saree.gstRate !== undefined) updateData.gst_rate = saree.gstRate !== null ? saree.gstRate : 0;
         if (saree.priceIncludesGst !== undefined) updateData.price_includes_gst = saree.priceIncludesGst;
+        if (saree.hasBlouse !== undefined) updateData.has_blouse = saree.hasBlouse;
 
         const userEmail = useAuthStore.getState().user?.email || 'system';
         updateData.updated_by = userEmail;
@@ -543,6 +551,7 @@ export const inventoryService = {
             category: data.category,
             categoryId: data.category_id || '',
             designCode: data.design_code || '',
+            hsnCode: data.hsn_code || '',
             sku: data.sku || '',
             description: data.description || '',
             fabric: data.fabric,
@@ -561,7 +570,8 @@ export const inventoryService = {
             discountPercentage: data.discount_percentage ? Number(data.discount_percentage) : 0,
             occasion: data.occasion || '',
             gstRate: data.gst_rate !== null && data.gst_rate !== undefined ? Number(data.gst_rate) : undefined,
-            priceIncludesGst: data.price_includes_gst ?? false,
+            priceIncludesGst: data.price_includes_gst ?? true,
+            hasBlouse: data.has_blouse !== undefined ? data.has_blouse : null,
             images: mappedImages
         };
     },
@@ -588,6 +598,20 @@ export const inventoryService = {
             .from('inventory')
             .delete()
             .eq('id', id);
+
+        if (error) throw error;
+    },
+
+    bulkUpdateStatus: async (ids: string[], status: 'active' | 'inactive'): Promise<void> => {
+        if (!ids || ids.length === 0) return;
+        const userEmail = useAuthStore.getState().user?.email || 'system';
+        const { error } = await supabase
+            .from('inventory')
+            .update({
+                status,
+                updated_by: userEmail
+            })
+            .in('id', ids);
 
         if (error) throw error;
     },
@@ -992,7 +1016,8 @@ export const inventoryService = {
                         discount_percentage: cleanNumericValue(row.discountPercentage),
                         occasion: row.occasion ? String(row.occasion).trim() : null,
                         gst_rate: row.gstRate !== undefined && row.gstRate !== null ? cleanNumericValue(row.gstRate) : null,
-                        price_includes_gst: row.priceIncludesGst ?? false,
+                        price_includes_gst: row.priceIncludesGst ?? true,
+                        has_blouse: row.hasBlouse !== undefined ? row.hasBlouse : null,
                         updated_by: userEmail,
                     };
                     if (skuVal) updatePayload.sku = skuVal;
@@ -1059,7 +1084,8 @@ export const inventoryService = {
                         discount_percentage: cleanNumericValue(row.discountPercentage),
                         occasion: row.occasion ? String(row.occasion).trim() : null,
                         gst_rate: row.gstRate !== undefined && row.gstRate !== null ? cleanNumericValue(row.gstRate) : null,
-                        price_includes_gst: row.priceIncludesGst ?? false,
+                        price_includes_gst: row.priceIncludesGst ?? true,
+                        has_blouse: row.hasBlouse !== undefined ? row.hasBlouse : null,
                         created_by: userEmail,
                         updated_by: userEmail,
                     };
@@ -1223,7 +1249,8 @@ export const inventoryService = {
                 discount_percentage: source.discount_percentage || 0,
                 occasion: source.occasion || null,
                 gst_rate: source.gst_rate !== undefined ? source.gst_rate : null,
-                price_includes_gst: source.price_includes_gst ?? false,
+                price_includes_gst: source.price_includes_gst ?? true,
+                has_blouse: source.has_blouse ?? null,
             });
         }
 
