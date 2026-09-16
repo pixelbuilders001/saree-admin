@@ -78,11 +78,14 @@ const COL_MAP: Record<string, string> = {
     'gst_rate': 'gstRate', 'gst rate': 'gstRate', 'gst': 'gstRate', 'gst %': 'gstRate', 'gst_percentage': 'gstRate', 'tax': 'gstRate', 'tax_rate': 'gstRate', 'gst_percent': 'gstRate',
 
     // Price Includes GST
-    'price_includes_gst': 'priceIncludesGst', 'price includes gst': 'priceIncludesGst', 'includes_gst': 'priceIncludesGst', 'includes gst': 'priceIncludesGst', 'gst_included': 'priceIncludesGst', 'gst included': 'priceIncludesGst', 'is_gst_included': 'priceIncludesGst'
+    'price_includes_gst': 'priceIncludesGst', 'price includes gst': 'priceIncludesGst', 'includes_gst': 'priceIncludesGst', 'includes gst': 'priceIncludesGst', 'gst_included': 'priceIncludesGst', 'gst included': 'priceIncludesGst', 'is_gst_included': 'priceIncludesGst',
+
+    // Has Blouse
+    'has_blouse': 'hasBlouse', 'has blouse': 'hasBlouse', 'blouse': 'hasBlouse', 'blouse_piece': 'hasBlouse', 'blouse piece': 'hasBlouse', 'with_blouse': 'hasBlouse', 'with blouse': 'hasBlouse'
 };
 
-const TEMPLATE_HEADERS = 'sku,saree_name,category,fabric,color,purchase_price,selling_price,stock,rack_no,barcode,status,design_code,hsn_code,category_id,description,mrp,discount_amount,discount_percentage,occasion,gst_rate,price_includes_gst';
-const TEMPLATE_EXAMPLE = 'SB001,Kanjivaram Red Silk,Kanjivaram,Silk,Red,4500,8000,5,A-12,,active,KATAN-101,5407,cat_101,Beautiful handwoven Kanjivaram silk saree,10000,2000,20,Wedding,5,true\nSB002,Banarasi Gold Zari,Banarasi,Silk,Gold,5000,9500,3,B-04,,active,KATAN-101,5407,cat_102,Stunning gold zari Banarasi silk,12000,2500,20.83,Festive,5,true';
+const TEMPLATE_HEADERS = 'sku,saree_name,category,fabric,color,purchase_price,selling_price,stock,rack_no,barcode,status,design_code,hsn_code,category_id,description,mrp,discount_amount,discount_percentage,occasion,gst_rate,price_includes_gst,has_blouse';
+const TEMPLATE_EXAMPLE = 'SB001,Kanjivaram Red Silk,Kanjivaram,Silk,Red,4500,8000,5,A-12,,active,KATAN-101,5407,cat_101,Beautiful handwoven Kanjivaram silk saree,10000,2000,20,Wedding,5,true,true\nSB002,Banarasi Gold Zari,Banarasi,Silk,Gold,5000,9500,3,B-04,,active,KATAN-101,5407,cat_102,Stunning gold zari Banarasi silk,12000,2500,20.83,Festive,5,true,false';
 
 interface ParsedRow {
     sareeName: string;
@@ -106,6 +109,7 @@ interface ParsedRow {
     occasion?: string;
     gstRate?: number;
     priceIncludesGst?: boolean;
+    hasBlouse?: boolean | null;
 }
 
 /**
@@ -552,10 +556,19 @@ export function CsvImportModal({ isOpen, onClose }: CsvImportModalProps) {
 
     const handleClose = () => { reset(); onClose(); };
 
-    const downloadExcelTemplate = () => {
+    const downloadExcelTemplate = async () => {
+        let url = '/product_template (2).xlsx';
+        try {
+            const check = await fetch('/product_template.xlsx', { method: 'HEAD' });
+            if (check.ok) {
+                url = '/product_template.xlsx';
+            }
+        } catch {
+            // fallback to product_template (2).xlsx
+        }
         const link = document.createElement('a');
-        link.href = '/template_product_upload.xlsx';
-        link.download = 'template_product_upload.xlsx';
+        link.href = encodeURI(url);
+        link.download = 'product_template.xlsx';
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -674,6 +687,13 @@ export function CsvImportModal({ isOpen, onClose }: CsvImportModalProps) {
                 occasion: String(row.occasion || '').trim(),
                 gstRate: row.gstRate !== undefined && row.gstRate !== '' ? parseCleanNumber(row.gstRate) : undefined,
                 priceIncludesGst: String(row.priceIncludesGst).toLowerCase() === 'true' || String(row.priceIncludesGst).toLowerCase() === 'yes' || String(row.priceIncludesGst) === '1',
+                hasBlouse: (() => {
+                    if (row.hasBlouse === undefined || row.hasBlouse === null || row.hasBlouse === '') return null;
+                    const val = String(row.hasBlouse).toLowerCase().trim();
+                    if (val === 'true' || val === 'yes' || val === '1' || val === 'with blouse') return true;
+                    if (val === 'false' || val === 'no' || val === '0' || val === 'without blouse') return false;
+                    return null;
+                })(),
             });
         });
 
