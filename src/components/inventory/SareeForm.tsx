@@ -192,9 +192,9 @@ export function SareeForm({ initialData, onSubmit, onCancel }: SareeFormProps) {
         try {
             await onSubmit(values, finalImages);
             toast.success(initialData ? 'Saree updated successfully' : 'Saree added successfully');
-        } catch (error) {
+        } catch (error: any) {
             console.error('Submit error:', error);
-            toast.error('Something went wrong while saving saree');
+            toast.error(error?.message || 'Something went wrong while saving saree');
         }
     };
 

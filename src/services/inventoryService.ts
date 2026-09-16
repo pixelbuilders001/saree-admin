@@ -86,6 +86,42 @@ export interface BulkImportRowInput {
     priceIncludesGst?: boolean;
 }
 
+export interface DuplicatePiecesOptions {
+    sourceSareeId: string;
+    numberOfPieces: number;
+    baseSkuPrefix?: string;
+    startingSerial?: number;
+    padLength?: number;
+    stockPerPiece?: number;
+    copyImages?: boolean;
+}
+
+export function parseSkuForSerial(rawSku: string) {
+    const sku = (rawSku || '').trim();
+    const match = sku.match(/^(.*?)([-_/\s]*)(\d+)$/);
+    if (match) {
+        const prefix = match[1];
+        const separator = match[2];
+        const numStr = match[3];
+        const padLength = numStr.length;
+        const currentNumber = parseInt(numStr, 10);
+        return {
+            prefix: `${prefix}${separator}`,
+            currentNumber,
+            nextNumber: currentNumber + 1,
+            padLength,
+            hasNumericSuffix: true,
+        };
+    }
+    return {
+        prefix: sku ? `${sku}-` : 'SBS-',
+        currentNumber: 1,
+        nextNumber: 2,
+        padLength: 2,
+        hasNumericSuffix: false,
+    };
+}
+
 export const inventoryService = {
     getSarees: async (): Promise<Saree[]> => {
         const { data, error } = await supabase
@@ -181,10 +217,44 @@ export const inventoryService = {
         };
     },
 
+    checkSkuExists: async (sku: string, excludeId?: string): Promise<boolean> => {
+        if (!sku || !sku.trim()) return false;
+        let query = supabase
+            .from('inventory')
+            .select('id')
+            .ilike('sku', sku.trim());
+        if (excludeId) {
+            query = query.neq('id', excludeId);
+        }
+        const { data, error } = await query.limit(1);
+        if (error) throw error;
+        return !!(data && data.length > 0);
+    },
+
+    findExistingSkus: async (skus: string[]): Promise<string[]> => {
+        if (!skus || skus.length === 0) return [];
+        const cleanSkus = skus.map(s => s.trim()).filter(Boolean);
+        if (cleanSkus.length === 0) return [];
+
+        const { data, error } = await supabase
+            .from('inventory')
+            .select('sku');
+        if (error) throw error;
+
+        const set = new Set((data || []).map((r: any) => (r.sku || '').trim().toUpperCase()));
+        return cleanSkus.filter(s => set.has(s.toUpperCase()));
+    },
+
     createSaree: async (
         saree: Omit<Saree, 'id' | 'addedDate'>,
         imageFiles?: { file: File; isPrimary: boolean }[]
     ): Promise<Saree> => {
+        if (saree.sku && saree.sku.trim()) {
+            const isDuplicate = await inventoryService.checkSkuExists(saree.sku.trim());
+            if (isDuplicate) {
+                throw new Error(`SKU "${saree.sku.trim()}" already exists in inventory. Please choose a unique SKU.`);
+            }
+        }
         // Generate a random ID (e.g. S-XXXX) for standard inventory item
         const randId = 'S' + Math.floor(1000 + Math.random() * 9000);
         const userEmail = useAuthStore.getState().user?.email || 'system';
@@ -319,7 +389,15 @@ export const inventoryService = {
         if (saree.categoryId !== undefined) updateData.category_id = saree.categoryId || null;
         if (saree.designCode !== undefined) updateData.design_code = saree.designCode ? saree.designCode.trim().toUpperCase() : null;
         if (saree.hsnCode !== undefined) updateData.hsn_code = saree.hsnCode ? saree.hsnCode.trim() : null;
-        if (saree.sku !== undefined) updateData.sku = saree.sku || null;
+        if (saree.sku !== undefined) {
+            if (saree.sku && saree.sku.trim()) {
+                const isDuplicate = await inventoryService.checkSkuExists(saree.sku.trim(), id);
+                if (isDuplicate) {
+                    throw new Error(`SKU "${saree.sku.trim()}" already exists in inventory. Please choose a unique SKU.`);
+                }
+            }
+            updateData.sku = saree.sku || null;
+        }
         if (saree.description !== undefined) updateData.description = saree.description || null;
         if (saree.fabric !== undefined) updateData.fabric = saree.fabric;
         if (saree.color !== undefined) updateData.color = saree.color;
@@ -1035,6 +1113,168 @@ export const inventoryService = {
             .in('id', productIds);
 
         if (error) throw error;
+    },
+
+    duplicateSareePieces: async (options: DuplicatePiecesOptions): Promise<Saree[]> => {
+        if (!options.numberOfPieces || options.numberOfPieces < 1) {
+            throw new Error('Number of pieces must be at least 1');
+        }
+
+        // 1. Fetch source saree with its images
+        const { data: source, error: srcErr } = await supabase
+            .from('inventory')
+            .select('*, inventory_images(*)')
+            .eq('id', options.sourceSareeId)
+            .single();
+
+        if (srcErr || !source) {
+            throw new Error('Source saree not found');
+        }
+
+        // 2. Parse SKU pattern and starting number
+        const baseParsed = parseSkuForSerial(options.baseSkuPrefix || source.sku || source.id || 'SBS-01');
+        const prefix = options.baseSkuPrefix ? options.baseSkuPrefix : baseParsed.prefix;
+        const startingSerial = options.startingSerial ?? baseParsed.nextNumber;
+        const padLength = options.padLength ?? baseParsed.padLength;
+
+        // 3. Fetch existing SKUs and IDs to ensure 100% uniqueness
+        const { data: existingRows } = await supabase
+            .from('inventory')
+            .select('id, sku, barcode');
+
+        const existingSkus = new Set((existingRows || []).map((r: any) => (r.sku || '').trim().toUpperCase()));
+        const existingBarcodes = new Set((existingRows || []).map((r: any) => (r.barcode || '').trim().toUpperCase()));
+        const existingIds = new Set((existingRows || []).map((r: any) => (r.id || '').trim().toUpperCase()));
+
+        // 4. Pre-validate all target SKUs against existing database SKUs
+        const targetSkus: string[] = [];
+        for (let i = 0; i < options.numberOfPieces; i++) {
+            const serialStr = String(startingSerial + i).padStart(padLength, '0');
+            targetSkus.push(`${prefix}${serialStr}`);
+        }
+
+        const conflictingSkus = targetSkus.filter(sku => existingSkus.has(sku.toUpperCase()));
+        if (conflictingSkus.length > 0) {
+            if (conflictingSkus.length === 1) {
+                throw new Error(`SKU "${conflictingSkus[0]}" already exists in inventory. Please choose a different starting serial number or prefix.`);
+            }
+            throw new Error(`The following SKUs already exist in inventory: ${conflictingSkus.slice(0, 3).join(', ')}${conflictingSkus.length > 3 ? ` (+${conflictingSkus.length - 3} more)` : ''}. Please choose a different starting serial number or prefix.`);
+        }
+
+        const conflictingBarcodes = targetSkus.filter(sku => existingBarcodes.has(sku.toUpperCase()));
+        if (conflictingBarcodes.length > 0) {
+            throw new Error(`Barcode/SKU "${conflictingBarcodes[0]}" already exists in inventory. Please choose a different starting serial number.`);
+        }
+
+        // 5. Generate the records
+        const userEmail = useAuthStore.getState().user?.email || 'system';
+        const newItemsToInsert: any[] = [];
+
+        for (let i = 0; i < options.numberOfPieces; i++) {
+            const newSku = targetSkus[i];
+            existingSkus.add(newSku.toUpperCase());
+
+            // Find next available random ID
+            let newId = '';
+            while (true) {
+                newId = 'S' + Math.floor(10000 + Math.random() * 90000);
+                if (!existingIds.has(newId.toUpperCase())) {
+                    existingIds.add(newId.toUpperCase());
+                    break;
+                }
+            }
+
+            // For Barcode, matches newSku exactly
+            const newBarcode = newSku;
+            existingBarcodes.add(newBarcode.toUpperCase());
+
+            newItemsToInsert.push({
+                id: newId,
+                saree_name: source.saree_name,
+                category: source.category,
+                category_id: source.category_id || null,
+                design_code: source.design_code ? source.design_code.trim().toUpperCase() : null,
+                hsn_code: source.hsn_code ? source.hsn_code.trim() : null,
+                sku: newSku,
+                description: source.description || null,
+                fabric: source.fabric,
+                color: source.color,
+                purchase_price: source.purchase_price,
+                selling_price: source.selling_price,
+                stock: options.stockPerPiece ?? 1,
+                rack_no: source.rack_no,
+                barcode: newBarcode,
+                status: source.status || 'active',
+                created_by: userEmail,
+                updated_by: userEmail,
+                mrp: source.mrp || 0,
+                discount_amount: source.discount_amount || 0,
+                discount_percentage: source.discount_percentage || 0,
+                occasion: source.occasion || null,
+                gst_rate: source.gst_rate !== undefined ? source.gst_rate : null,
+                price_includes_gst: source.price_includes_gst ?? false,
+            });
+        }
+
+        // 5. Insert new inventory rows
+        const { data: insertedItems, error: insertErr } = await supabase
+            .from('inventory')
+            .insert(newItemsToInsert)
+            .select();
+
+        if (insertErr) throw insertErr;
+
+        // 6. Link images if copyImages is true
+        const shouldCopyImages = options.copyImages !== false;
+        const sourceImages = source.inventory_images || [];
+        if (shouldCopyImages && sourceImages.length > 0 && insertedItems && insertedItems.length > 0) {
+            const imagesToInsert: any[] = [];
+            for (const item of insertedItems) {
+                for (const img of sourceImages) {
+                    imagesToInsert.push({
+                        inventory_id: item.id,
+                        image_url: img.image_url,
+                        storage_key: img.storage_key,
+                        is_primary: img.is_primary,
+                        sort_order: img.sort_order,
+                    });
+                }
+            }
+            if (imagesToInsert.length > 0) {
+                const { error: imgErr } = await supabase
+                    .from('inventory_images')
+                    .insert(imagesToInsert);
+                if (imgErr) console.error('Failed to duplicate images:', imgErr);
+            }
+        }
+
+        return (insertedItems || []).map((item: any) => ({
+            id: item.id,
+            sareeName: item.saree_name,
+            category: item.category,
+            categoryId: item.category_id || '',
+            designCode: item.design_code || '',
+            hsnCode: item.hsn_code || '',
+            sku: item.sku || '',
+            description: item.description || '',
+            fabric: item.fabric,
+            color: item.color,
+            purchasePrice: Number(item.purchase_price),
+            sellingPrice: Number(item.selling_price),
+            stock: Number(item.stock),
+            rackNo: item.rack_no || '',
+            barcode: item.barcode || '',
+            addedDate: item.created_at,
+            status: item.status as 'active' | 'inactive',
+            createdBy: item.created_by || '',
+            updatedBy: item.updated_by || '',
+            mrp: item.mrp ? Number(item.mrp) : 0,
+            discountAmount: item.discount_amount ? Number(item.discount_amount) : 0,
+            discountPercentage: item.discount_percentage ? Number(item.discount_percentage) : 0,
+            occasion: item.occasion || '',
+            gstRate: item.gst_rate !== null && item.gst_rate !== undefined ? Number(item.gst_rate) : undefined,
+            priceIncludesGst: item.price_includes_gst ?? false,
+        }));
     },
 };
 

@@ -24,6 +24,7 @@ import {
     CheckCircle2,
     Clock,
     ImageIcon,
+    Copy,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -63,6 +64,7 @@ import { BatchBarcodePrinter } from '@/components/inventory/BatchBarcodePrinter'
 import { CsvImportModal } from '@/components/inventory/CsvImportModal';
 import { BulkImageUploadModal } from '@/components/inventory/BulkImageUploadModal';
 import { CategoryProductsModal } from '@/components/inventory/CategoryProductsModal';
+import { DuplicateSareeModal } from '@/components/inventory/DuplicateSareeModal';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 
@@ -82,6 +84,7 @@ export default function InventoryPage() {
     const [galleryState, setGalleryState] = React.useState<{ images: { imageUrl: string }[], title: string } | null>(null);
     const [galleryActiveIndex, setGalleryActiveIndex] = React.useState<number>(0);
     const [viewingSaree, setViewingSaree] = React.useState<Saree | null>(null);
+    const [duplicatingSaree, setDuplicatingSaree] = React.useState<Saree | null>(null);
 
     const queryClient = useQueryClient();
 
@@ -924,6 +927,12 @@ export default function InventoryPage() {
                                                         <Edit className="h-3.5 w-3.5" /> Edit details
                                                     </DropdownMenuItem>
                                                     <DropdownMenuItem
+                                                        className="gap-2 cursor-pointer text-xs font-medium text-amber-900 focus:text-amber-900 focus:bg-amber-50"
+                                                        onClick={() => setDuplicatingSaree(saree)}
+                                                    >
+                                                        <Copy className="h-3.5 w-3.5 text-amber-700" /> Duplicate as Pieces
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem
                                                         className="gap-2 cursor-pointer text-xs font-medium"
                                                         onClick={() => setBarcodeToShow(saree)}
                                                     >
@@ -1044,6 +1053,15 @@ export default function InventoryPage() {
             <BulkImageUploadModal
                 isOpen={isBulkImageUploadOpen}
                 onClose={() => setIsBulkImageUploadOpen(false)}
+            />
+
+            <DuplicateSareeModal
+                saree={duplicatingSaree}
+                isOpen={!!duplicatingSaree}
+                onClose={() => setDuplicatingSaree(null)}
+                onSuccess={() => {
+                    queryClient.invalidateQueries({ queryKey: ['sarees'] });
+                }}
             />
 
             <Dialog open={!!galleryState} onOpenChange={(open) => !open && setGalleryState(null)}>
@@ -1268,14 +1286,22 @@ export default function InventoryPage() {
                                 {/* Footer actions */}
                                 <div className="flex items-center gap-2 px-5 py-3 border-t border-gold/15 shrink-0 bg-gray-50/80">
                                     <Button
-                                        className="flex-1 bg-maroon text-gold hover:bg-maroon/90 gap-1.5 h-9 text-sm font-semibold"
+                                        className="flex-1 bg-maroon text-gold hover:bg-maroon/90 gap-1.5 h-9 text-sm font-semibold cursor-pointer"
                                         onClick={() => { setEditingSaree(s); setIsFormOpen(true); setViewingSaree(null); }}
                                     >
                                         <Edit className="h-3.5 w-3.5" /> Edit
                                     </Button>
                                     <Button
                                         variant="outline"
-                                        className="flex-1 border-maroon/30 text-maroon hover:bg-cream/40 gap-1.5 h-9 text-sm font-semibold"
+                                        className="border-amber-700/30 text-amber-900 hover:bg-amber-50 gap-1.5 h-9 text-xs font-semibold cursor-pointer"
+                                        onClick={() => { setDuplicatingSaree(s); setViewingSaree(null); }}
+                                        title="Duplicate as Serialized Pieces"
+                                    >
+                                        <Copy className="h-3.5 w-3.5 text-amber-700" /> Duplicate
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        className="flex-1 border-maroon/30 text-maroon hover:bg-cream/40 gap-1.5 h-9 text-sm font-semibold cursor-pointer"
                                         onClick={() => { setBarcodeToShow(s); setViewingSaree(null); }}
                                     >
                                         <BarcodeIcon className="h-3.5 w-3.5" /> Barcode
