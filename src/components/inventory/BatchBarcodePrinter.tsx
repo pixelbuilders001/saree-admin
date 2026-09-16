@@ -958,7 +958,7 @@ export function BatchBarcodePrinter({ sarees, isOpen, onClose }: BatchBarcodePri
                                                 }}
                                             >
                                                 {pageItems.map(({ saree, copyIndex }, itemIdx) => {
-                                                    const barcodeVal = saree.barcode || saree.id;
+                                                    const barcodeVal = saree.id;
                                                     const displayMrp = saree.mrp && saree.mrp > 0 ? saree.mrp : saree.sellingPrice;
                                                     const formattedMrp = displayMrp.toLocaleString('en-IN');
                                                     const skuVal = saree.sku || saree.id;
@@ -1006,7 +1006,7 @@ export function BatchBarcodePrinter({ sarees, isOpen, onClose }: BatchBarcodePri
                     {pagesList.map((pageItems, pageIdx) => (
                         <div key={`print-page-${pageIdx}`} className="print-a4-page-block">
                             {pageItems.map(({ saree, copyIndex }, itemIdx) => {
-                                const barcodeVal = saree.barcode || saree.id;
+                                const barcodeVal = saree.id;
                                 const displayMrp = saree.mrp && saree.mrp > 0 ? saree.mrp : saree.sellingPrice;
                                 const formattedMrp = displayMrp.toLocaleString('en-IN');
                                 const skuVal = saree.sku || saree.id;

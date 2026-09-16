@@ -131,24 +131,33 @@ export const inventoryService = {
 
         if (error) throw error;
 
-        return (data || []).map((item: any) => ({
-            id: item.id,
-            sareeName: item.saree_name,
-            category: item.category,
-            categoryId: item.category_id || '',
-            designCode: item.design_code || '',
-            hsnCode: item.hsn_code || '',
-            sku: item.sku || '',
-            description: item.description || '',
-            fabric: item.fabric,
-            color: item.color,
-            purchasePrice: Number(item.purchase_price),
-            sellingPrice: Number(item.selling_price),
-            stock: Number(item.stock),
-            rackNo: item.rack_no || '',
-            barcode: item.barcode || '',
-            addedDate: item.created_at,
-            status: item.status as 'active' | 'inactive',
+        return (data || []).map((item: any) => {
+            const isBarcodeSku = Boolean(item.barcode && item.sku && item.barcode.trim().toUpperCase() === item.sku.trim().toUpperCase());
+            const normalizedBarcode = (!item.barcode || isBarcodeSku) ? item.id : item.barcode;
+
+            // Auto-heal: ensure Supabase inventory row uses the standard product ID for barcode
+            if (isBarcodeSku) {
+                supabase.from('inventory').update({ barcode: item.id }).eq('id', item.id).then();
+            }
+
+            return {
+                id: item.id,
+                sareeName: item.saree_name,
+                category: item.category,
+                categoryId: item.category_id || '',
+                designCode: item.design_code || '',
+                hsnCode: item.hsn_code || '',
+                sku: item.sku || '',
+                description: item.description || '',
+                fabric: item.fabric,
+                color: item.color,
+                purchasePrice: Number(item.purchase_price),
+                sellingPrice: Number(item.selling_price),
+                stock: Number(item.stock),
+                rackNo: item.rack_no || '',
+                barcode: normalizedBarcode,
+                addedDate: item.created_at,
+                status: item.status as 'active' | 'inactive',
             createdBy: item.created_by || '',
             updatedBy: item.updated_by || '',
             mrp: item.mrp ? Number(item.mrp) : 0,
@@ -166,8 +175,9 @@ export const inventoryService = {
                 sortOrder: img.sort_order,
                 createdAt: img.created_at
             })).sort((a: any, b: any) => a.sortOrder - b.sortOrder)
-        }));
-    },
+        };
+    });
+},
 
     getSareeById: async (id: string): Promise<Saree> => {
         const { data, error } = await supabase
@@ -178,6 +188,12 @@ export const inventoryService = {
 
         if (error) throw error;
         if (!data) throw new Error('Saree not found');
+
+        const isBarcodeSku = Boolean(data.barcode && data.sku && data.barcode.trim().toUpperCase() === data.sku.trim().toUpperCase());
+        const normalizedBarcode = (!data.barcode || isBarcodeSku) ? data.id : data.barcode;
+        if (isBarcodeSku) {
+            supabase.from('inventory').update({ barcode: data.id }).eq('id', data.id).then();
+        }
 
         return {
             id: data.id,
@@ -194,7 +210,7 @@ export const inventoryService = {
             sellingPrice: Number(data.selling_price),
             stock: Number(data.stock),
             rackNo: data.rack_no || '',
-            barcode: data.barcode || '',
+            barcode: normalizedBarcode,
             addedDate: data.created_at,
             status: data.status as 'active' | 'inactive',
             createdBy: data.created_by || '',
@@ -1161,11 +1177,6 @@ export const inventoryService = {
             throw new Error(`The following SKUs already exist in inventory: ${conflictingSkus.slice(0, 3).join(', ')}${conflictingSkus.length > 3 ? ` (+${conflictingSkus.length - 3} more)` : ''}. Please choose a different starting serial number or prefix.`);
         }
 
-        const conflictingBarcodes = targetSkus.filter(sku => existingBarcodes.has(sku.toUpperCase()));
-        if (conflictingBarcodes.length > 0) {
-            throw new Error(`Barcode/SKU "${conflictingBarcodes[0]}" already exists in inventory. Please choose a different starting serial number.`);
-        }
-
         // 5. Generate the records
         const userEmail = useAuthStore.getState().user?.email || 'system';
         const newItemsToInsert: any[] = [];
@@ -1184,8 +1195,8 @@ export const inventoryService = {
                 }
             }
 
-            // For Barcode, matches newSku exactly
-            const newBarcode = newSku;
+            // In standard inventory, barcode is always the S-ID (e.g. S12345)
+            const newBarcode = newId;
             existingBarcodes.add(newBarcode.toUpperCase());
 
             newItemsToInsert.push({

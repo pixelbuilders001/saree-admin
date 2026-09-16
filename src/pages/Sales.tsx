@@ -50,6 +50,36 @@ import { supabase } from '@/lib/supabase';
 import { motion } from 'framer-motion';
 import { calculateGst } from '@/config/gstConfig';
 
+export const isSareeCodeMatch = (saree: { id: string; barcode?: string; sku?: string }, rawCode: string): boolean => {
+    if (!rawCode || !saree) return false;
+    const term = rawCode.trim().toLowerCase();
+    if (!term) return false;
+
+    const termWithoutS = term.startsWith('s') ? term.substring(1) : term;
+    const termWithS = term.startsWith('s') ? term : 's' + term;
+
+    const sId = (saree.id || '').trim().toLowerCase();
+    const sIdWithoutS = sId.startsWith('s') ? sId.substring(1) : sId;
+
+    const sBarcode = (saree.barcode || '').trim().toLowerCase();
+    const sBarcodeWithoutS = sBarcode.startsWith('s') ? sBarcode.substring(1) : sBarcode;
+
+    const sSku = (saree.sku || '').trim().toLowerCase();
+
+    return (
+        sBarcode === term ||
+        sBarcode === termWithS ||
+        sBarcode === termWithoutS ||
+        (sBarcodeWithoutS.length >= 3 && sBarcodeWithoutS === termWithoutS) ||
+        sId === term ||
+        sId === termWithS ||
+        sId === termWithoutS ||
+        (sIdWithoutS.length >= 3 && sIdWithoutS === termWithoutS) ||
+        sSku === term ||
+        (sSku.replace(/[-\s_]/g, '') === term.replace(/[-\s_]/g, ''))
+    );
+};
+
 export default function SalesPage() {
     const customerNameInputRef = React.useRef<HTMLInputElement>(null);
     const [customerName, setCustomerName] = React.useState<string>('');
@@ -88,6 +118,8 @@ export default function SalesPage() {
     const [isRemoteLinkOpen, setIsRemoteLinkOpen] = React.useState(false);
     const [isCustomerDetailsOpen, setIsCustomerDetailsOpen] = React.useState(false);
     const [isBreakdownOpen, setIsBreakdownOpen] = React.useState(false);
+    const searchInputRef = React.useRef<HTMLInputElement>(null);
+    const scannerBufferRef = React.useRef<{ text: string; lastTime: number }>({ text: '', lastTime: 0 });
     const [searchParams] = useSearchParams();
     const remoteMode = searchParams.get('remoteMode');
     const urlSessionId = searchParams.get('sessionId');
@@ -174,13 +206,19 @@ export default function SalesPage() {
 
     const filteredGridSarees = React.useMemo(() => {
         if (!Array.isArray(sarees)) return [];
+        const cleanTerm = sareeSearchTerm.trim().toLowerCase();
         return sarees.filter(s => {
-            const matchesStatus = s.status === 'active';
-            const matchesCategory = selectedCategory === 'All' || s.category === selectedCategory;
-            const matchesSearch = !sareeSearchTerm ||
-                s.sareeName.toLowerCase().includes(sareeSearchTerm.toLowerCase()) ||
-                s.id.toLowerCase().includes(sareeSearchTerm.toLowerCase()) ||
-                s.barcode?.toLowerCase().includes(sareeSearchTerm.toLowerCase());
+            const matchesStatus = !s.status || s.status === 'active';
+            const matchesSearch = !cleanTerm ||
+                s.sareeName.toLowerCase().includes(cleanTerm) ||
+                s.id.toLowerCase().includes(cleanTerm) ||
+                (s.sku && s.sku.toLowerCase().includes(cleanTerm)) ||
+                (s.barcode && s.barcode.toLowerCase().includes(cleanTerm));
+
+            // If user types or scans an exact or partial barcode/sku/id, match across all categories
+            const isDirectCodeMatch = cleanTerm !== '' && isSareeCodeMatch(s, cleanTerm);
+
+            const matchesCategory = selectedCategory === 'All' || s.category === selectedCategory || isDirectCodeMatch;
             return matchesStatus && matchesCategory && matchesSearch;
         });
     }, [sarees, selectedCategory, sareeSearchTerm]);
@@ -190,7 +228,46 @@ export default function SalesPage() {
         setHighlightedIndex(0);
     }, [filteredGridSarees.length]);
 
-    const handleKeyDown = (e: React.KeyboardEvent) => {
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const rawTerm = (e.currentTarget.value || sareeSearchTerm || '').trim();
+            if (!rawTerm) return;
+
+            // 1. Direct EXACT match: search all active sarees regardless of category filter
+            const exactMatch = sarees?.find(s =>
+                (!s.status || s.status === 'active') && isSareeCodeMatch(s, rawTerm)
+            );
+
+            if (exactMatch) {
+                playBeep();
+                handleAddToCart(exactMatch);
+                setSareeSearchTerm('');
+                if (searchInputRef.current) {
+                    searchInputRef.current.value = '';
+                }
+                scannerBufferRef.current = { text: '', lastTime: 0 };
+                return;
+            }
+
+            // 2. Otherwise fall back to highlighted or first filtered result
+            if (filteredGridSarees.length > 0) {
+                const selectedSaree = filteredGridSarees[highlightedIndex] || filteredGridSarees[0];
+                if (selectedSaree) {
+                    playBeep();
+                    handleAddToCart(selectedSaree);
+                    setSareeSearchTerm('');
+                    if (searchInputRef.current) {
+                        searchInputRef.current.value = '';
+                    }
+                    scannerBufferRef.current = { text: '', lastTime: 0 };
+                }
+            } else {
+                toast.error(`No active saree found matching: "${rawTerm}"`);
+            }
+            return;
+        }
+
         if (filteredGridSarees.length === 0) return;
 
         if (e.key === 'ArrowDown') {
@@ -199,13 +276,6 @@ export default function SalesPage() {
         } else if (e.key === 'ArrowUp') {
             e.preventDefault();
             setHighlightedIndex(prev => (prev - 1 + filteredGridSarees.length) % filteredGridSarees.length);
-        } else if (e.key === 'Enter') {
-            e.preventDefault();
-            const selectedSaree = filteredGridSarees[highlightedIndex];
-            if (selectedSaree) {
-                handleAddToCart(selectedSaree);
-                setSareeSearchTerm('');
-            }
         } else if (e.key === 'Escape') {
             setSareeSearchTerm('');
         }
@@ -359,6 +429,73 @@ export default function SalesPage() {
         addToCartRef.current = handleAddToCart;
     }, [handleAddToCart]);
 
+    // Global Hardware Barcode Scanner Listener:
+    // Seamlessly handles physical USB/Bluetooth scanners and keyboard entry,
+    // ensuring barcode scans immediately find the saree and add to cart.
+    React.useEffect(() => {
+        const handleGlobalKeyDown = (e: KeyboardEvent) => {
+            const activeEl = document.activeElement;
+            const isOtherInputActive = activeEl && (
+                (activeEl.tagName === 'INPUT' && activeEl !== searchInputRef.current) ||
+                activeEl.tagName === 'TEXTAREA' ||
+                (activeEl as HTMLElement).isContentEditable
+            );
+
+            const now = Date.now();
+            const timeSinceLastKey = now - scannerBufferRef.current.lastTime;
+
+            if (e.key === 'Enter') {
+                const bufferText = scannerBufferRef.current.text.trim();
+                const inputVal = (searchInputRef.current?.value || sareeSearchTerm || '').trim();
+                const termToMatch = bufferText || inputVal;
+
+                if (termToMatch.length >= 2) {
+                    const matchedSaree = sareesRef.current?.find(s =>
+                        (!s.status || s.status === 'active') && isSareeCodeMatch(s, termToMatch)
+                    );
+
+                    if (matchedSaree) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        playBeep();
+                        addToCartRef.current(matchedSaree);
+                        setSareeSearchTerm('');
+                        if (searchInputRef.current) {
+                            searchInputRef.current.value = '';
+                        }
+                        scannerBufferRef.current = { text: '', lastTime: 0 };
+                        return;
+                    }
+                }
+                scannerBufferRef.current = { text: '', lastTime: 0 };
+                return;
+            }
+
+            if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                if (isOtherInputActive) {
+                    if (timeSinceLastKey < 50) {
+                        scannerBufferRef.current.text += e.key;
+                    } else {
+                        scannerBufferRef.current.text = e.key;
+                    }
+                } else {
+                    if (activeEl !== searchInputRef.current) {
+                        searchInputRef.current?.focus();
+                    }
+                    if (timeSinceLastKey > 150) {
+                        scannerBufferRef.current.text = e.key;
+                    } else {
+                        scannerBufferRef.current.text += e.key;
+                    }
+                }
+                scannerBufferRef.current.lastTime = now;
+            }
+        };
+
+        window.addEventListener('keydown', handleGlobalKeyDown, true);
+        return () => window.removeEventListener('keydown', handleGlobalKeyDown, true);
+    }, [sareeSearchTerm]);
+
     const initializeRealtime = React.useCallback(() => {
         if (channelRef.current) {
             supabase.removeChannel(channelRef.current);
@@ -383,18 +520,13 @@ export default function SalesPage() {
 
                     if (barcode) {
                         const foundSaree = sareesRef.current?.find(s =>
-                            s.id.toLowerCase() === barcode.toLowerCase() ||
-                            s.barcode?.toLowerCase() === barcode.toLowerCase()
+                            (!s.status || s.status === 'active') && isSareeCodeMatch(s, barcode)
                         );
 
                         if (foundSaree) {
-                            if (foundSaree.status !== 'active') {
-                                toast.error(`Saree "${foundSaree.sareeName}" is inactive.`);
-                                return;
-                            }
                             playBeep();
                             addToCartRef.current(foundSaree);
-                            toast.success(`Remote scanned: ${foundSaree.sareeName}`);
+                            toast.success(`Remote scanned: ${foundSaree.sareeName} (${foundSaree.sku || foundSaree.id})`);
                         } else {
                             toast.error(`No active saree found for barcode: ${barcode}`);
                         }
@@ -464,18 +596,14 @@ export default function SalesPage() {
         }
 
         const saree = sarees?.find(s =>
-            s.id.toLowerCase() === decodedText.toLowerCase() ||
-            s.barcode?.toLowerCase() === decodedText.toLowerCase()
+            (!s.status || s.status === 'active') && isSareeCodeMatch(s, decodedText)
         );
 
         if (saree) {
-            if (saree.status !== 'active') {
-                toast.error(`Saree "${saree.sareeName}" is inactive and cannot be sold.`);
-                return;
-            }
             playBeep();
             handleAddToCart(saree);
             setIsScannerOpen(false);
+            toast.success(`Scanned: ${saree.sareeName} (${saree.sku || saree.id})`);
         } else {
             toast.error(`No saree found with barcode: ${decodedText}`);
         }
@@ -675,6 +803,7 @@ export default function SalesPage() {
                     <div className="relative flex-1 w-full">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                         <Input
+                            ref={searchInputRef}
                             placeholder="Search by name, ID or scan barcode..."
                             className="pl-9 pr-4 border-gold/25 h-10 text-sm focus-visible:ring-maroon bg-white shadow-sm"
                             value={sareeSearchTerm}

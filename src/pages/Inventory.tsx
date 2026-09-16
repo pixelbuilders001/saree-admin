@@ -1030,7 +1030,7 @@ export default function InventoryPage() {
             <BarcodeGenerator
                 isOpen={!!barcodeToShow}
                 onClose={() => setBarcodeToShow(null)}
-                value={barcodeToShow?.barcode || barcodeToShow?.id || ''}
+                value={barcodeToShow?.id || ''}
                 sareeName={barcodeToShow?.sareeName}
                 mrp={barcodeToShow?.mrp}
                 sellingPrice={barcodeToShow?.sellingPrice}

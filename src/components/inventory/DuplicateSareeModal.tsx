@@ -58,7 +58,7 @@ export function DuplicateSareeModal({
     const previewList = useMemo(() => {
         if (!saree) return [];
         const count = Math.min(Math.max(1, numberOfPieces || 1), 50);
-        const list: { serial: number; sku: string; barcode: string }[] = [];
+        const list: { serial: number; sku: string }[] = [];
         let curr = startingSerial;
         for (let i = 0; i < count; i++) {
             const serialStr = String(curr).padStart(padLength, '0');
@@ -66,7 +66,6 @@ export function DuplicateSareeModal({
             list.push({
                 serial: curr,
                 sku,
-                barcode: sku,
             });
             curr++;
         }

@@ -7,6 +7,7 @@ import { playBeep } from '@/lib/audio';
 import { BarcodeScanner } from '@/components/sales/BarcodeScanner';
 import { RemoteScannerLink } from '@/components/sales/RemoteScannerLink';
 import { supabase } from '@/lib/supabase';
+import { isSareeCodeMatch } from './Sales';
 import {
     ArrowLeftRight,
     Search,
@@ -198,18 +199,13 @@ export default function ExchangePage() {
 
                     if (barcode) {
                         const foundSaree = sareesRef.current?.find(s =>
-                            s.id.toLowerCase() === barcode.toLowerCase() ||
-                            s.barcode?.toLowerCase() === barcode.toLowerCase()
+                            (!s.status || s.status === 'active') && isSareeCodeMatch(s, barcode)
                         );
 
                         if (foundSaree) {
-                            if (foundSaree.status !== 'active') {
-                                toast.error(`Saree "${foundSaree.sareeName}" is inactive.`);
-                                return;
-                            }
                             playBeep();
                             addReplacementRef.current(foundSaree);
-                            toast.success(`Remote scanned: ${foundSaree.sareeName}`);
+                            toast.success(`Remote scanned: ${foundSaree.sareeName} (${foundSaree.sku || foundSaree.id})`);
                         } else {
                             toast.error(`No active saree found for barcode: ${barcode}`);
                         }
@@ -278,18 +274,14 @@ export default function ExchangePage() {
         }
 
         const saree = sarees?.find(s =>
-            s.id.toLowerCase() === decodedText.trim().toLowerCase() ||
-            (s.barcode && s.barcode.toLowerCase() === decodedText.trim().toLowerCase())
+            (!s.status || s.status === 'active') && isSareeCodeMatch(s, decodedText)
         );
 
         if (saree) {
-            if (saree.status !== 'active') {
-                toast.error(`Saree "${saree.sareeName}" is inactive and cannot be exchanged.`);
-                return;
-            }
             playBeep();
             handleAddReplacement(saree);
             setIsScannerOpen(false);
+            toast.success(`Scanned: ${saree.sareeName} (${saree.sku || saree.id})`);
         } else {
             toast.error(`No saree found with barcode: ${decodedText}`);
         }
@@ -324,10 +316,14 @@ export default function ExchangePage() {
 
     const filteredSarees = React.useMemo(() => {
         if (!Array.isArray(sarees) || !sareeSearchTerm) return [];
+        const cleanTerm = sareeSearchTerm.trim().toLowerCase();
         return sarees.filter(s =>
-            s.status === 'active' && (
-                s.sareeName.toLowerCase().includes(sareeSearchTerm.toLowerCase()) ||
-                s.id.toLowerCase().includes(sareeSearchTerm.toLowerCase())
+            (!s.status || s.status === 'active') && (
+                s.sareeName.toLowerCase().includes(cleanTerm) ||
+                s.id.toLowerCase().includes(cleanTerm) ||
+                (s.sku && s.sku.toLowerCase().includes(cleanTerm)) ||
+                (s.barcode && s.barcode.toLowerCase().includes(cleanTerm)) ||
+                isSareeCodeMatch(s, cleanTerm)
             )
         ).slice(0, 8);
     }, [sarees, sareeSearchTerm]);
@@ -578,6 +574,27 @@ export default function ExchangePage() {
                                             className="pl-8 border-gold/25 focus-visible:ring-maroon h-8 text-[11px]"
                                             value={sareeSearchTerm}
                                             onChange={(e) => setSareeSearchTerm(e.target.value)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    e.preventDefault();
+                                                    const term = (e.currentTarget.value || sareeSearchTerm || '').trim();
+                                                    if (!term) return;
+                                                    const match = sarees?.find(s =>
+                                                        (!s.status || s.status === 'active') && isSareeCodeMatch(s, term)
+                                                    );
+                                                    if (match) {
+                                                        playBeep();
+                                                        handleAddReplacement(match);
+                                                        setSareeSearchTerm('');
+                                                    } else if (filteredSarees.length > 0) {
+                                                        playBeep();
+                                                        handleAddReplacement(filteredSarees[0]);
+                                                        setSareeSearchTerm('');
+                                                    } else {
+                                                        toast.error(`No saree found matching: "${term}"`);
+                                                    }
+                                                }
+                                            }}
                                         />
                                         {sareeSearchTerm && (
                                             <Card className="absolute z-50 w-full mt-1 border-gold/20 shadow-2xl max-h-[160px] overflow-y-auto bg-white/95 backdrop-blur-md">
