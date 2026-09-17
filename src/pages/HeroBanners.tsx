@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     Image, Plus, Pencil, Trash2, ToggleLeft, ToggleRight,
     Loader2, ChevronUp, ChevronDown, AlertTriangle, Check, FileImage,
-    CalendarClock, Eye, EyeOff, Layers
+    CalendarClock, Eye, EyeOff, Layers, Smartphone, Monitor, X
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -60,12 +60,22 @@ function BannerModal({
             end_at: banner.endAt ? banner.endAt.slice(0, 16) : '',
         } : EMPTY_FORM
     );
+    // Desktop banner states
     const [imageFile, setImageFile] = useState<File | null>(null);
     const [preview, setPreview] = useState<string | null>(banner?.imageUrl ?? null);
-    const [saving, setSaving] = useState(false);
     const [compressing, setCompressing] = useState(false);
     const [sizeInfo, setSizeInfo] = useState<{ originalKB: number; compressedKB: number } | null>(null);
     const fileRef = useRef<HTMLInputElement>(null);
+
+    // Mobile banner states (vertical aspect 4/5)
+    const [mobileImageFile, setMobileImageFile] = useState<File | null>(null);
+    const [mobilePreview, setMobilePreview] = useState<string | null>(banner?.mobileImageUrl ?? null);
+    const [mobileCompressing, setMobileCompressing] = useState(false);
+    const [mobileSizeInfo, setMobileSizeInfo] = useState<{ originalKB: number; compressedKB: number } | null>(null);
+    const [removeMobileImage, setRemoveMobileImage] = useState(false);
+    const mobileFileRef = useRef<HTMLInputElement>(null);
+
+    const [saving, setSaving] = useState(false);
 
     const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -75,7 +85,6 @@ function BannerModal({
         setSizeInfo(null);
         setCompressing(true);
 
-        // Show raw preview immediately for responsiveness
         const rawUrl = URL.createObjectURL(file);
         setPreview(rawUrl);
 
@@ -84,26 +93,62 @@ function BannerModal({
             const compressed = await compressImage(file, 800, 2400, 'image/webp');
             const compressedKB = Math.round(compressed.size / 1024);
 
-            // Replace preview with compressed blob URL for accuracy
             URL.revokeObjectURL(rawUrl);
             setPreview(URL.createObjectURL(compressed));
             setImageFile(compressed);
             setSizeInfo({ originalKB, compressedKB });
         } catch {
-            // Compression failed — fall back to original
             setImageFile(file);
             setSizeInfo({ originalKB, compressedKB: originalKB });
         } finally {
             setCompressing(false);
         }
 
-        // Reset input so the same file can be re-selected
         e.target.value = '';
+    };
+
+    const handleMobileFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const originalKB = Math.round(file.size / 1024);
+        setMobileSizeInfo(null);
+        setMobileCompressing(true);
+        setRemoveMobileImage(false);
+
+        const rawUrl = URL.createObjectURL(file);
+        setMobilePreview(rawUrl);
+
+        try {
+            // Compress mobile image: max 800 KB, max 1600px, WebP
+            const compressed = await compressImage(file, 800, 1600, 'image/webp');
+            const compressedKB = Math.round(compressed.size / 1024);
+
+            URL.revokeObjectURL(rawUrl);
+            setMobilePreview(URL.createObjectURL(compressed));
+            setMobileImageFile(compressed);
+            setMobileSizeInfo({ originalKB, compressedKB });
+        } catch {
+            setMobileImageFile(file);
+            setMobileSizeInfo({ originalKB, compressedKB: originalKB });
+        } finally {
+            setMobileCompressing(false);
+        }
+
+        e.target.value = '';
+    };
+
+    const handleClearMobileImage = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setMobilePreview(null);
+        setMobileImageFile(null);
+        setMobileSizeInfo(null);
+        setRemoveMobileImage(true);
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!preview && !imageFile) { toast.error('Image is required'); return; }
+        if (!preview && !imageFile) { toast.error('Desktop banner image is required'); return; }
 
         setSaving(true);
         try {
@@ -120,10 +165,26 @@ function BannerModal({
             };
 
             if (isEdit && banner) {
-                await heroBannerService.updateBanner(banner.id, { ...fields, imageUrl: banner.imageUrl }, imageFile || undefined, banner.imageUrl);
+                const finalMobileImageUrl = removeMobileImage ? null : (mobileImageFile ? undefined : banner.mobileImageUrl);
+                await heroBannerService.updateBanner(
+                    banner.id,
+                    {
+                        ...fields,
+                        imageUrl: banner.imageUrl,
+                        ...(finalMobileImageUrl !== undefined ? { mobileImageUrl: finalMobileImageUrl } : {})
+                    },
+                    imageFile || undefined,
+                    banner.imageUrl,
+                    mobileImageFile || undefined,
+                    banner.mobileImageUrl
+                );
                 toast.success('Banner updated');
             } else {
-                await heroBannerService.createBanner(fields, imageFile || undefined);
+                await heroBannerService.createBanner(
+                    fields,
+                    imageFile || undefined,
+                    mobileImageFile || undefined
+                );
                 toast.success('Banner created');
             }
             onSaved();
@@ -137,7 +198,7 @@ function BannerModal({
 
     return (
         <Dialog open onOpenChange={(o) => !o && onClose()}>
-            <DialogContent className="border-gold/20 max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="border-gold/20 max-w-3xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader className="border-b border-gold/10 pb-2">
                     <DialogTitle className="text-sm font-bold text-maroon uppercase tracking-wider font-serif flex items-center gap-1.5">
                         <Image className="h-4 w-4 text-maroon/70" />
@@ -146,60 +207,146 @@ function BannerModal({
                 </DialogHeader>
 
                 <form onSubmit={handleSubmit} className="space-y-4 pt-2">
-                    {/* Image Upload */}
-                    <div>
-                        <label className={lbl}>Banner Image *</label>
-                        <div
-                            onClick={() => !compressing && fileRef.current?.click()}
-                            className={cn(
-                                "relative border-2 border-dashed rounded-lg overflow-hidden bg-cream/5 transition-colors",
-                                compressing ? 'border-amber-300 cursor-wait' : 'border-gold/25 cursor-pointer hover:bg-cream/10'
-                            )}
-                            style={{ minHeight: 160 }}
-                        >
-                            {preview ? (
-                                <img src={preview} alt="Preview" className="w-full object-cover" style={{ maxHeight: 220 }} />
-                            ) : (
-                                <div className="flex flex-col items-center justify-center h-40 gap-2">
-                                    <FileImage className="h-8 w-8 text-gold/40" />
-                                    <p className="text-xs text-gray-400">Click to upload banner image</p>
-                                    <p className="text-[10px] text-gray-300">JPG, PNG, WebP — auto compressed before upload</p>
+                    {/* Image Uploads Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                        {/* 1. Desktop Image Upload */}
+                        <div className="space-y-1.5">
+                            <div className="flex items-center justify-between">
+                                <label className={lbl}>
+                                    <span className="flex items-center gap-1.5 text-gray-700">
+                                        <Monitor className="h-3.5 w-3.5 text-maroon" />
+                                        Desktop Banner *
+                                    </span>
+                                </label>
+                                <span className="text-[9px] text-gray-400 font-medium">Aspect ~21:8 (Landscape)</span>
+                            </div>
+                            <div
+                                onClick={() => !compressing && fileRef.current?.click()}
+                                className={cn(
+                                    "relative border-2 border-dashed rounded-lg overflow-hidden bg-cream/5 transition-colors flex flex-col items-center justify-center",
+                                    compressing ? 'border-amber-300 cursor-wait' : 'border-gold/25 cursor-pointer hover:bg-cream/10'
+                                )}
+                                style={{ height: 160 }}
+                            >
+                                {preview ? (
+                                    <img src={preview} alt="Desktop Preview" className="w-full h-full object-cover" />
+                                ) : (
+                                    <div className="flex flex-col items-center justify-center p-3 text-center gap-1.5">
+                                        <FileImage className="h-7 w-7 text-gold/50" />
+                                        <p className="text-xs font-semibold text-gray-600">Click to upload desktop banner</p>
+                                        <p className="text-[10px] text-gray-400">JPG, PNG, WebP (auto-compressed)</p>
+                                    </div>
+                                )}
+
+                                {/* Compressing overlay */}
+                                {compressing && (
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/40 backdrop-blur-[2px]">
+                                        <Loader2 className="h-6 w-6 animate-spin text-white" />
+                                        <span className="text-white text-[10px] font-bold tracking-wider">Compressing…</span>
+                                    </div>
+                                )}
+
+                                {/* Change image overlay */}
+                                {preview && !compressing && (
+                                    <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 bg-black/30 transition-opacity">
+                                        <span className="text-white text-[10px] font-bold bg-black/60 px-2.5 py-1 rounded">Change Desktop Image</span>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Size info pill */}
+                            {sizeInfo && !compressing && (
+                                <div className={cn(
+                                    "inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full border",
+                                    sizeInfo.compressedKB < sizeInfo.originalKB
+                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                        : 'bg-blue-50 text-blue-700 border-blue-200'
+                                )}>
+                                    <Check className="h-2.5 w-2.5" />
+                                    {sizeInfo.compressedKB < sizeInfo.originalKB
+                                        ? `Compressed: ${sizeInfo.originalKB} KB → ${sizeInfo.compressedKB} KB (-${Math.round((1 - sizeInfo.compressedKB / sizeInfo.originalKB) * 100)}%)`
+                                        : `Optimised: ${sizeInfo.compressedKB} KB`}
                                 </div>
                             )}
 
-                            {/* Compressing overlay */}
-                            {compressing && (
-                                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/40 backdrop-blur-[2px]">
-                                    <Loader2 className="h-7 w-7 animate-spin text-white" />
-                                    <span className="text-white text-xs font-bold tracking-wider">Compressing…</span>
-                                </div>
-                            )}
-
-                            {/* Change image overlay (when not compressing) */}
-                            {preview && !compressing && (
-                                <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 bg-black/30 transition-opacity">
-                                    <span className="text-white text-xs font-bold bg-black/50 px-3 py-1 rounded">Change Image</span>
-                                </div>
-                            )}
+                            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
                         </div>
 
-                        {/* Size info pill */}
-                        {sizeInfo && !compressing && (
-                            <div className={cn(
-                                "mt-2 inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full border",
-                                sizeInfo.compressedKB < sizeInfo.originalKB
-                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                    : 'bg-blue-50 text-blue-700 border-blue-200'
-                            )}>
-                                <Check className="h-3 w-3" />
-                                {sizeInfo.compressedKB < sizeInfo.originalKB
-                                    ? `Compressed: ${sizeInfo.originalKB} KB → ${sizeInfo.compressedKB} KB (saved ${Math.round((1 - sizeInfo.compressedKB / sizeInfo.originalKB) * 100)}%)`
-                                    : `Image ready: ${sizeInfo.compressedKB} KB (already optimised)`
-                                }
+                        {/* 2. Mobile Image Upload */}
+                        <div className="space-y-1.5">
+                            <div className="flex items-center justify-between">
+                                <label className={lbl}>
+                                    <span className="flex items-center gap-1.5 text-gray-700">
+                                        <Smartphone className="h-3.5 w-3.5 text-maroon" />
+                                        Mobile Banner (Optional)
+                                    </span>
+                                </label>
+                                <span className="text-[9px] text-amber-700 font-bold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                                    Aspect 2:3 (Vertical)
+                                </span>
                             </div>
-                        )}
+                            <div
+                                onClick={() => !mobileCompressing && mobileFileRef.current?.click()}
+                                className={cn(
+                                    "relative border-2 border-dashed rounded-lg overflow-hidden bg-cream/5 transition-colors flex flex-col items-center justify-center",
+                                    mobileCompressing ? 'border-amber-300 cursor-wait' : 'border-gold/25 cursor-pointer hover:bg-cream/10'
+                                )}
+                                style={{ height: 160 }}
+                            >
+                                {mobilePreview ? (
+                                    <div className="w-full h-full flex items-center justify-center bg-gray-900/5">
+                                        <img src={mobilePreview} alt="Mobile Preview" className="h-full object-contain aspect-[2/3] rounded shadow-xs" />
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-col items-center justify-center p-3 text-center gap-1">
+                                        <Smartphone className="h-7 w-7 text-gold/50" />
+                                        <p className="text-xs font-semibold text-gray-600">Upload Mobile Banner</p>
+                                        <p className="text-[10px] text-gray-400 font-mono">Aspect 2:3 (e.g. 1024×1536)</p>
+                                        <p className="text-[9px] text-amber-600/90 font-medium">If omitted, desktop banner will be used</p>
+                                    </div>
+                                )}
 
-                        <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
+                                {/* Compressing overlay */}
+                                {mobileCompressing && (
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/40 backdrop-blur-[2px]">
+                                        <Loader2 className="h-6 w-6 animate-spin text-white" />
+                                        <span className="text-white text-[10px] font-bold tracking-wider">Compressing…</span>
+                                    </div>
+                                )}
+
+                                {/* Change or Remove image overlay */}
+                                {mobilePreview && !mobileCompressing && (
+                                    <div className="absolute inset-0 flex items-center justify-center gap-2 opacity-0 hover:opacity-100 bg-black/30 transition-opacity">
+                                        <span className="text-white text-[10px] font-bold bg-black/60 px-2.5 py-1 rounded">Change</span>
+                                        <button
+                                            type="button"
+                                            onClick={handleClearMobileImage}
+                                            className="text-white text-[10px] font-bold bg-red-600/90 hover:bg-red-700 px-2.5 py-1 rounded flex items-center gap-1 cursor-pointer"
+                                            title="Remove mobile image"
+                                        >
+                                            <X className="h-3 w-3" /> Remove
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Size info pill */}
+                            {mobileSizeInfo && !mobileCompressing && (
+                                <div className={cn(
+                                    "inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full border",
+                                    mobileSizeInfo.compressedKB < mobileSizeInfo.originalKB
+                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                        : 'bg-blue-50 text-blue-700 border-blue-200'
+                                )}>
+                                    <Check className="h-2.5 w-2.5" />
+                                    {mobileSizeInfo.compressedKB < mobileSizeInfo.originalKB
+                                        ? `Compressed: ${mobileSizeInfo.originalKB} KB → ${mobileSizeInfo.compressedKB} KB (-${Math.round((1 - mobileSizeInfo.compressedKB / mobileSizeInfo.originalKB) * 100)}%)`
+                                        : `Optimised: ${mobileSizeInfo.compressedKB} KB`}
+                                </div>
+                            )}
+
+                            <input ref={mobileFileRef} type="file" accept="image/*" className="hidden" onChange={handleMobileFile} />
+                        </div>
                     </div>
 
                     {/* Fields grid */}
@@ -264,10 +411,10 @@ function BannerModal({
                             className="h-8 text-[10px] border-gray-200 text-gray-600 uppercase font-bold px-3 cursor-pointer">
                             Cancel
                         </Button>
-                        <Button type="submit" disabled={saving || compressing}
+                        <Button type="submit" disabled={saving || compressing || mobileCompressing}
                             className="h-8 text-[10px] bg-gradient-to-r from-maroon to-maroon-dark hover:from-maroon-dark hover:to-maroon-dark text-gold uppercase font-bold px-4 cursor-pointer gap-1.5">
                             {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                            {saving ? 'Saving…' : compressing ? 'Compressing…' : isEdit ? 'Update Banner' : 'Create Banner'}
+                            {saving ? 'Saving…' : (compressing || mobileCompressing) ? 'Compressing…' : isEdit ? 'Update Banner' : 'Create Banner'}
                         </Button>
                     </DialogFooter>
                 </form>
@@ -282,7 +429,7 @@ function DeleteConfirm({ banner, onClose, onDeleted }: { banner: HeroBanner; onC
     const handleDelete = async () => {
         setLoading(true);
         try {
-            await heroBannerService.deleteBanner(banner.id, banner.imageUrl);
+            await heroBannerService.deleteBanner(banner.id, banner.imageUrl, banner.mobileImageUrl);
             toast.success('Banner deleted');
             onDeleted();
             onClose();
@@ -303,9 +450,9 @@ function DeleteConfirm({ banner, onClose, onDeleted }: { banner: HeroBanner; onC
                 </DialogHeader>
                 <DialogDescription asChild>
                     <div className="space-y-3 pt-2">
-                        <p className="text-xs text-gray-500">This will also remove the image from storage.</p>
+                        <p className="text-xs text-gray-500">This will also remove any uploaded desktop and mobile images from storage.</p>
                         <div className="p-3 bg-red-50 rounded-lg border border-red-100">
-                            <p className="text-xs font-bold text-red-700 truncate">"{banner.title}"</p>
+                            <p className="text-xs font-bold text-red-700 truncate">"{banner.title || 'Untitled Banner'}"</p>
                         </div>
                     </div>
                 </DialogDescription>
@@ -363,6 +510,7 @@ export default function HeroBannersPage() {
 
     const activeCount = banners.filter(b => b.isActive).length;
     const scheduledCount = banners.filter(b => b.startAt || b.endAt).length;
+    const mobileCustomCount = banners.filter(b => b.mobileImageUrl).length;
 
     if (isLoading) {
         return (
@@ -387,12 +535,12 @@ export default function HeroBannersPage() {
                     </div>
                     <div>
                         <h1 className="text-xl md:text-2xl font-bold font-serif text-maroon tracking-wide">Hero Banners</h1>
-                        <p className="text-xs text-gray-500 font-sans">Manage homepage hero banners — visibility, order & scheduling</p>
+                        <p className="text-xs text-gray-500 font-sans">Manage homepage hero banners — desktop landscape & mobile vertical (2:3)</p>
                     </div>
                 </div>
 
                 <Button onClick={openNew}
-                    className="bg-gradient-to-r from-maroon to-maroon-dark hover:from-maroon-dark hover:to-maroon-dark text-gold h-9 text-xs font-bold shadow-md shadow-maroon/20 gap-1.5 hover:shadow-lg hover:shadow-maroon/30 transition-all">
+                    className="bg-gradient-to-r from-maroon to-maroon-dark hover:from-maroon-dark hover:to-maroon-dark text-gold h-9 text-xs font-bold shadow-md shadow-maroon/20 gap-1.5 hover:shadow-lg hover:shadow-maroon/30 transition-all cursor-pointer">
                     <Plus className="h-4 w-4" />
                     Add Banner
                 </Button>
@@ -403,8 +551,8 @@ export default function HeroBannersPage() {
                 {[
                     { label: 'Total Banners', value: banners.length, icon: Layers, from: 'from-slate-600', to: 'to-slate-800', text: 'text-gray-800' },
                     { label: 'Active', value: activeCount, icon: Eye, from: 'from-emerald-500', to: 'to-emerald-700', text: 'text-emerald-600' },
-                    { label: 'Inactive', value: banners.length - activeCount, icon: EyeOff, from: 'from-gray-400', to: 'to-gray-600', text: 'text-gray-500' },
-                    { label: 'Scheduled', value: scheduledCount, icon: CalendarClock, from: 'from-amber-400', to: 'to-amber-600', text: 'text-amber-600' },
+                    { label: 'Mobile (2:3)', value: mobileCustomCount, icon: Smartphone, from: 'from-amber-500', to: 'to-amber-700', text: 'text-amber-600' },
+                    { label: 'Scheduled', value: scheduledCount, icon: CalendarClock, from: 'from-blue-500', to: 'to-blue-700', text: 'text-blue-600' },
                 ].map((s, i) => (
                     <motion.div key={s.label}
                         initial={{ opacity: 0, y: 12 }}
@@ -435,7 +583,7 @@ export default function HeroBannersPage() {
                         <p className="text-sm font-bold text-gray-500">No hero banners yet</p>
                         <p className="text-xs text-gray-400">Create your first banner to promote on the storefront homepage</p>
                         <Button onClick={openNew}
-                            className="bg-gradient-to-r from-maroon to-maroon-dark hover:from-maroon-dark hover:to-maroon-dark text-gold h-8 text-[10px] font-bold uppercase tracking-wider gap-1.5 mt-2 shadow-md shadow-maroon/20">
+                            className="bg-gradient-to-r from-maroon to-maroon-dark hover:from-maroon-dark hover:to-maroon-dark text-gold h-8 text-[10px] font-bold uppercase tracking-wider gap-1.5 mt-2 shadow-md shadow-maroon/20 cursor-pointer">
                             <Plus className="h-3.5 w-3.5" /> Add First Banner
                         </Button>
                     </CardContent>
@@ -461,13 +609,34 @@ export default function HeroBannersPage() {
                                     initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                                     className="flex flex-col sm:flex-row sm:items-center gap-4 p-3.5 hover:bg-cream/10 transition-colors">
 
-                                    {/* Image preview */}
-                                    <div className="flex-shrink-0 w-full sm:w-32 h-18 rounded-lg overflow-hidden border border-gold/15 bg-gray-50">
-                                        {banner.imageUrl ? (
-                                            <img src={banner.imageUrl} alt={banner.title ?? undefined} className="w-full h-full object-cover" />
+                                    {/* Dual Preview: Desktop + Mobile */}
+                                    <div className="flex items-center gap-2 flex-shrink-0">
+                                        {/* Desktop Preview */}
+                                        <div className="w-28 sm:w-32 h-18 rounded-lg overflow-hidden border border-gold/15 bg-gray-50 relative group" title="Desktop Banner">
+                                            {banner.imageUrl ? (
+                                                <img src={banner.imageUrl} alt={banner.title ?? undefined} className="w-full h-full object-cover" />
+                                            ) : (
+                                                <div className="w-full h-full flex items-center justify-center">
+                                                    <Image className="h-6 w-6 text-gray-200" />
+                                                </div>
+                                            )}
+                                            <span className="absolute bottom-1 left-1 bg-black/60 text-[8px] font-bold text-white px-1 rounded flex items-center gap-0.5 pointer-events-none">
+                                                <Monitor className="h-2 w-2" /> Desktop
+                                            </span>
+                                        </div>
+
+                                        {/* Mobile Preview */}
+                                        {banner.mobileImageUrl ? (
+                                            <div className="w-12 h-18 rounded-lg overflow-hidden border border-gold/25 bg-gray-900/5 relative group" title="Custom Mobile Banner (2:3)">
+                                                <img src={banner.mobileImageUrl} alt="Mobile Banner" className="w-full h-full object-cover" />
+                                                <span className="absolute bottom-1 left-0.5 right-0.5 bg-maroon/85 text-[7px] font-bold text-gold px-0.5 py-0.2 rounded text-center flex items-center justify-center gap-0.5 pointer-events-none">
+                                                    <Smartphone className="h-2 w-2" /> 2:3
+                                                </span>
+                                            </div>
                                         ) : (
-                                            <div className="w-full h-full flex items-center justify-center">
-                                                <Image className="h-6 w-6 text-gray-200" />
+                                            <div className="w-12 h-18 rounded-lg border border-dashed border-gray-200 bg-gray-50 flex flex-col items-center justify-center text-[7px] text-gray-400 text-center p-1" title="No separate mobile banner; desktop banner used as fallback">
+                                                <Smartphone className="h-3.5 w-3.5 text-gray-300 mb-0.5" />
+                                                <span className="leading-tight">Desktop Fallback</span>
                                             </div>
                                         )}
                                     </div>
@@ -492,8 +661,14 @@ export default function HeroBannersPage() {
                                             <span className="text-[9px] text-gray-400 font-mono border border-gray-100 px-2 py-0.5 rounded-full bg-gray-50">
                                                 Order #{banner.sortOrder}
                                             </span>
+                                            {banner.mobileImageUrl && (
+                                                <span className="inline-flex items-center gap-1 text-[9px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                                                    <Smartphone className="h-2.5 w-2.5" />
+                                                    Vertical 2:3
+                                                </span>
+                                            )}
                                         </div>
-                                        <p className="text-sm font-bold text-gray-800 mt-1.5 truncate">{banner.title}</p>
+                                        <p className="text-sm font-bold text-gray-800 mt-1.5 truncate">{banner.title || 'Untitled Banner'}</p>
                                         {banner.subtitle && <p className="text-xs text-gray-400 truncate">{banner.subtitle}</p>}
                                         <div className="flex items-center gap-3 mt-1.5 flex-wrap">
                                             {banner.buttonText && (

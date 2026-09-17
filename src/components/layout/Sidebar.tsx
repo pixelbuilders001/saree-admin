@@ -20,7 +20,8 @@ import {
     Megaphone,
     Bell,
     Presentation,
-    LayoutGrid
+    LayoutGrid,
+    Gift
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -50,6 +51,7 @@ const navGroups = [
         title: "Marketing",
         items: [
             { icon: Megaphone, label: 'Campaigns', path: '/campaigns' },
+            { icon: Gift, label: 'Coupons & Referrals', path: '/coupons-referrals' },
             { icon: Bell, label: 'Push Notifications', path: '/push-notifications' },
             { icon: Presentation, label: 'Hero Banners', path: '/hero-banners' },
         ]

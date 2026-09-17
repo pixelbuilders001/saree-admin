@@ -8,6 +8,7 @@ export interface HeroBanner {
     title: string | null;
     subtitle: string | null;
     imageUrl: string | null;
+    mobileImageUrl: string | null;
     buttonText: string | null;
     buttonLink: string | null;
     isActive: boolean;
@@ -26,6 +27,7 @@ const mapRow = (row: any): HeroBanner => ({
     title: row.title ?? null,
     subtitle: row.subtitle ?? null,
     imageUrl: row.image_url ?? null,
+    mobileImageUrl: row.mobile_image_url ?? null,
     buttonText: row.button_text ?? null,
     buttonLink: row.button_link ?? null,
     isActive: row.is_active ?? false,
@@ -48,9 +50,11 @@ export const heroBannerService = {
         return (data || []).map(mapRow);
     },
 
-    uploadImage: async (file: File): Promise<string> => {
-        const compressed = await compressImage(file, 800, 2400, 'image/webp');
-        const fileName = `banner_${Date.now()}_${Math.random().toString(36).substring(2, 10)}.webp`;
+    uploadImage: async (file: File, isMobile: boolean = false): Promise<string> => {
+        const maxDim = isMobile ? 1600 : 2400;
+        const compressed = await compressImage(file, 800, maxDim, 'image/webp');
+        const prefix = isMobile ? 'banner_mobile_' : 'banner_';
+        const fileName = `${prefix}${Date.now()}_${Math.random().toString(36).substring(2, 10)}.webp`;
 
         const result = await uploadToImageKit(compressed, fileName, '/hero-banners');
         return result.url;
@@ -73,14 +77,19 @@ export const heroBannerService = {
     },
 
     createBanner: async (
-        fields: Omit<HeroBanner, 'id' | 'createdAt' | 'updatedAt' | 'imageUrl'>,
-        imageFile?: File
+        fields: Omit<HeroBanner, 'id' | 'createdAt' | 'updatedAt' | 'imageUrl' | 'mobileImageUrl'>,
+        imageFile?: File,
+        mobileImageFile?: File
     ): Promise<HeroBanner> => {
         let imageUrl: string | null = null;
+        let mobileImageUrl: string | null = null;
 
         try {
             if (imageFile) {
-                imageUrl = await heroBannerService.uploadImage(imageFile);
+                imageUrl = await heroBannerService.uploadImage(imageFile, false);
+            }
+            if (mobileImageFile) {
+                mobileImageUrl = await heroBannerService.uploadImage(mobileImageFile, true);
             }
 
             const { data, error } = await supabase
@@ -90,6 +99,7 @@ export const heroBannerService = {
                     title: fields.title || null,
                     subtitle: fields.subtitle || null,
                     image_url: imageUrl,
+                    mobile_image_url: mobileImageUrl,
                     button_text: fields.buttonText || null,
                     button_link: fields.buttonLink || null,
                     is_active: fields.isActive,
@@ -104,6 +114,7 @@ export const heroBannerService = {
             return mapRow(data);
         } catch (err) {
             if (imageUrl) await heroBannerService.deleteImageByUrl(imageUrl);
+            if (mobileImageUrl) await heroBannerService.deleteImageByUrl(mobileImageUrl);
             throw err;
         }
     },
@@ -112,14 +123,21 @@ export const heroBannerService = {
         id: string,
         fields: Partial<Omit<HeroBanner, 'id' | 'createdAt' | 'updatedAt'>>,
         imageFile?: File,
-        oldImageUrl?: string | null
+        oldImageUrl?: string | null,
+        mobileImageFile?: File,
+        oldMobileImageUrl?: string | null
     ): Promise<HeroBanner> => {
-        let imageUrl = fields.imageUrl ?? null;
+        let imageUrl = fields.imageUrl !== undefined ? fields.imageUrl : undefined;
+        let mobileImageUrl = fields.mobileImageUrl !== undefined ? fields.mobileImageUrl : undefined;
 
         if (imageFile) {
-            // Delete old image from storage first
             if (oldImageUrl) await heroBannerService.deleteImageByUrl(oldImageUrl);
-            imageUrl = await heroBannerService.uploadImage(imageFile);
+            imageUrl = await heroBannerService.uploadImage(imageFile, false);
+        }
+
+        if (mobileImageFile) {
+            if (oldMobileImageUrl) await heroBannerService.deleteImageByUrl(oldMobileImageUrl);
+            mobileImageUrl = await heroBannerService.uploadImage(mobileImageFile, true);
         }
 
         const updatePayload: any = { updated_at: new Date().toISOString() };
@@ -132,7 +150,8 @@ export const heroBannerService = {
         if (fields.sortOrder !== undefined) updatePayload.sort_order = fields.sortOrder;
         if (fields.startAt !== undefined) updatePayload.start_at = fields.startAt || null;
         if (fields.endAt !== undefined) updatePayload.end_at = fields.endAt || null;
-        updatePayload.image_url = imageUrl;
+        if (imageUrl !== undefined) updatePayload.image_url = imageUrl;
+        if (mobileImageUrl !== undefined) updatePayload.mobile_image_url = mobileImageUrl;
 
         const { data, error } = await supabase
             .from('hero_banners')
@@ -157,8 +176,9 @@ export const heroBannerService = {
         return mapRow(data);
     },
 
-    deleteBanner: async (id: string, imageUrl?: string | null): Promise<void> => {
+    deleteBanner: async (id: string, imageUrl?: string | null, mobileImageUrl?: string | null): Promise<void> => {
         if (imageUrl) await heroBannerService.deleteImageByUrl(imageUrl);
+        if (mobileImageUrl) await heroBannerService.deleteImageByUrl(mobileImageUrl);
 
         const { error } = await supabase.from('hero_banners').delete().eq('id', id);
         if (error) throw error;
