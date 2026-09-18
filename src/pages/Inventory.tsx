@@ -1,6 +1,8 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { inventoryService, categoryService, type Saree } from '@/services/inventoryService';
+import { addonInventoryService } from '@/services/addonInventoryService';
 import {
     Plus,
     Search,
@@ -16,6 +18,7 @@ import {
     Package,
     Boxes,
     PackageX,
+    PackagePlus,
     IndianRupee,
     AlertTriangle,
     Printer,
@@ -70,6 +73,24 @@ import { DuplicateSareeModal } from '@/components/inventory/DuplicateSareeModal'
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 
+// Format numbers in Indian shorthand (e.g., 3.45 Cr, 12.50 L) for instant readability
+const formatIndianCompact = (num: number): string => {
+    if (!num || isNaN(num)) return '';
+    const abs = Math.abs(num);
+    if (abs >= 10000000) {
+        const cr = num / 10000000;
+        return `₹${cr >= 100 ? cr.toFixed(1) : cr.toFixed(2)} Cr`;
+    }
+    if (abs >= 100000) {
+        const lakh = num / 100000;
+        return `₹${lakh >= 100 ? lakh.toFixed(1) : lakh.toFixed(2)} L`;
+    }
+    if (abs >= 1000) {
+        return `₹${(num / 1000).toFixed(1)} K`;
+    }
+    return '';
+};
+
 export default function InventoryPage() {
     const [searchTerm, setSearchTerm] = React.useState('');
     const [currentPage, setCurrentPage] = React.useState(1);
@@ -123,6 +144,11 @@ export default function InventoryPage() {
     const { data: sarees, isLoading } = useQuery({
         queryKey: ['sarees'],
         queryFn: inventoryService.getSarees
+    });
+
+    const { data: addons = [] } = useQuery({
+        queryKey: ['addons'],
+        queryFn: addonInventoryService.getAddons
     });
 
     // Reset pagination when search or filters change
@@ -221,6 +247,19 @@ export default function InventoryPage() {
         });
         return { total: sarees.length, units, lowStock, outOfStock, stockValue, costValue, imagesUploaded, imagesPending };
     }, [sarees]);
+
+    // Add-ons own stock valuation and stats
+    const addonsStats = React.useMemo(() => {
+        if (!Array.isArray(addons)) return { total: 0, units: 0, costValue: 0, retailValue: 0 };
+        let units = 0, costValue = 0, retailValue = 0;
+        addons.forEach(a => {
+            const stock = Number(a.stock) || 0;
+            units += stock;
+            costValue += stock * (Number(a.purchase_price) || 0);
+            retailValue += stock * (Number(a.selling_price) || 0);
+        });
+        return { total: addons.length, units, costValue, retailValue };
+    }, [addons]);
 
     const filteredSarees = Array.isArray(sarees) ? sarees.filter(saree => {
         // Search term check
@@ -429,100 +468,190 @@ export default function InventoryPage() {
             </div>
 
             {/* KPI Summary Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
-                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
-                    <Card className="border-gold/20 shadow-xs hover:shadow-md transition-shadow bg-white">
-                        <CardContent className="p-3 flex items-center justify-between gap-1.5">
-                            <div className="space-y-0.5 min-w-0">
-                                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block truncate">Total Products</span>
-                                <span className="text-lg sm:text-xl font-bold font-mono text-gray-800 block leading-tight">{inventoryStats.total}</span>
-                                <span className="text-[9px] text-gray-400 block truncate">Catalogue items</span>
-                            </div>
-                            <div className="p-1.5 sm:p-2 bg-gradient-to-br from-slate-600 to-slate-800 rounded-lg text-white shadow-xs shrink-0">
-                                <Package className="h-4 w-4" />
-                            </div>
-                        </CardContent>
-                    </Card>
-                </motion.div>
+            <div className="space-y-2.5">
+                {/* Row 1: Stock Quantity & Health */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
+                        <Card className="border-gold/20 shadow-xs hover:shadow-md transition-shadow bg-white">
+                            <CardContent className="p-3 flex items-center justify-between gap-2">
+                                <div className="space-y-0.5 min-w-0">
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Total Products</span>
+                                    <span className="text-lg sm:text-xl font-bold font-mono text-gray-800 block leading-tight">{inventoryStats.total.toLocaleString('en-IN')}</span>
+                                    <span className="text-[9px] text-gray-400 block truncate">Catalogue sarees</span>
+                                </div>
+                                <div className="p-1.5 sm:p-2 bg-gradient-to-br from-slate-600 to-slate-800 rounded-lg text-white shadow-xs shrink-0">
+                                    <Package className="h-4 w-4" />
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </motion.div>
 
-                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: 0.04 }}>
-                    <Card className="border-gold/20 shadow-xs hover:shadow-md transition-shadow bg-white">
-                        <CardContent className="p-3 flex items-center justify-between gap-1.5">
-                            <div className="space-y-0.5 min-w-0">
-                                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block truncate">Total Units</span>
-                                <span className="text-lg sm:text-xl font-bold font-mono text-indigo-600 block leading-tight">{inventoryStats.units}</span>
-                                <span className="text-[9px] text-gray-400 block truncate">In stock quantity</span>
-                            </div>
-                            <div className="p-1.5 sm:p-2 bg-gradient-to-br from-indigo-500 to-indigo-700 rounded-lg text-white shadow-xs shrink-0">
-                                <Boxes className="h-4 w-4" />
-                            </div>
-                        </CardContent>
-                    </Card>
-                </motion.div>
+                    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: 0.04 }}>
+                        <Card className="border-gold/20 shadow-xs hover:shadow-md transition-shadow bg-white">
+                            <CardContent className="p-3 flex items-center justify-between gap-2">
+                                <div className="space-y-0.5 min-w-0">
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Total Units</span>
+                                    <span className="text-lg sm:text-xl font-bold font-mono text-indigo-600 block leading-tight">{inventoryStats.units.toLocaleString('en-IN')}</span>
+                                    <span className="text-[9px] text-gray-400 block truncate">In stock sarees</span>
+                                </div>
+                                <div className="p-1.5 sm:p-2 bg-gradient-to-br from-indigo-500 to-indigo-700 rounded-lg text-white shadow-xs shrink-0">
+                                    <Boxes className="h-4 w-4" />
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </motion.div>
 
-                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: 0.08 }}>
-                    <Card className="border-gold/20 shadow-xs hover:shadow-md transition-shadow bg-white">
-                        <CardContent className="p-3 flex items-center justify-between gap-1.5">
-                            <div className="space-y-0.5 min-w-0">
-                                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block truncate">Low Stock</span>
-                                <span className="text-lg sm:text-xl font-bold font-mono text-amber-600 block leading-tight">{inventoryStats.lowStock}</span>
-                                <span className="text-[9px] text-gray-400 block truncate">&lt; 5 units left</span>
-                            </div>
-                            <div className="p-1.5 sm:p-2 bg-gradient-to-br from-amber-400 to-amber-600 rounded-lg text-white shadow-xs shrink-0">
-                                <AlertTriangle className="h-4 w-4" />
-                            </div>
-                        </CardContent>
-                    </Card>
-                </motion.div>
+                    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: 0.08 }}>
+                        <Card className="border-gold/20 shadow-xs hover:shadow-md transition-shadow bg-white">
+                            <CardContent className="p-3 flex items-center justify-between gap-2">
+                                <div className="space-y-0.5 min-w-0">
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Low Stock</span>
+                                    <span className="text-lg sm:text-xl font-bold font-mono text-amber-600 block leading-tight">{inventoryStats.lowStock.toLocaleString('en-IN')}</span>
+                                    <span className="text-[9px] text-gray-400 block truncate">&lt; 5 units left</span>
+                                </div>
+                                <div className="p-1.5 sm:p-2 bg-gradient-to-br from-amber-400 to-amber-600 rounded-lg text-white shadow-xs shrink-0">
+                                    <AlertTriangle className="h-4 w-4" />
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </motion.div>
 
-                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: 0.12 }}>
-                    <Card className="border-gold/20 shadow-xs hover:shadow-md transition-shadow bg-white">
-                        <CardContent className="p-3 flex items-center justify-between gap-1.5">
-                            <div className="space-y-0.5 min-w-0">
-                                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block truncate">Out of Stock</span>
-                                <span className="text-lg sm:text-xl font-bold font-mono text-red-600 block leading-tight">{inventoryStats.outOfStock}</span>
-                                <span className="text-[9px] text-gray-400 block truncate">Needs restock</span>
-                            </div>
-                            <div className="p-1.5 sm:p-2 bg-gradient-to-br from-red-500 to-red-700 rounded-lg text-white shadow-xs shrink-0">
-                                <PackageX className="h-4 w-4" />
-                            </div>
-                        </CardContent>
-                    </Card>
-                </motion.div>
+                    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: 0.12 }}>
+                        <Card className="border-gold/20 shadow-xs hover:shadow-md transition-shadow bg-white">
+                            <CardContent className="p-3 flex items-center justify-between gap-2">
+                                <div className="space-y-0.5 min-w-0">
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Out of Stock</span>
+                                    <span className="text-lg sm:text-xl font-bold font-mono text-red-600 block leading-tight">{inventoryStats.outOfStock.toLocaleString('en-IN')}</span>
+                                    <span className="text-[9px] text-gray-400 block truncate">Needs restock</span>
+                                </div>
+                                <div className="p-1.5 sm:p-2 bg-gradient-to-br from-red-500 to-red-700 rounded-lg text-white shadow-xs shrink-0">
+                                    <PackageX className="h-4 w-4" />
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </motion.div>
+                </div>
 
-                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: 0.16 }}>
-                    <Card className="border-gold/20 shadow-xs hover:shadow-md transition-shadow bg-white">
-                        <CardContent className="p-3 flex items-center justify-between gap-1.5">
-                            <div className="space-y-0.5 min-w-0">
-                                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block truncate">Asset (Cost)</span>
-                                <span className="text-lg sm:text-xl font-bold font-mono text-teal-700 block leading-tight truncate" title={`₹${inventoryStats.costValue.toLocaleString()}`}>
-                                    ₹{inventoryStats.costValue.toLocaleString()}
+                {/* Row 2: Stock Valuations & Financial Assets (Full Figure, Never Ellipsed) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                    {/* Sarees (Own Cost) */}
+                    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: 0.14 }}>
+                        <Card className="border-gold/20 shadow-xs hover:shadow-md transition-shadow bg-white">
+                            <CardContent className="p-3 space-y-1">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                                        Sarees (Own Cost)
+                                    </span>
+                                    <div className="p-1.5 bg-gradient-to-br from-teal-600 to-teal-800 rounded-lg text-white shadow-xs shrink-0">
+                                        <Wallet className="h-3.5 w-3.5" />
+                                    </div>
+                                </div>
+                                <div className="flex items-baseline gap-2 flex-wrap pt-0.5">
+                                    <span className="text-lg sm:text-xl font-bold font-mono text-teal-700 tracking-tight select-all">
+                                        ₹{inventoryStats.costValue.toLocaleString('en-IN')}
+                                    </span>
+                                    {inventoryStats.costValue >= 100000 && (
+                                        <span className="text-[10px] font-semibold text-teal-800 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200">
+                                            {formatIndianCompact(inventoryStats.costValue)}
+                                        </span>
+                                    )}
+                                </div>
+                                <span className="text-[9px] text-gray-400 block">
+                                    Saree purchase cost ({inventoryStats.units} units)
                                 </span>
-                                <span className="text-[9px] text-gray-400 block truncate">At purchase price</span>
-                            </div>
-                            <div className="p-1.5 sm:p-2 bg-gradient-to-br from-teal-600 to-teal-800 rounded-lg text-white shadow-xs shrink-0">
-                                <Wallet className="h-4 w-4" />
-                            </div>
-                        </CardContent>
-                    </Card>
-                </motion.div>
+                            </CardContent>
+                        </Card>
+                    </motion.div>
 
-                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: 0.20 }}>
-                    <Card className="border-gold/20 shadow-xs hover:shadow-md transition-shadow bg-white">
-                        <CardContent className="p-3 flex items-center justify-between gap-1.5">
-                            <div className="space-y-0.5 min-w-0">
-                                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block truncate">Asset (Retail)</span>
-                                <span className="text-lg sm:text-xl font-bold font-mono text-emerald-600 block leading-tight truncate" title={`₹${inventoryStats.stockValue.toLocaleString()}`}>
-                                    ₹{inventoryStats.stockValue.toLocaleString()}
+                    {/* Add-ons (Own Cost) */}
+                    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: 0.18 }}>
+                        <Link to="/addons" className="block group h-full">
+                            <Card className="border-gold/20 shadow-xs hover:shadow-md transition-all bg-white group-hover:border-purple-300 h-full">
+                                <CardContent className="p-3 space-y-1">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                                            Add-ons (Own Cost)
+                                        </span>
+                                        <div className="p-1.5 bg-gradient-to-br from-purple-600 to-purple-800 rounded-lg text-white shadow-xs shrink-0 group-hover:scale-105 transition-transform">
+                                            <PackagePlus className="h-3.5 w-3.5" />
+                                        </div>
+                                    </div>
+                                    <div className="flex items-baseline gap-2 flex-wrap pt-0.5">
+                                        <span className="text-lg sm:text-xl font-bold font-mono text-purple-700 tracking-tight select-all">
+                                            ₹{addonsStats.costValue.toLocaleString('en-IN')}
+                                        </span>
+                                        {addonsStats.costValue >= 100000 && (
+                                            <span className="text-[10px] font-semibold text-purple-800 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200">
+                                                {formatIndianCompact(addonsStats.costValue)}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <span className="text-[9px] text-purple-600 group-hover:underline block">
+                                        Own stock ({addonsStats.units} units · {addonsStats.total} items)
+                                    </span>
+                                </CardContent>
+                            </Card>
+                        </Link>
+                    </motion.div>
+
+                    {/* Total Stock Asset (Cost) */}
+                    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: 0.22 }}>
+                        <Card className="border-gold/30 shadow-xs hover:shadow-md transition-shadow bg-gradient-to-br from-white to-cream/20">
+                            <CardContent className="p-3 space-y-1">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-[10px] font-bold text-maroon uppercase tracking-wider">
+                                        Total Inventory (Cost)
+                                    </span>
+                                    <div className="p-1.5 bg-gradient-to-br from-maroon to-maroon-dark rounded-lg text-gold shadow-xs shrink-0">
+                                        <Layers className="h-3.5 w-3.5" />
+                                    </div>
+                                </div>
+                                <div className="flex items-baseline gap-2 flex-wrap pt-0.5">
+                                    <span className="text-lg sm:text-xl font-bold font-mono text-maroon tracking-tight select-all">
+                                        ₹{(inventoryStats.costValue + addonsStats.costValue).toLocaleString('en-IN')}
+                                    </span>
+                                    {(inventoryStats.costValue + addonsStats.costValue) >= 100000 && (
+                                        <span className="text-[10px] font-semibold text-maroon bg-cream px-1.5 py-0.5 rounded border border-gold/30">
+                                            {formatIndianCompact(inventoryStats.costValue + addonsStats.costValue)}
+                                        </span>
+                                    )}
+                                </div>
+                                <span className="text-[9px] text-gray-500 block">
+                                    Sarees + Add-ons combined cost
                                 </span>
-                                <span className="text-[9px] text-gray-400 block truncate">At selling price</span>
-                            </div>
-                            <div className="p-1.5 sm:p-2 bg-gradient-to-br from-emerald-500 to-emerald-700 rounded-lg text-white shadow-xs shrink-0">
-                                <IndianRupee className="h-4 w-4" />
-                            </div>
-                        </CardContent>
-                    </Card>
-                </motion.div>
+                            </CardContent>
+                        </Card>
+                    </motion.div>
+
+                    {/* Asset (Retail) */}
+                    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: 0.26 }}>
+                        <Card className="border-gold/20 shadow-xs hover:shadow-md transition-shadow bg-white">
+                            <CardContent className="p-3 space-y-1">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                                        Asset (Retail Value)
+                                    </span>
+                                    <div className="p-1.5 bg-gradient-to-br from-emerald-500 to-emerald-700 rounded-lg text-white shadow-xs shrink-0">
+                                        <IndianRupee className="h-3.5 w-3.5" />
+                                    </div>
+                                </div>
+                                <div className="flex items-baseline gap-2 flex-wrap pt-0.5">
+                                    <span className="text-lg sm:text-xl font-bold font-mono text-emerald-600 tracking-tight select-all">
+                                        ₹{inventoryStats.stockValue.toLocaleString('en-IN')}
+                                    </span>
+                                    {inventoryStats.stockValue >= 100000 && (
+                                        <span className="text-[10px] font-semibold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                            {formatIndianCompact(inventoryStats.stockValue)}
+                                        </span>
+                                    )}
+                                </div>
+                                <span className="text-[9px] text-gray-400 block">
+                                    At selling price ({inventoryStats.units} units)
+                                </span>
+                            </CardContent>
+                        </Card>
+                    </motion.div>
+                </div>
             </div>
 
             {/* Controls Bar */}
@@ -810,7 +939,7 @@ export default function InventoryPage() {
                             </span>
                         </span>
                         <span className="text-[10px] text-gray-500 normal-case font-normal hidden md:inline">
-                            Asset value — Cost: <span className="font-bold font-mono text-teal-700">₹{inventoryStats.costValue.toLocaleString()}</span> | Retail: <span className="font-bold font-mono text-maroon">₹{inventoryStats.stockValue.toLocaleString()}</span>
+                            Asset value — Sarees: <span className="font-bold font-mono text-teal-700">₹{inventoryStats.costValue.toLocaleString('en-IN')}</span> | Add-ons: <span className="font-bold font-mono text-purple-700">₹{addonsStats.costValue.toLocaleString('en-IN')}</span> | Total Cost: <span className="font-bold font-mono text-emerald-700">₹{(inventoryStats.costValue + addonsStats.costValue).toLocaleString('en-IN')}</span> | Retail: <span className="font-bold font-mono text-maroon">₹{inventoryStats.stockValue.toLocaleString('en-IN')}</span>
                         </span>
                     </CardTitle>
                 </CardHeader>
@@ -1031,7 +1160,7 @@ export default function InventoryPage() {
                                         <TableCell className="py-1 text-xs text-right font-bold text-maroon font-mono whitespace-nowrap">
                                             <span className="inline-flex items-center gap-0.5">
                                                 <IndianRupee className="h-3 w-3" />
-                                                {saree.sellingPrice.toLocaleString()}
+                                                {(saree.sellingPrice || 0).toLocaleString()}
                                             </span>
                                         </TableCell>
                                         <TableCell className="py-1 text-xs text-center whitespace-nowrap">
@@ -1505,7 +1634,7 @@ export default function InventoryPage() {
                                             )}
                                             <div>
                                                 <div className="text-[9px] text-gray-400 uppercase">Selling Price</div>
-                                                <div className="text-lg font-bold text-maroon font-mono">₹{s.sellingPrice.toLocaleString()}</div>
+                                                <div className="text-lg font-bold text-maroon font-mono">₹{(s.sellingPrice || 0).toLocaleString()}</div>
                                                 {s.priceIncludesGst !== undefined && (
                                                     <div className="text-[9px] text-gray-500 font-medium">
                                                         {s.priceIncludesGst ? '✓ Price includes GST' : 'Price excludes GST'}

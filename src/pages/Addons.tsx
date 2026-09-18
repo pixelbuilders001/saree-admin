@@ -8,6 +8,8 @@ import {
     Trash2,
     PackagePlus,
     Package,
+    Boxes,
+    PackageX,
     AlertTriangle,
     IndianRupee,
     Layers,
@@ -16,11 +18,13 @@ import {
     ChevronLeft,
     ChevronRight,
     CheckCircle2,
+    Wallet,
 } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
     Table,
     TableBody,
@@ -73,6 +77,24 @@ const DEFAULT_FORM_DATA: AddonFormData = {
     selling_price: '',
     stock: '0',
     status: 'active',
+};
+
+// Format numbers in Indian shorthand (e.g., 3.45 Cr, 12.50 L) for instant readability
+const formatIndianCompact = (num: number): string => {
+    if (!num || isNaN(num)) return '';
+    const abs = Math.abs(num);
+    if (abs >= 10000000) {
+        const cr = num / 10000000;
+        return `₹${cr >= 100 ? cr.toFixed(1) : cr.toFixed(2)} Cr`;
+    }
+    if (abs >= 100000) {
+        const lakh = num / 100000;
+        return `₹${lakh >= 100 ? lakh.toFixed(1) : lakh.toFixed(2)} L`;
+    }
+    if (abs >= 1000) {
+        return `₹${(num / 1000).toFixed(1)} K`;
+    }
+    return '';
 };
 
 export default function AddonsPage() {
@@ -248,21 +270,28 @@ export default function AddonsPage() {
         let totalSellingValue = 0;
         let totalCostValue = 0;
 
-        addons.forEach((a) => {
-            totalUnits += a.stock;
-            if (a.stock === 0) outOfStockCount++;
-            else if (a.stock < 5) lowStockCount++;
-            totalSellingValue += a.stock * a.selling_price;
-            totalCostValue += a.stock * a.purchase_price;
-        });
+        if (Array.isArray(addons)) {
+            addons.forEach((a) => {
+                const stock = Number(a.stock) || 0;
+                const sp = Number(a.selling_price) || 0;
+                const pp = Number(a.purchase_price) || 0;
+                totalUnits += stock;
+                if (stock === 0) outOfStockCount++;
+                else if (stock < 5) lowStockCount++;
+                totalSellingValue += stock * sp;
+                totalCostValue += stock * pp;
+            });
+        }
 
         return {
-            totalAddons: addons.length,
+            totalAddons: Array.isArray(addons) ? addons.length : 0,
             totalUnits,
             lowStockCount,
             outOfStockCount,
             totalSellingValue,
             totalCostValue,
+            ownStockValuation: totalCostValue,
+            retailStockValuation: totalSellingValue,
         };
     }, [addons]);
 
@@ -298,145 +327,191 @@ export default function AddonsPage() {
     const isSaving = createMutation.isPending || updateMutation.isPending;
 
     return (
-        <div className="space-y-4 max-w-7xl mx-auto px-2">
+        <div className="space-y-5 max-w-7xl mx-auto px-2 pb-10">
             {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-5 rounded-2xl border border-gold/20 shadow-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div className="flex items-center gap-3">
-                    <div className="w-11 h-11 rounded-xl bg-maroon/10 text-maroon flex items-center justify-center border border-gold/30 shrink-0">
-                        <PackagePlus className="w-6 h-6" />
+                    <div className="p-2.5 bg-gradient-to-br from-maroon to-maroon-dark text-gold rounded-xl shadow-md shadow-maroon/20">
+                        <PackagePlus className="h-6 w-6" />
                     </div>
                     <div>
                         <div className="flex items-center gap-2">
-                            <h1 className="text-xl sm:text-2xl font-serif font-bold text-stone-900 tracking-wide">
-                                ADD-ONS &amp; ACCESSORIES
+                            <h1 className="text-xl md:text-2xl font-bold font-serif text-maroon tracking-wide">
+                                Add-ons &amp; Accessories
                             </h1>
-                            <Badge variant="outline" className="border-gold/40 text-maroon bg-cream/30 text-xs font-semibold">
-                                {addons.length} Items
-                            </Badge>
+                            <span className="text-[10px] font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full font-mono">
+                                {addons.length} items
+                            </span>
                         </div>
-                        <p className="text-xs sm:text-sm text-stone-500 mt-0.5">
-                            Maintain blouse pieces, petticoats, fall &amp; pico, packaging, and saree add-on inventory.
+                        <p className="text-xs text-gray-500 font-sans">
+                            Maintain blouse pieces, petticoats, fall &amp; pico, packaging, and saree add-on inventory
                         </p>
                     </div>
                 </div>
 
-                <div className="flex items-center gap-2 self-start sm:self-auto">
+                <div className="flex items-center gap-2">
                     <Button
                         variant="outline"
-                        size="sm"
+                        className="border-gold/40 text-maroon hover:bg-gold/10 gap-1.5 h-9 px-3.5 text-xs font-bold transition-all shadow-sm bg-white cursor-pointer"
                         onClick={() => refetch()}
                         disabled={isFetching}
-                        className="flex items-center gap-1.5 text-xs text-maroon border-gold/30 hover:bg-gold/10 bg-white cursor-pointer"
                     >
-                        <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? 'animate-spin' : ''}`} />
+                        <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
                         Refresh
                     </Button>
                     <Button
-                        size="sm"
+                        className="bg-gradient-to-r from-maroon to-maroon-dark text-gold gap-1.5 h-9 px-4 text-xs font-bold shadow-md shadow-maroon/20 hover:shadow-lg hover:shadow-maroon/30 transition-all cursor-pointer"
                         onClick={handleOpenCreate}
-                        className="bg-maroon hover:bg-maroon-dark text-gold font-bold shadow-sm text-xs flex items-center gap-1.5 cursor-pointer"
                     >
-                        <Plus className="w-4 h-4" />
-                        ADD ADD-ON
+                        <Plus className="h-4 w-4" />
+                        Add New Add-on
                     </Button>
                 </div>
             </div>
 
             {/* KPI Summary Cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-                <Card className="border-gold/20 shadow-xs bg-white">
-                    <CardContent className="p-4 flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center shrink-0 border border-blue-200/60">
-                            <Layers className="w-5 h-5" />
-                        </div>
-                        <div>
-                            <span className="text-xs text-stone-500 font-medium block">Total Add-on Items</span>
-                            <span className="text-xl font-serif font-bold text-stone-900">
-                                {stats.totalAddons}
-                            </span>
-                        </div>
-                    </CardContent>
-                </Card>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+                {/* Total Items */}
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
+                    <Card className="border-gold/20 shadow-xs hover:shadow-md transition-shadow bg-white">
+                        <CardContent className="p-3 flex items-center justify-between gap-2">
+                            <div className="space-y-0.5 min-w-0">
+                                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Total Items</span>
+                                <span className="text-lg sm:text-xl font-bold font-mono text-gray-800 block leading-tight">{stats.totalAddons}</span>
+                                <span className="text-[9px] text-gray-400 block truncate">Catalogue products</span>
+                            </div>
+                            <div className="p-1.5 sm:p-2 bg-gradient-to-br from-slate-600 to-slate-800 rounded-lg text-white shadow-xs shrink-0">
+                                <Layers className="h-4 w-4" />
+                            </div>
+                        </CardContent>
+                    </Card>
+                </motion.div>
 
-                <Card className="border-gold/20 shadow-xs bg-white">
-                    <CardContent className="p-4 flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0 border border-emerald-200/60">
-                            <Package className="w-5 h-5" />
-                        </div>
-                        <div>
-                            <span className="text-xs text-stone-500 font-medium block">Total Units In Stock</span>
-                            <span className="text-xl font-serif font-bold text-stone-900">
-                                {stats.totalUnits.toLocaleString('en-IN')}
-                            </span>
-                        </div>
-                    </CardContent>
-                </Card>
+                {/* Units In Stock */}
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: 0.04 }}>
+                    <Card className="border-gold/20 shadow-xs hover:shadow-md transition-shadow bg-white">
+                        <CardContent className="p-3 flex items-center justify-between gap-2">
+                            <div className="space-y-0.5 min-w-0">
+                                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Units In Stock</span>
+                                <span className="text-lg sm:text-xl font-bold font-mono text-indigo-600 block leading-tight">{stats.totalUnits.toLocaleString('en-IN')}</span>
+                                <span className="text-[9px] text-gray-400 block truncate">Available stock</span>
+                            </div>
+                            <div className="p-1.5 sm:p-2 bg-gradient-to-br from-indigo-500 to-indigo-700 rounded-lg text-white shadow-xs shrink-0">
+                                <Boxes className="h-4 w-4" />
+                            </div>
+                        </CardContent>
+                    </Card>
+                </motion.div>
 
-                <Card className="border-gold/20 shadow-xs bg-white">
-                    <CardContent className="p-4 flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center shrink-0 border border-amber-200/60">
-                            <AlertTriangle className="w-5 h-5" />
-                        </div>
-                        <div>
-                            <span className="text-xs text-stone-500 font-medium block">Low / Out of Stock</span>
-                            <div className="flex items-center gap-2">
-                                <span className="text-xl font-serif font-bold text-amber-900">
-                                    {stats.lowStockCount}
+                {/* Low / Out of Stock */}
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: 0.08 }}>
+                    <Card className="border-gold/20 shadow-xs hover:shadow-md transition-shadow bg-white">
+                        <CardContent className="p-3 flex items-center justify-between gap-2">
+                            <div className="space-y-0.5 min-w-0">
+                                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Low / Out Stock</span>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="text-lg sm:text-xl font-bold font-mono text-amber-600 block leading-tight">{stats.lowStockCount}</span>
+                                    {stats.outOfStockCount > 0 && (
+                                        <span className="text-[10px] font-bold text-red-700 bg-red-50 px-1 py-0.2 rounded border border-red-200">
+                                            {stats.outOfStockCount} Out
+                                        </span>
+                                    )}
+                                </div>
+                                <span className="text-[9px] text-gray-400 block truncate">Restock attention</span>
+                            </div>
+                            <div className="p-1.5 sm:p-2 bg-gradient-to-br from-amber-400 to-amber-600 rounded-lg text-white shadow-xs shrink-0">
+                                <AlertTriangle className="h-4 w-4" />
+                            </div>
+                        </CardContent>
+                    </Card>
+                </motion.div>
+
+                {/* Own Stock Valuation (Cost) */}
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: 0.12 }}>
+                    <Card className="border-gold/20 shadow-xs hover:shadow-md transition-shadow bg-white">
+                        <CardContent className="p-3 space-y-1">
+                            <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                                    Own Stock Valuation
                                 </span>
-                                {stats.outOfStockCount > 0 && (
-                                    <span className="text-[11px] font-semibold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">
-                                        {stats.outOfStockCount} Out
+                                <div className="p-1.5 bg-gradient-to-br from-teal-600 to-teal-800 rounded-lg text-white shadow-xs shrink-0">
+                                    <Wallet className="h-3.5 w-3.5" />
+                                </div>
+                            </div>
+                            <div className="flex items-baseline gap-2 flex-wrap pt-0.5">
+                                <span className="text-lg sm:text-xl font-bold font-mono text-teal-700 tracking-tight select-all">
+                                    ₹{stats.totalCostValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                                </span>
+                                {stats.totalCostValue >= 100000 && (
+                                    <span className="text-[10px] font-semibold text-teal-800 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200">
+                                        {formatIndianCompact(stats.totalCostValue)}
                                     </span>
                                 )}
                             </div>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <Card className="border-gold/20 shadow-xs bg-white">
-                    <CardContent className="p-4 flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center shrink-0 border border-purple-200/60">
-                            <IndianRupee className="w-5 h-5" />
-                        </div>
-                        <div>
-                            <span className="text-xs text-stone-500 font-medium block">Stock Valuation (Retail)</span>
-                            <span className="text-xl font-serif font-bold text-stone-900">
-                                ₹{stats.totalSellingValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                            <span className="text-[9px] text-gray-400 block truncate">
+                                At purchase cost ({stats.totalUnits} units)
                             </span>
-                        </div>
-                    </CardContent>
-                </Card>
+                        </CardContent>
+                    </Card>
+                </motion.div>
+
+                {/* Retail Valuation */}
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: 0.16 }}>
+                    <Card className="border-gold/20 shadow-xs hover:shadow-md transition-shadow bg-white">
+                        <CardContent className="p-3 space-y-1">
+                            <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                                    Retail Valuation
+                                </span>
+                                <div className="p-1.5 bg-gradient-to-br from-emerald-500 to-emerald-700 rounded-lg text-white shadow-xs shrink-0">
+                                    <IndianRupee className="h-3.5 w-3.5" />
+                                </div>
+                            </div>
+                            <div className="flex items-baseline gap-2 flex-wrap pt-0.5">
+                                <span className="text-lg sm:text-xl font-bold font-mono text-emerald-600 tracking-tight select-all">
+                                    ₹{stats.totalSellingValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                                </span>
+                                {stats.totalSellingValue >= 100000 && (
+                                    <span className="text-[10px] font-semibold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                        {formatIndianCompact(stats.totalSellingValue)}
+                                    </span>
+                                )}
+                            </div>
+                            <span className="text-[9px] text-gray-400 block truncate">
+                                At selling price ({stats.totalUnits} units)
+                            </span>
+                        </CardContent>
+                    </Card>
+                </motion.div>
             </div>
 
-            {/* Filter & Table Card */}
-            <Card className="border-gold/20 shadow-md bg-white">
-                <CardHeader className="bg-cream/20 border-b border-gold/10 p-3 sm:p-4">
-                    <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-                        {/* Search Input */}
+            {/* Controls Bar */}
+            <Card className="border-gold/20 shadow-sm bg-white">
+                <CardContent className="p-3.5 space-y-3">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
                         <div className="relative flex-1 max-w-md">
-                            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                             <Input
                                 placeholder="Search by add-on name or category..."
+                                className="pl-9 h-10 text-sm border-gold/30 bg-white"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                className="h-9 pl-9 text-xs border-gold/30 bg-white"
                             />
                             {searchTerm && (
                                 <button
                                     type="button"
                                     onClick={() => setSearchTerm('')}
-                                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600"
+                                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 cursor-pointer"
                                 >
-                                    <X className="w-3.5 h-3.5" />
+                                    <X className="w-4 h-4" />
                                 </button>
                             )}
                         </div>
 
-                        {/* Category & Status Dropdown Filters */}
                         <div className="flex flex-wrap items-center gap-2">
                             <div className="w-36">
                                 <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                                    <SelectTrigger className="h-9 text-xs border-gold/30 bg-white">
+                                    <SelectTrigger className="h-10 text-xs border-gold/30 bg-white">
                                         <SelectValue placeholder="Category" />
                                     </SelectTrigger>
                                     <SelectContent className="border-gold/20">
@@ -452,7 +527,7 @@ export default function AddonsPage() {
 
                             <div className="w-32">
                                 <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-                                    <SelectTrigger className="h-9 text-xs border-gold/30 bg-white">
+                                    <SelectTrigger className="h-10 text-xs border-gold/30 bg-white">
                                         <SelectValue placeholder="Status" />
                                     </SelectTrigger>
                                     <SelectContent className="border-gold/20">
@@ -465,18 +540,35 @@ export default function AddonsPage() {
 
                             {(searchTerm || selectedCategory !== 'All' || selectedStatus !== 'All') && (
                                 <Button
-                                    variant="ghost"
+                                    variant="outline"
                                     size="sm"
                                     onClick={() => {
                                         setSearchTerm('');
                                         setSelectedCategory('All');
                                         setSelectedStatus('All');
                                     }}
-                                    className="h-9 px-2 text-xs text-stone-500 hover:text-stone-900 cursor-pointer"
+                                    className="h-10 px-3 text-xs border-gold/40 text-maroon hover:bg-gold/10 font-bold transition-all cursor-pointer"
                                 >
-                                    Reset
+                                    Clear Filters
                                 </Button>
                             )}
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
+
+            {/* Add-ons Data Register Card */}
+            <Card className="border-gold/20 shadow-md bg-white overflow-hidden">
+                <CardHeader className="bg-gradient-to-r from-cream/40 to-transparent border-b border-gold/15 px-4 py-3 sm:px-6">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div>
+                            <CardTitle className="text-sm font-bold text-maroon uppercase tracking-wider flex items-center gap-2">
+                                <PackagePlus className="w-4 h-4 text-maroon" />
+                                Add-ons & Accessories Register
+                            </CardTitle>
+                            <CardDescription className="text-xs text-stone-500 mt-0.5">
+                                Showing {filteredAddons.length} registered item{filteredAddons.length === 1 ? '' : 's'} &bull; Own Cost Stock: ₹{(stats.totalCostValue || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })} &bull; Retail Value: ₹{(stats.totalSellingValue || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                            </CardDescription>
                         </div>
                     </div>
                 </CardHeader>
@@ -485,7 +577,7 @@ export default function AddonsPage() {
                     {isLoading ? (
                         <div className="py-16 text-center">
                             <Loader2 className="w-8 h-8 animate-spin text-maroon mx-auto mb-2" />
-                            <p className="text-xs text-stone-500">Loading add-ons inventory...</p>
+                            <p className="text-xs text-stone-500 font-medium">Loading add-ons inventory...</p>
                         </div>
                     ) : filteredAddons.length === 0 ? (
                         <div className="py-16 text-center px-4">
@@ -508,7 +600,7 @@ export default function AddonsPage() {
                                             setSelectedCategory('All');
                                             setSelectedStatus('All');
                                         }}
-                                        className="text-xs border-gold/30 text-maroon hover:bg-cream/20"
+                                        className="text-xs border-gold/40 text-maroon hover:bg-gold/10 font-bold"
                                     >
                                         Clear Filters
                                     </Button>
@@ -516,7 +608,7 @@ export default function AddonsPage() {
                                     <Button
                                         size="sm"
                                         onClick={handleOpenCreate}
-                                        className="bg-maroon hover:bg-maroon-dark text-gold font-bold text-xs"
+                                        className="bg-maroon hover:bg-maroon-dark text-gold font-bold text-xs shadow-sm"
                                     >
                                         <Plus className="w-3.5 h-3.5 mr-1" />
                                         ADD ADD-ON
@@ -527,16 +619,16 @@ export default function AddonsPage() {
                     ) : (
                         <div className="overflow-x-auto">
                             <Table>
-                                <TableHeader className="bg-stone-50 border-b border-stone-200">
-                                    <TableRow className="text-[11px] font-bold uppercase tracking-wider text-stone-600">
-                                        <TableHead className="py-3 px-4">Name</TableHead>
-                                        <TableHead className="py-3 px-3">Category</TableHead>
-                                        <TableHead className="py-3 px-3 text-right">Purchase Price</TableHead>
-                                        <TableHead className="py-3 px-3 text-right">Selling Price</TableHead>
-                                        <TableHead className="py-3 px-3 text-center">Stock</TableHead>
-                                        <TableHead className="py-3 px-3 text-center">Status</TableHead>
-                                        <TableHead className="py-3 px-3 text-right">Created At</TableHead>
-                                        <TableHead className="py-3 px-4 text-right">Actions</TableHead>
+                                <TableHeader className="bg-cream/40 border-b border-gold/20">
+                                    <TableRow className="text-[11px] font-bold uppercase tracking-wider text-maroon">
+                                        <TableHead className="py-3 px-4 text-maroon">Name</TableHead>
+                                        <TableHead className="py-3 px-3 text-maroon">Category</TableHead>
+                                        <TableHead className="py-3 px-3 text-right text-maroon">Purchase Price</TableHead>
+                                        <TableHead className="py-3 px-3 text-right text-maroon">Selling Price</TableHead>
+                                        <TableHead className="py-3 px-3 text-center text-maroon">Stock</TableHead>
+                                        <TableHead className="py-3 px-3 text-center text-maroon">Status</TableHead>
+                                        <TableHead className="py-3 px-3 text-right text-maroon">Created At</TableHead>
+                                        <TableHead className="py-3 px-4 text-right text-maroon">Actions</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -547,10 +639,10 @@ export default function AddonsPage() {
                                         return (
                                             <TableRow
                                                 key={addon.id}
-                                                className="hover:bg-cream/10 border-b border-stone-100 text-xs transition-colors"
+                                                className="hover:bg-cream/15 border-b border-gold/10 text-xs transition-colors"
                                             >
                                                 {/* Name */}
-                                                <TableCell className="py-3 px-4 font-semibold text-stone-900">
+                                                <TableCell className="py-3 px-4 font-semibold text-stone-900 font-serif">
                                                     <div>{addon.name}</div>
                                                 </TableCell>
 
@@ -558,29 +650,35 @@ export default function AddonsPage() {
                                                 <TableCell className="py-3 px-3">
                                                     <Badge
                                                         variant="outline"
-                                                        className="text-[11px] font-medium bg-stone-50 text-stone-700 border-stone-200"
+                                                        className="text-[11px] font-medium bg-cream/50 text-maroon border border-gold/30"
                                                     >
                                                         {addon.category}
                                                     </Badge>
                                                 </TableCell>
 
                                                 {/* Purchase Price */}
-                                                <TableCell className="py-3 px-3 text-right font-mono text-stone-600">
-                                                    ₹{addon.purchase_price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                <TableCell className="py-3 px-3 text-right font-mono text-stone-700">
+                                                    <div>₹{(addon.purchase_price || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                                                    <div className="text-[10px] text-maroon/70 font-sans font-medium" title="Own stock valuation for this item">
+                                                        Own: ₹{((addon.stock || 0) * (addon.purchase_price || 0)).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                                                    </div>
                                                 </TableCell>
 
                                                 {/* Selling Price */}
                                                 <TableCell className="py-3 px-3 text-right font-mono font-bold text-maroon">
-                                                    ₹{addon.selling_price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                    <div>₹{(addon.selling_price || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                                                    <div className="text-[10px] text-stone-500 font-sans font-normal" title="Retail stock valuation for this item">
+                                                        Retail: ₹{((addon.stock || 0) * (addon.selling_price || 0)).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                                                    </div>
                                                 </TableCell>
 
                                                 {/* Stock */}
                                                 <TableCell className="py-3 px-3 text-center">
                                                     <Badge
                                                         className={cn(
-                                                            'font-mono text-xs font-bold px-2 py-0.5',
+                                                            'font-mono text-xs font-bold px-2.5 py-0.5',
                                                             isOutOfStock
-                                                                ? 'bg-rose-100 text-rose-700 border border-rose-300'
+                                                                ? 'bg-rose-100 text-rose-800 border border-rose-300'
                                                                 : isLowStock
                                                                 ? 'bg-amber-100 text-amber-800 border border-amber-300'
                                                                 : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
@@ -606,7 +704,7 @@ export default function AddonsPage() {
                                                 </TableCell>
 
                                                 {/* Created At */}
-                                                <TableCell className="py-3 px-3 text-right text-stone-400 font-mono text-[11px]">
+                                                <TableCell className="py-3 px-3 text-right text-stone-500 font-mono text-[11px]">
                                                     {addon.created_at
                                                         ? new Date(addon.created_at).toLocaleDateString('en-IN', {
                                                               day: '2-digit',
@@ -623,7 +721,7 @@ export default function AddonsPage() {
                                                             variant="outline"
                                                             size="sm"
                                                             onClick={() => handleOpenEdit(addon)}
-                                                            className="h-7 w-7 p-0 border-gold/30 text-stone-700 hover:text-maroon hover:bg-cream/30"
+                                                            className="h-7 w-7 p-0 border-gold/40 text-maroon hover:bg-gold/10 hover:text-maroon-dark transition-all cursor-pointer"
                                                             title="Edit Add-on"
                                                         >
                                                             <Edit2 className="h-3.5 w-3.5" />
@@ -632,7 +730,7 @@ export default function AddonsPage() {
                                                             variant="outline"
                                                             size="sm"
                                                             onClick={() => setDeletingAddon(addon)}
-                                                            className="h-7 w-7 p-0 border-rose-200 text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+                                                            className="h-7 w-7 p-0 border-rose-200 text-rose-600 hover:text-rose-700 hover:bg-rose-50 transition-all cursor-pointer"
                                                             title="Delete Add-on"
                                                         >
                                                             <Trash2 className="h-3.5 w-3.5" />
@@ -647,18 +745,18 @@ export default function AddonsPage() {
 
                             {/* Pagination Controls */}
                             {totalPages > 1 && (
-                                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-3 bg-stone-50 border-t border-stone-200 text-xs">
-                                    <span className="text-stone-500">
+                                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-3 bg-cream/20 border-t border-gold/15 text-xs">
+                                    <span className="text-stone-600">
                                         Showing{' '}
-                                        <span className="font-semibold text-stone-800">
+                                        <span className="font-bold text-maroon">
                                             {(currentPage - 1) * ITEMS_PER_PAGE + 1}
                                         </span>{' '}
                                         to{' '}
-                                        <span className="font-semibold text-stone-800">
+                                        <span className="font-bold text-maroon">
                                             {Math.min(currentPage * ITEMS_PER_PAGE, filteredAddons.length)}
                                         </span>{' '}
                                         of{' '}
-                                        <span className="font-semibold text-stone-800">
+                                        <span className="font-bold text-maroon">
                                             {filteredAddons.length}
                                         </span>{' '}
                                         add-ons
@@ -670,7 +768,7 @@ export default function AddonsPage() {
                                             size="sm"
                                             onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                                             disabled={currentPage === 1}
-                                            className="h-8 w-8 p-0 border-gold/30 text-maroon hover:bg-cream/20"
+                                            className="h-8 w-8 p-0 border-gold/30 text-maroon hover:bg-gold/10 hover:border-gold/50 cursor-pointer disabled:opacity-40"
                                         >
                                             <ChevronLeft className="h-4 w-4" />
                                         </Button>
@@ -685,17 +783,17 @@ export default function AddonsPage() {
                                             .map((p, idx, arr) => (
                                                 <React.Fragment key={p}>
                                                     {idx > 0 && arr[idx - 1] !== p - 1 && (
-                                                        <span className="text-stone-400 px-0.5">...</span>
+                                                        <span className="text-stone-400 px-0.5">&hellip;</span>
                                                     )}
                                                     <Button
                                                         variant={currentPage === p ? 'default' : 'outline'}
                                                         size="sm"
                                                         onClick={() => setCurrentPage(p)}
                                                         className={cn(
-                                                            'h-8 w-8 p-0 text-xs font-bold',
+                                                            'h-8 w-8 p-0 text-xs font-bold transition-all cursor-pointer',
                                                             currentPage === p
-                                                                ? 'bg-maroon text-gold hover:bg-maroon-dark'
-                                                                : 'border-gold/30 text-maroon hover:bg-cream/20'
+                                                                ? 'bg-maroon text-gold hover:bg-maroon-dark shadow-sm'
+                                                                : 'border-gold/30 text-maroon hover:bg-cream/40'
                                                         )}
                                                     >
                                                         {p}
@@ -708,7 +806,7 @@ export default function AddonsPage() {
                                             size="sm"
                                             onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                                             disabled={currentPage === totalPages}
-                                            className="h-8 w-8 p-0 border-gold/30 text-maroon hover:bg-cream/20"
+                                            className="h-8 w-8 p-0 border-gold/30 text-maroon hover:bg-gold/10 hover:border-gold/50 cursor-pointer disabled:opacity-40"
                                         >
                                             <ChevronRight className="h-4 w-4" />
                                         </Button>
@@ -722,21 +820,23 @@ export default function AddonsPage() {
 
             {/* Modal: Add / Edit Add-on */}
             <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-                <DialogContent className="max-w-lg bg-white border-gold/20 shadow-2xl p-5">
-                    <DialogHeader className="border-b border-gold/15 pb-2.5">
+                <DialogContent className="max-w-lg bg-white border-gold/30 shadow-2xl p-6">
+                    <DialogHeader className="border-b border-gold/15 pb-3">
                         <DialogTitle className="text-lg font-serif font-bold text-maroon flex items-center gap-2">
-                            <PackagePlus className="w-5 h-5 text-maroon" />
+                            <div className="w-8 h-8 rounded-lg bg-maroon/10 border border-gold/30 flex items-center justify-center text-maroon">
+                                <PackagePlus className="w-4 h-4 text-maroon" />
+                            </div>
                             {editingAddon ? 'EDIT ADD-ON ITEM' : 'REGISTER NEW ADD-ON'}
                         </DialogTitle>
-                        <DialogDescription className="text-xs text-stone-500">
+                        <DialogDescription className="text-xs text-stone-500 mt-1">
                             Configure inventory details, pricing, and stock count for this saree accessory.
                         </DialogDescription>
                     </DialogHeader>
 
-                    <form onSubmit={handleSubmit} className="space-y-3.5 pt-2">
+                    <form onSubmit={handleSubmit} className="space-y-4 pt-3">
                         {/* Name */}
-                        <div className="space-y-1">
-                            <label className="text-xs font-bold text-stone-700 uppercase tracking-wider block">
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-bold text-maroon uppercase tracking-wider block">
                                 Add-on Name <span className="text-rose-500">*</span>
                             </label>
                             <Input
@@ -744,20 +844,20 @@ export default function AddonsPage() {
                                 value={formData.name}
                                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                                 required
-                                className="h-9 text-xs border-gold/30"
+                                className="h-9 text-xs border-gold/30 focus-visible:ring-1 focus-visible:ring-gold focus-visible:border-maroon"
                             />
                         </div>
 
                         {/* Category */}
-                        <div className="space-y-1">
-                            <label className="text-xs font-bold text-stone-700 uppercase tracking-wider block">
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-bold text-maroon uppercase tracking-wider block">
                                 Category <span className="text-rose-500">*</span>
                             </label>
                             <Select
                                 value={formData.category}
                                 onValueChange={(val) => setFormData({ ...formData, category: val })}
                             >
-                                <SelectTrigger className="h-9 text-xs border-gold/30 bg-white">
+                                <SelectTrigger className="h-9 text-xs border-gold/30 bg-white focus:ring-1 focus:ring-gold">
                                     <SelectValue placeholder="Select category" />
                                 </SelectTrigger>
                                 <SelectContent className="border-gold/20">
@@ -775,19 +875,19 @@ export default function AddonsPage() {
                                     value={formData.customCategory}
                                     onChange={(e) => setFormData({ ...formData, customCategory: e.target.value })}
                                     required
-                                    className="h-8 text-xs border-gold/30 mt-1.5"
+                                    className="h-8 text-xs border-gold/30 mt-1.5 focus-visible:ring-1 focus-visible:ring-gold"
                                 />
                             )}
                         </div>
 
                         {/* Prices Grid */}
                         <div className="grid grid-cols-2 gap-3">
-                            <div className="space-y-1">
-                                <label className="text-xs font-bold text-stone-700 uppercase tracking-wider block">
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-bold text-maroon uppercase tracking-wider block">
                                     Purchase Price (₹) <span className="text-rose-500">*</span>
                                 </label>
                                 <div className="relative">
-                                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400 text-xs">₹</span>
+                                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400 text-xs font-mono">₹</span>
                                     <Input
                                         type="number"
                                         min="0"
@@ -796,17 +896,17 @@ export default function AddonsPage() {
                                         value={formData.purchase_price}
                                         onChange={(e) => setFormData({ ...formData, purchase_price: e.target.value })}
                                         required
-                                        className="h-9 pl-7 text-xs border-gold/30"
+                                        className="h-9 pl-7 text-xs border-gold/30 font-mono focus-visible:ring-1 focus-visible:ring-gold"
                                     />
                                 </div>
                             </div>
 
-                            <div className="space-y-1">
-                                <label className="text-xs font-bold text-stone-700 uppercase tracking-wider block">
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-bold text-maroon uppercase tracking-wider block">
                                     Selling Price (₹) <span className="text-rose-500">*</span>
                                 </label>
                                 <div className="relative">
-                                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400 text-xs">₹</span>
+                                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-maroon text-xs font-mono font-bold">₹</span>
                                     <Input
                                         type="number"
                                         min="0"
@@ -815,7 +915,7 @@ export default function AddonsPage() {
                                         value={formData.selling_price}
                                         onChange={(e) => setFormData({ ...formData, selling_price: e.target.value })}
                                         required
-                                        className="h-9 pl-7 text-xs border-gold/30 font-semibold text-maroon"
+                                        className="h-9 pl-7 text-xs border-gold/30 font-mono font-bold text-maroon focus-visible:ring-1 focus-visible:ring-gold"
                                     />
                                 </div>
                             </div>
@@ -823,8 +923,8 @@ export default function AddonsPage() {
 
                         {/* Stock & Status Grid */}
                         <div className="grid grid-cols-2 gap-3">
-                            <div className="space-y-1">
-                                <label className="text-xs font-bold text-stone-700 uppercase tracking-wider block">
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-bold text-maroon uppercase tracking-wider block">
                                     Initial Stock <span className="text-rose-500">*</span>
                                 </label>
                                 <Input
@@ -835,12 +935,12 @@ export default function AddonsPage() {
                                     value={formData.stock}
                                     onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
                                     required
-                                    className="h-9 text-xs border-gold/30 font-mono"
+                                    className="h-9 text-xs border-gold/30 font-mono focus-visible:ring-1 focus-visible:ring-gold"
                                 />
                             </div>
 
-                            <div className="space-y-1">
-                                <label className="text-xs font-bold text-stone-700 uppercase tracking-wider block">
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-bold text-maroon uppercase tracking-wider block">
                                     Status <span className="text-rose-500">*</span>
                                 </label>
                                 <Select
@@ -849,25 +949,25 @@ export default function AddonsPage() {
                                         setFormData({ ...formData, status: val })
                                     }
                                 >
-                                    <SelectTrigger className="h-9 text-xs border-gold/30 bg-white">
+                                    <SelectTrigger className="h-9 text-xs border-gold/30 bg-white focus:ring-1 focus:ring-gold">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent className="border-gold/20">
-                                        <SelectItem value="active" className="text-xs">Active (Available)</SelectItem>
-                                        <SelectItem value="inactive" className="text-xs">Inactive (Hidden)</SelectItem>
+                                        <SelectItem value="active" className="text-xs font-medium text-emerald-700">Active (Available)</SelectItem>
+                                        <SelectItem value="inactive" className="text-xs font-medium text-stone-500">Inactive (Hidden)</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
                         </div>
 
-                        <DialogFooter className="pt-3 border-t border-stone-100 flex items-center justify-end gap-2">
+                        <DialogFooter className="pt-3 border-t border-gold/15 flex items-center justify-end gap-2">
                             <Button
                                 type="button"
                                 variant="outline"
                                 size="sm"
                                 onClick={() => setIsFormOpen(false)}
                                 disabled={isSaving}
-                                className="h-8 text-xs border-stone-300"
+                                className="h-8 text-xs border-gold/30 text-stone-700 hover:bg-cream/40"
                             >
                                 Cancel
                             </Button>
@@ -875,7 +975,7 @@ export default function AddonsPage() {
                                 type="submit"
                                 size="sm"
                                 disabled={isSaving}
-                                className="bg-maroon hover:bg-maroon-dark text-gold font-bold h-8 text-xs px-4 flex items-center gap-1.5 shadow-sm cursor-pointer"
+                                className="bg-maroon hover:bg-maroon-dark text-gold font-bold h-8 text-xs px-4 flex items-center gap-1.5 shadow-md cursor-pointer"
                             >
                                 {isSaving ? (
                                     <>
@@ -896,9 +996,9 @@ export default function AddonsPage() {
 
             {/* Modal: Delete Confirmation Dialog */}
             <Dialog open={!!deletingAddon} onOpenChange={(open) => !open && setDeletingAddon(null)}>
-                <DialogContent className="max-w-md bg-white border-gold/20 shadow-2xl p-5">
-                    <DialogHeader className="flex flex-row items-center gap-3 space-y-0 pb-2 border-b border-stone-100">
-                        <div className="p-2.5 rounded-full bg-rose-50 text-rose-600 shrink-0">
+                <DialogContent className="max-w-md bg-white border-gold/30 shadow-2xl p-6">
+                    <DialogHeader className="flex flex-row items-center gap-3 space-y-0 pb-3 border-b border-gold/15">
+                        <div className="p-2.5 rounded-full bg-rose-50 text-rose-600 border border-rose-200 shrink-0">
                             <AlertTriangle className="h-5 w-5" />
                         </div>
                         <div>
@@ -906,17 +1006,17 @@ export default function AddonsPage() {
                                 Delete Add-on Item
                             </DialogTitle>
                             <DialogDescription className="text-xs text-stone-500 mt-0.5">
-                                Please confirm before removing this accessory.
+                                Please confirm before removing this accessory from inventory.
                             </DialogDescription>
                         </div>
                     </DialogHeader>
 
-                    <div className="py-3 text-xs text-stone-700">
+                    <div className="py-3 text-xs text-stone-700 leading-relaxed">
                         Are you sure you want to delete add-on{' '}
-                        <span className="font-bold text-stone-900 font-serif">"{deletingAddon?.name}"</span>?
-                        <p className="text-[11px] text-stone-500 mt-2 bg-stone-50 p-2.5 rounded-lg border border-stone-200">
-                            This will permanently remove the record and its stock balance ({deletingAddon?.stock} units) from the database.
-                        </p>
+                        <span className="font-bold text-maroon font-serif">"{deletingAddon?.name}"</span>?
+                        <div className="text-[11px] text-stone-600 mt-3 bg-cream/40 p-3 rounded-lg border border-gold/20">
+                            <span className="font-bold text-stone-800">Warning:</span> This will permanently remove the record and its stock balance (<span className="font-bold text-maroon">{deletingAddon?.stock} units</span>) from the database.
+                        </div>
                     </div>
 
                     <DialogFooter className="pt-2 flex items-center justify-end gap-2">
@@ -926,7 +1026,7 @@ export default function AddonsPage() {
                             size="sm"
                             onClick={() => setDeletingAddon(null)}
                             disabled={deleteMutation.isPending}
-                            className="h-8 text-xs border-stone-300"
+                            className="h-8 text-xs border-gold/30 text-stone-700 hover:bg-cream/40"
                         >
                             Cancel
                         </Button>
@@ -935,7 +1035,7 @@ export default function AddonsPage() {
                             size="sm"
                             onClick={() => deletingAddon && deleteMutation.mutate(deletingAddon.id)}
                             disabled={deleteMutation.isPending}
-                            className="bg-rose-600 hover:bg-rose-700 text-white font-bold h-8 text-xs px-4 flex items-center gap-1.5 shadow-sm cursor-pointer"
+                            className="bg-rose-600 hover:bg-rose-700 text-white font-bold h-8 text-xs px-4 flex items-center gap-1.5 shadow-md cursor-pointer"
                         >
                             {deleteMutation.isPending ? (
                                 <>
