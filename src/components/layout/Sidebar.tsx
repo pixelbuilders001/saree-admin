@@ -21,7 +21,8 @@ import {
     Bell,
     Presentation,
     LayoutGrid,
-    Gift
+    Gift,
+    PackagePlus
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -35,6 +36,7 @@ const navGroups = [
         items: [
             { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
             { icon: Package, label: 'Inventory', path: '/inventory' },
+            { icon: PackagePlus, label: 'Add-ons', path: '/addons' },
             { icon: ShoppingCart, label: 'Sales', path: '/sales' },
             { icon: ArrowLeftRight, label: 'Exchange', path: '/exchange' },
             { icon: ShoppingBag, label: 'Online Orders', path: '/orders' },

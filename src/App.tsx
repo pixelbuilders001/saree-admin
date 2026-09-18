@@ -25,6 +25,7 @@ import PushNotificationsPage from '@/pages/PushNotifications';
 import HeroBannersPage from '@/pages/HeroBanners';
 import HomepagePage from '@/pages/Homepage';
 import CouponsReferralsPage from '@/pages/CouponsReferrals';
+import AddonsPage from '@/pages/Addons';
 import { supabase } from '@/lib/supabase';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -134,6 +135,7 @@ function App() {
           }>
             <Route index element={<DashboardPage />} />
             <Route path="inventory" element={<InventoryPage />} />
+            <Route path="addons" element={<AddonsPage />} />
             <Route path="sales" element={<SalesPage />} />
             <Route path="orders" element={<OrdersPage />} />
             <Route path="purchases" element={<PurchasesPage />} />
