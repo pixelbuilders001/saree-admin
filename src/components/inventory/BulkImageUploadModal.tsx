@@ -17,6 +17,7 @@ import {
     ImageIcon,
 } from 'lucide-react';
 import { inventoryService } from '@/services/inventoryService';
+import { compressImage } from '@/lib/imageCompressor';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 
@@ -24,6 +25,7 @@ export interface ParsedImageFile {
     id: string;
     file: File;
     fileName: string;
+    targetFileName: string;
     previewUrl: string;
     sku: string;
     isPrimary: boolean;
@@ -32,6 +34,7 @@ export interface ParsedImageFile {
     inventoryId?: string;
     sareeName?: string;
     errorMessage?: string;
+    originalSize?: number;
 }
 
 interface BulkImageUploadModalProps {
@@ -130,14 +133,18 @@ export const BulkImageUploadModal: React.FC<BulkImageUploadModalProps> = ({ isOp
         setIsResolving(true);
         setStep('preview');
 
-        // Parse names
+        // Parse names and determine target WebP filename
         const parsedList: ParsedImageFile[] = rawFiles.map(file => {
             const parsed = parseImageFileName(file.name);
             const previewUrl = URL.createObjectURL(file);
+            const baseName = file.name.replace(/\.[^/.]+$/, '').trim();
+            const targetFileName = `${baseName}.webp`;
             return {
                 id: `${file.name}-${Math.random().toString(36).substring(2, 9)}`,
                 file,
                 fileName: file.name,
+                targetFileName,
+                originalSize: file.size,
                 previewUrl,
                 sku: parsed?.sku || '',
                 isPrimary: parsed?.isPrimary ?? false,
@@ -217,15 +224,22 @@ export const BulkImageUploadModal: React.FC<BulkImageUploadModalProps> = ({ isOp
 
         const uploadSingle = async (item: ParsedImageFile) => {
             updateItemStatus(item.id, 'uploading');
-            setUploadProgress(prev => ({ ...prev, currentFile: item.fileName }));
+            const targetName = item.targetFileName || `${item.fileName.replace(/\.[^/.]+$/, '')}.webp`;
+            setUploadProgress(prev => ({ ...prev, currentFile: `Converting ${item.fileName} to WebP...` }));
 
             try {
                 if (!item.inventoryId) throw new Error('Missing inventory ID');
 
+                // 1. Convert and compress image to WebP (lightweight & SEO-ready)
+                const webpFile = await compressImage(item.file, 800, 1600, 'image/webp');
+
+                setUploadProgress(prev => ({ ...prev, currentFile: `Uploading ${targetName} to ImageKit...` }));
+
+                // 2. Upload WebP file to ImageKit
                 await inventoryService.uploadProductImageToImageKit(
-                    item.file,
+                    webpFile,
                     item.inventoryId,
-                    item.fileName,
+                    targetName,
                     item.isPrimary,
                     item.sortOrder
                 );
@@ -273,10 +287,16 @@ export const BulkImageUploadModal: React.FC<BulkImageUploadModalProps> = ({ isOp
         <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
             <DialogContent className="max-w-4xl max-h-[92vh] flex flex-col border-gold/20 shadow-2xl p-0 overflow-hidden bg-white">
                 <DialogHeader className="border-b border-gold/15 px-5 py-3.5 shrink-0 bg-gradient-to-r from-cream/30 to-transparent">
-                    <DialogTitle className="text-base font-bold font-serif text-maroon flex items-center gap-2">
-                        <ImageIcon className="h-5 w-5 text-maroon" />
-                        BULK IMAGE UPLOADER (IMAGEKIT)
-                    </DialogTitle>
+                    <div className="flex items-center justify-between">
+                        <DialogTitle className="text-base font-bold font-serif text-maroon flex items-center gap-2">
+                            <ImageIcon className="h-5 w-5 text-maroon" />
+                            BULK IMAGE UPLOADER (IMAGEKIT)
+                        </DialogTitle>
+                        <span className="hidden sm:inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                            <Sparkles className="h-3 w-3 text-emerald-600" />
+                            Auto-WebP & SEO Optimized
+                        </span>
+                    </div>
                 </DialogHeader>
 
                 {/* ── STEP 1: SELECT FILES ─────────────────────────────────── */}
@@ -299,7 +319,7 @@ export const BulkImageUploadModal: React.FC<BulkImageUploadModalProps> = ({ isOp
                             </div>
                             <div>
                                 <p className="font-bold text-base text-maroon">Click to select photos or drag & drop</p>
-                                <p className="text-xs text-gray-400 mt-1">Supports WebP, JPG, PNG · Select individual files or an entire folder</p>
+                                <p className="text-xs text-gray-500 mt-1">Supports JPG, PNG, WebP · Automatically converted to lightweight WebP before upload</p>
                             </div>
 
                             <div className="flex items-center gap-3 mt-2" onClick={(e) => e.stopPropagation()}>
@@ -355,10 +375,18 @@ export const BulkImageUploadModal: React.FC<BulkImageUploadModalProps> = ({ isOp
 
                         {/* File Naming Rules Card */}
                         <div className="w-full max-w-lg bg-gradient-to-br from-cream/40 to-transparent border border-gold/25 rounded-xl p-4 text-xs text-gray-700 space-y-2.5">
-                            <div className="flex items-center gap-2 font-bold text-maroon text-xs">
-                                <Sparkles className="h-4 w-4 text-gold-600" />
-                                File Naming Convention
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2 font-bold text-maroon text-xs">
+                                    <Sparkles className="h-4 w-4 text-gold-600" />
+                                    File Naming & WebP Optimization
+                                </div>
+                                <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
+                                    Converts to .webp
+                                </span>
                             </div>
+                            <p className="text-[11px] text-gray-500">
+                                You can select images in JPG, PNG, or WebP. Before upload, all images are automatically converted to optimized WebP format for fast web delivery and superior SEO ranking.
+                            </p>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-1 font-mono text-[11px]">
                                 <div className="bg-white border border-gold/15 p-2.5 rounded-lg shadow-2xs">
                                     <div className="text-purple-700 font-bold mb-1">Primary Image:</div>
@@ -448,7 +476,7 @@ export const BulkImageUploadModal: React.FC<BulkImageUploadModalProps> = ({ isOp
                                     <thead className="bg-cream/30 sticky top-0 z-10 border-b border-gold/15 text-[10px] font-bold uppercase tracking-wider text-maroon">
                                         <tr>
                                             <th className="py-2 px-3">Image</th>
-                                            <th className="py-2 px-3">File Name</th>
+                                            <th className="py-2 px-3">Target File (WebP)</th>
                                             <th className="py-2 px-3">SKU</th>
                                             <th className="py-2 px-3">Matched Product</th>
                                             <th className="py-2 px-3">ImageKit Destination</th>
@@ -466,8 +494,20 @@ export const BulkImageUploadModal: React.FC<BulkImageUploadModalProps> = ({ isOp
                                                         className="h-10 w-10 object-cover rounded-lg border border-gold/20 shadow-2xs"
                                                     />
                                                 </td>
-                                                <td className="py-2 px-3 font-mono font-medium text-gray-800">
-                                                    {item.fileName}
+                                                <td className="py-2 px-3">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <span className="font-mono font-bold text-gray-800 text-[11px]">
+                                                            {item.targetFileName}
+                                                        </span>
+                                                        <span className="inline-flex items-center text-[9px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1 py-0.5 rounded leading-none">
+                                                            WebP
+                                                        </span>
+                                                    </div>
+                                                    {item.fileName !== item.targetFileName && (
+                                                        <span className="text-[10px] text-gray-400 font-sans block mt-0.5">
+                                                            from {item.fileName} {item.originalSize ? `(${(item.originalSize / 1024).toFixed(0)} KB)` : ''}
+                                                        </span>
+                                                    )}
                                                 </td>
                                                 <td className="py-2 px-3">
                                                     <span className="font-mono font-bold text-gray-700 bg-gray-100 px-1.5 py-0.5 rounded text-[11px]">
@@ -492,8 +532,8 @@ export const BulkImageUploadModal: React.FC<BulkImageUploadModalProps> = ({ isOp
                                                 </td>
                                                 <td className="py-2 px-3 font-mono text-[10px] text-gray-500">
                                                     {item.status === 'matched' ? (
-                                                        <span className="truncate block max-w-[180px]" title={`products/${item.inventoryId}/${item.fileName}`}>
-                                                            products/<strong className="text-maroon">{item.inventoryId}</strong>/{item.fileName}
+                                                        <span className="truncate block max-w-[180px]" title={`products/${item.inventoryId}/${item.targetFileName}`}>
+                                                            products/<strong className="text-maroon">{item.inventoryId}</strong>/{item.targetFileName}
                                                         </span>
                                                     ) : '—'}
                                                 </td>
@@ -535,7 +575,10 @@ export const BulkImageUploadModal: React.FC<BulkImageUploadModalProps> = ({ isOp
                             <ImageIcon className="h-5 w-5 text-gold absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
                         </div>
                         <div className="text-center space-y-1">
-                            <h3 className="font-bold text-base text-maroon">Uploading Photos to ImageKit...</h3>
+                            <h3 className="font-bold text-base text-maroon">Converting to WebP & Uploading to ImageKit...</h3>
+                            <p className="text-xs text-emerald-700 font-medium">
+                                Converting images to lightweight WebP format for fast web delivery & SEO
+                            </p>
                             <p className="text-xs text-gray-500 font-mono">
                                 {uploadProgress.current} of {uploadProgress.total} completed
                             </p>
@@ -568,8 +611,12 @@ export const BulkImageUploadModal: React.FC<BulkImageUploadModalProps> = ({ isOp
                         <div className="text-center space-y-1">
                             <h3 className="font-bold text-lg text-maroon font-serif">Image Upload Completed!</h3>
                             <p className="text-xs text-gray-500">
-                                Photos have been uploaded to ImageKit and linked to their products.
+                                Photos have been converted to lightweight WebP, uploaded to ImageKit, and linked to their products.
                             </p>
+                            <div className="inline-flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full font-medium mt-1">
+                                <Sparkles className="h-3.5 w-3.5 text-emerald-600" />
+                                All images converted to WebP for faster page load times & superior SEO
+                            </div>
                         </div>
 
                         {/* Metric Cards */}
@@ -632,7 +679,7 @@ export const BulkImageUploadModal: React.FC<BulkImageUploadModalProps> = ({ isOp
                                 className="bg-maroon hover:bg-maroon-dark text-gold font-bold text-xs gap-1.5 px-4 shadow-sm"
                             >
                                 <Upload className="h-4 w-4" />
-                                Upload {matchedFiles.length} Photos to ImageKit
+                                Convert to WebP & Upload {matchedFiles.length} Photos
                             </Button>
                         </>
                     )}

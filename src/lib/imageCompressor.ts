@@ -5,7 +5,8 @@ export async function compressImage(
     file: File,
     maxSizeKB = 300,
     maxWidthOrHeight = 1200,
-    outputType: 'image/webp' | 'image/jpeg' = 'image/webp'
+    outputType: 'image/webp' | 'image/jpeg' = 'image/webp',
+    quality = 0.85
 ): Promise<File> {
     const ext = outputType === 'image/webp' ? '.webp' : '.jpg';
     const isAlreadyTargetType = file.type === outputType;
@@ -16,7 +17,8 @@ export async function compressImage(
     }
 
     // Only process image formats
-    if (!file.type.startsWith('image/')) {
+    const isImage = file.type.startsWith('image/') || /\.(jpe?g|png|webp|avif|bmp|tiff?)$/i.test(file.name);
+    if (!isImage) {
         return file;
     }
 
@@ -77,7 +79,7 @@ export async function compressImage(
                         resolve(compressedFile);
                     },
                     outputType,
-                    0.85
+                    quality
                 );
             };
             img.onerror = () => {

@@ -753,9 +753,19 @@ export const inventoryService = {
         isPrimary: boolean,
         sortOrder: number
     ): Promise<SareeImage> => {
+        // Automatically convert to WebP format for fast web delivery and SEO
+        const compressedFile = (file.type === 'image/webp' && file.size / 1024 <= 800)
+            ? file
+            : await compressImage(file, 800, 1600, 'image/webp');
+
+        // Ensure filename has .webp extension
+        const webpFileName = fileName.toLowerCase().endsWith('.webp')
+            ? fileName
+            : `${fileName.replace(/\.[^/.]+$/, '')}.webp`;
+
         const folder = `/products/${inventoryId}`;
-        // Upload to ImageKit preserving filename
-        const result = await uploadToImageKit(file, fileName, folder, false);
+        // Upload to ImageKit preserving WebP filename
+        const result = await uploadToImageKit(compressedFile, webpFileName, folder, false);
 
         // If this image is designated primary, set any existing primary images for this saree to false
         if (isPrimary) {
