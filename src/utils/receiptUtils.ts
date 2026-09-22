@@ -268,6 +268,7 @@ export function generateReceiptUrl(saleOrOrder: any, domain?: string): string {
     const receiptData = mapSaleToReceiptData(saleOrOrder);
     const payload = encodeReceiptData(receiptData);
     const inv = encodeURIComponent(receiptData.invoiceNumber || 'INV');
-    const baseDomain = domain || (typeof window !== 'undefined' && window.location?.origin ? window.location.origin : 'https://shreebanarasisarees.in');
+    const configuredStorefront = import.meta.env.VITE_STOREFRONT_URL;
+    const baseDomain = domain || configuredStorefront || (typeof window !== 'undefined' && window.location?.origin ? window.location.origin : 'https://shreebanarasisarees.in');
     return `${baseDomain.replace(/\/$/, '')}/receipt/${inv}?d=${payload}`;
 }

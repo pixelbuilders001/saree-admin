@@ -741,7 +741,8 @@ export default function ReceiptView() {
                         <div style={{ fontSize: '11.5px', color: '#444', maxWidth: '340px', lineHeight: '1.7' }}>
                             <em>Thank you for supporting authentic Indian weavers &amp; handlooms!</em>
                             {(() => {
-                                const currentOrigin = (typeof window !== 'undefined' && window.location.origin) ? window.location.origin : 'https://shreebanarasisarees.in';
+                                const storefrontUrl = import.meta.env.VITE_STOREFRONT_URL;
+                                const currentOrigin = storefrontUrl || ((typeof window !== 'undefined' && window.location.origin) ? window.location.origin : 'https://shreebanarasisarees.in');
                                 const isLoyalty = Boolean(receipt.loyaltyMemberCode);
                                 const qrTargetUrl = isLoyalty 
                                     ? `${currentOrigin}/rewards/${receipt.loyaltyMemberCode}`
