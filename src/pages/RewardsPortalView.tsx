@@ -141,7 +141,9 @@ export default function RewardsPortalView() {
                                     {pinDigits.map((digit, idx) => (
                                         <input
                                             key={idx}
-                                            ref={el => (inputRefs.current[idx] = el)}
+                                            ref={el => {
+                                                inputRefs.current[idx] = el;
+                                            }}
                                             type="password"
                                             inputMode="numeric"
                                             pattern="[0-9]*"

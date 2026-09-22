@@ -503,7 +503,7 @@ export default function SalesPage() {
     const minPtsThreshold = loyaltySettings?.min_points_to_redeem ?? 100;
     const minBillThreshold = loyaltySettings?.min_bill_amount_for_redeem ?? 1000;
     const maxBillPctCap = (loyaltySettings?.max_redeem_percent_of_bill ?? 25) / 100;
-    const maxPointsCeiling = loyaltySettings?.max_points_per_order > 0 ? loyaltySettings.max_points_per_order : Infinity;
+    const maxPointsCeiling = (loyaltySettings?.max_points_per_order || 0) > 0 ? (loyaltySettings?.max_points_per_order || 0) : Infinity;
 
     const billAfterVoucher = Math.max(0, cartTotal - appliedVoucherAmount);
     const customerPoints = Number(currentCustomer?.loyaltyPointsBalance || 0);
@@ -1365,7 +1365,7 @@ export default function SalesPage() {
                                                 <span className="font-mono text-[10px] text-amber-800 bg-amber-100/90 px-1 py-0.2 rounded mr-1">
                                                     {currentCustomer.loyaltyMemberCode}
                                                 </span>
-                                                {currentCustomer.loyaltyPointsBalance || 0} pts (₹{currentCustomer.loyaltyPointsBalance || 0})
+                                                {customerPoints} pts (₹{customerPoints})
                                             </>
                                         ) : (
                                             'Rewards Not Enrolled'
@@ -1748,11 +1748,11 @@ export default function SalesPage() {
                                     <div>
                                         <span className="font-bold">Shree Rewards: </span>
                                         <span className="text-[11px] font-semibold text-amber-800">
-                                            {currentCustomer.loyaltyPointsBalance} pts (₹{currentCustomer.loyaltyPointsBalance * pointValInInr})
+                                            {customerPoints} pts (₹{(customerPoints * pointValInInr).toLocaleString('en-IN')})
                                         </span>
                                         {maxRedeemablePoints > 0 && (
                                             <span className="text-[10px] text-amber-700/80 hidden md:inline ml-1 font-medium">
-                                                (Cap: {loyaltySettings.max_redeem_percent_of_bill}% of bill)
+                                                (Cap: {loyaltySettings?.max_redeem_percent_of_bill ?? 25}% of bill)
                                             </span>
                                         )}
                                     </div>
