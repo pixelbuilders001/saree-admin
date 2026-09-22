@@ -213,7 +213,7 @@ export function CategoryManagementModal({ isOpen, onClose }: CategoryManagementM
 
                 {isFormOpen ? (
                     /* ── ADD/EDIT FORM VIEW ──────────────────────────────── */
-                    <form onSubmit={handleFormSubmit} className="flex-1 overflow-y-auto p-5 space-y-4">
+                    <form onSubmit={handleFormSubmit} noValidate className="flex-1 overflow-y-auto p-5 space-y-4">
                         <div className="flex items-center gap-2 text-maroon font-bold text-xs cursor-pointer hover:underline mb-2" onClick={() => setIsFormOpen(false)}>
                             <ArrowLeft className="h-3.5 w-3.5" /> Back to category list
                         </div>

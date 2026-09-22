@@ -189,7 +189,7 @@ const CollectionForm: React.FC<CollectionFormProps> = ({
     };
 
     return (
-        <form onSubmit={handleSave} className="flex flex-col flex-1 overflow-hidden">
+        <form onSubmit={handleSave} noValidate className="flex flex-col flex-1 overflow-hidden">
             <div className="flex-1 overflow-y-auto p-5 space-y-5">
                 {/* Basic Info */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

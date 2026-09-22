@@ -33,6 +33,31 @@ export interface DeliverySettings {
     updated_at?: string;
 }
 
+export interface LoyaltySettings {
+    id: string;
+    is_active: boolean;
+    earn_percentage: number;          // e.g. 1% (1 point per ₹100 spent)
+    point_value_in_inr: number;       // e.g. 1 point = ₹1
+    min_points_to_redeem: number;     // e.g. 100 points minimum balance required
+    min_bill_amount_for_redeem: number; // e.g. ₹1,000 minimum bill required to use points
+    max_redeem_percent_of_bill: number; // e.g. 25% cap on cart total
+    max_points_per_order: number;     // e.g. 1000 max points per bill (0 = unlimited)
+    created_at?: string;
+    updated_at?: string;
+    updated_by?: string;
+}
+
+export const DEFAULT_LOYALTY_SETTINGS: LoyaltySettings = {
+    id: 'default',
+    is_active: true,
+    earn_percentage: 1,
+    point_value_in_inr: 1,
+    min_points_to_redeem: 100,
+    min_bill_amount_for_redeem: 1000,
+    max_redeem_percent_of_bill: 25,
+    max_points_per_order: 1000,
+};
+
 export const DEFAULT_DELIVERY_SETTINGS: DeliverySettings = {
     id: 'default',
     serviceable_district: 'Samastipur',
@@ -175,6 +200,92 @@ export const settingsService = {
         }
 
         return data;
+    },
+
+    getLoyaltySettings: async (): Promise<LoyaltySettings> => {
+        let cached: LoyaltySettings | null = null;
+        try {
+            const raw = localStorage.getItem('sbs_loyalty_settings');
+            if (raw) {
+                cached = JSON.parse(raw);
+            }
+        } catch (_) {}
+
+        try {
+            const { data, error } = await supabase
+                .from('loyalty_settings')
+                .select('*')
+                .limit(1)
+                .maybeSingle();
+
+            if (error) {
+                console.warn('Error fetching loyalty settings from Supabase, using cache/defaults:', error.message);
+                return cached || DEFAULT_LOYALTY_SETTINGS;
+            }
+
+            if (!data) {
+                return cached || DEFAULT_LOYALTY_SETTINGS;
+            }
+
+            const formatted: LoyaltySettings = {
+                ...DEFAULT_LOYALTY_SETTINGS,
+                ...data,
+                earn_percentage: Number(data.earn_percentage ?? DEFAULT_LOYALTY_SETTINGS.earn_percentage),
+                point_value_in_inr: Number(data.point_value_in_inr ?? DEFAULT_LOYALTY_SETTINGS.point_value_in_inr),
+                min_points_to_redeem: Number(data.min_points_to_redeem ?? DEFAULT_LOYALTY_SETTINGS.min_points_to_redeem),
+                min_bill_amount_for_redeem: Number(data.min_bill_amount_for_redeem ?? DEFAULT_LOYALTY_SETTINGS.min_bill_amount_for_redeem),
+                max_redeem_percent_of_bill: Number(data.max_redeem_percent_of_bill ?? DEFAULT_LOYALTY_SETTINGS.max_redeem_percent_of_bill),
+                max_points_per_order: Number(data.max_points_per_order ?? DEFAULT_LOYALTY_SETTINGS.max_points_per_order),
+                is_active: data.is_active ?? true,
+            };
+
+            try {
+                localStorage.setItem('sbs_loyalty_settings', JSON.stringify(formatted));
+            } catch (_) {}
+
+            return formatted;
+        } catch (err: any) {
+            console.error('getLoyaltySettings failed:', err);
+            return cached || DEFAULT_LOYALTY_SETTINGS;
+        }
+    },
+
+    saveLoyaltySettings: async (settings: Partial<LoyaltySettings>): Promise<LoyaltySettings> => {
+        const userEmail = useAuthStore.getState().user?.email || 'admin';
+        const payload: LoyaltySettings = {
+            id: 'default',
+            is_active: settings.is_active ?? true,
+            earn_percentage: Math.max(0, Number(settings.earn_percentage ?? 1)),
+            point_value_in_inr: Math.max(0.1, Number(settings.point_value_in_inr ?? 1)),
+            min_points_to_redeem: Math.max(0, Math.floor(Number(settings.min_points_to_redeem ?? 100))),
+            min_bill_amount_for_redeem: Math.max(0, Number(settings.min_bill_amount_for_redeem ?? 1000)),
+            max_redeem_percent_of_bill: Math.min(100, Math.max(1, Number(settings.max_redeem_percent_of_bill ?? 25))),
+            max_points_per_order: Math.max(0, Math.floor(Number(settings.max_points_per_order ?? 1000))),
+            updated_at: new Date().toISOString(),
+            updated_by: userEmail,
+        };
+
+        // Cache locally immediately so POS can consume instantly
+        try {
+            localStorage.setItem('sbs_loyalty_settings', JSON.stringify(payload));
+        } catch (_) {}
+
+        // Try upserting to Supabase
+        const { data, error } = await supabase
+            .from('loyalty_settings')
+            .upsert([payload], { onConflict: 'id' })
+            .select()
+            .single();
+
+        if (error) {
+            console.warn('Could not persist loyalty_settings to Supabase, saved to local cache:', error.message);
+            return payload;
+        }
+
+        return {
+            ...payload,
+            ...data,
+        };
     }
 };
 export default settingsService;

@@ -5,6 +5,7 @@ import { inventoryService, type Saree } from '@/services/inventoryService';
 import { salesService } from '@/services/salesService';
 import { customerService } from '@/services/customerService';
 import { creditService } from '@/services/creditService';
+import { loyaltyService } from '@/services/loyaltyService';
 import {
     ShoppingCart,
     Search,
@@ -35,6 +36,7 @@ import {
     X,
     Check,
     Sparkles,
+    Award,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -49,7 +51,7 @@ import type { Sale, SaleItemAddon } from '@/services/salesService';
 import { addonsService, type ProductAddon } from '@/services/addonsService';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import QRCode from 'react-qr-code';
-import { settingsService, type UpiSetting } from '@/services/settingsService';
+import { settingsService, type UpiSetting, type LoyaltySettings, DEFAULT_LOYALTY_SETTINGS } from '@/services/settingsService';
 import { staffService, type Staff } from '@/services/staffService';
 import { supabase } from '@/lib/supabase';
 import { motion } from 'framer-motion';
@@ -85,6 +87,92 @@ export const isSareeCodeMatch = (saree: { id: string; barcode?: string; sku?: st
     );
 };
 
+interface SareeGridCardProps {
+    saree: Saree;
+    isHighlighted: boolean;
+    onAddToCart: (saree: Saree) => void;
+}
+
+const SareeGridCard = React.memo(function SareeGridCard({
+    saree,
+    isHighlighted,
+    onAddToCart,
+}: SareeGridCardProps) {
+    const isOutOfStock = saree.stock <= 0;
+    const isLowStock = saree.stock > 0 && saree.stock < 5;
+    const primaryImg = saree.images && saree.images.length > 0
+        ? (saree.images.find(img => img.isPrimary)?.imageUrl || saree.images[0].imageUrl)
+        : null;
+
+    return (
+        <button
+            type="button"
+            disabled={isOutOfStock}
+            onClick={() => onAddToCart(saree)}
+            className={cn(
+                "text-left bg-white border rounded-xl p-3 flex flex-col justify-between shadow-2xs hover:shadow-md transition-all active:scale-[0.98] duration-75 relative overflow-hidden group cursor-pointer w-full text-xs h-[120px]",
+                isHighlighted
+                    ? "border-maroon ring-2 ring-maroon/20 shadow-md"
+                    : "border-gray-100 hover:border-gold/40",
+                isOutOfStock && "opacity-50 cursor-not-allowed bg-gray-50 border-gray-100"
+            )}
+        >
+            {/* Top accent line */}
+            <div className={cn(
+                "absolute top-0 left-0 right-0 h-0.5",
+                isOutOfStock ? "bg-gray-200" : isLowStock ? "bg-gradient-to-r from-red-400 to-amber-400" : "bg-gradient-to-r from-gold to-maroon/60"
+            )} />
+
+            {isOutOfStock ? (
+                <span className="absolute top-2 right-2 text-[8px] bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded-full font-bold z-10 uppercase tracking-wider">
+                    Sold Out
+                </span>
+            ) : isLowStock ? (
+                <span className="absolute top-2 right-2 text-[8px] bg-red-50 text-red-600 px-1.5 py-0.5 rounded-full font-bold animate-pulse z-10">
+                    {saree.stock} Left
+                </span>
+            ) : null}
+
+            <div className="flex gap-2.5 items-start w-full flex-1">
+                {primaryImg ? (
+                    <img
+                        src={primaryImg}
+                        alt={saree.sareeName}
+                        loading="lazy"
+                        decoding="async"
+                        className="w-11 h-11 object-cover rounded-lg border border-gold/15 shrink-0 shadow-2xs"
+                    />
+                ) : (
+                    <div className="w-11 h-11 bg-cream/35 border border-gold/10 rounded-lg flex items-center justify-center text-[7px] text-gray-400 font-bold shrink-0 uppercase">
+                        No Img
+                    </div>
+                )}
+                <div className="flex-1 min-w-0 w-full">
+                    <div className="flex justify-between items-center w-full gap-1 mb-0.5">
+                        <span className="text-[8px] text-gray-400 font-mono truncate">{saree.id}</span>
+                        <span className="text-[8px] text-maroon/70 bg-cream/40 px-1.5 py-0.5 rounded-full truncate max-w-[55px] font-semibold" title={saree.category}>
+                            {saree.category}
+                        </span>
+                    </div>
+                    <div className="font-semibold text-gray-800 text-xs truncate group-hover:text-maroon transition-colors pr-1" title={saree.sareeName}>
+                        {saree.sareeName}
+                    </div>
+                </div>
+            </div>
+
+            <div className="mt-2 pt-2 border-t border-gray-50 flex justify-between items-center w-full shrink-0">
+                <div className="flex items-center gap-1 font-bold text-maroon text-xs">
+                    <IndianRupee className="h-3 w-3" />
+                    {saree.sellingPrice.toLocaleString()}
+                </div>
+                <div className="flex items-center gap-0.5 text-[9px] text-gray-400 font-medium">
+                    <Package className="h-2.5 w-2.5" /> Qty: {saree.stock}
+                </div>
+            </div>
+        </button>
+    );
+});
+
 export default function SalesPage() {
     const customerNameInputRef = React.useRef<HTMLInputElement>(null);
     const [customerName, setCustomerName] = React.useState<string>('');
@@ -99,6 +187,11 @@ export default function SalesPage() {
     const [voucherCodeInput, setVoucherCodeInput] = React.useState<string>('');
     const [appliedVoucher, setAppliedVoucher] = React.useState<{ code: string; amount: number; customerName?: string } | null>(null);
     const [isCheckingVoucher, setIsCheckingVoucher] = React.useState(false);
+    const [loyaltyRedeemedPoints, setLoyaltyRedeemedPoints] = React.useState<number>(0);
+    const [isLoyaltyEnrollModalOpen, setIsLoyaltyEnrollModalOpen] = React.useState<boolean>(false);
+    const [generatedPinForDisplay, setGeneratedPinForDisplay] = React.useState<string | null>(null);
+    const [isEnrollingLoyalty, setIsEnrollingLoyalty] = React.useState<boolean>(false);
+    const [enrollCustomPin, setEnrollCustomPin] = React.useState<string>('');
     const [highlightedIndex, setHighlightedIndex] = React.useState<number>(0);
     const [manualDiscountType, setManualDiscountType] = React.useState<'amount' | 'percentage'>('percentage');
     const [manualDiscountInput, setManualDiscountInput] = React.useState<string>('0');
@@ -161,6 +254,12 @@ export default function SalesPage() {
         staleTime: 60_000,
     });
 
+    const { data: loyaltySettings = DEFAULT_LOYALTY_SETTINGS } = useQuery<LoyaltySettings>({
+        queryKey: ['loyaltySettings'],
+        queryFn: settingsService.getLoyaltySettings,
+        staleTime: 30_000,
+    });
+
     const { data: availableAddons = [], isLoading: isLoadingAddons } = useQuery<ProductAddon[]>({
         queryKey: ['productAddons'],
         queryFn: addonsService.getAddons,
@@ -197,6 +296,7 @@ export default function SalesPage() {
             setAppliedVoucher(null);
             setVoucherCodeInput('');
             setIsGstApplied(false);
+            setLoyaltyRedeemedPoints(0);
             setLastCompletedSale(data);
             setIsReceiptModalOpen(true);
         },
@@ -240,6 +340,16 @@ export default function SalesPage() {
             return matchesStatus && matchesCategory && matchesSearch;
         });
     }, [sarees, selectedCategory, sareeSearchTerm]);
+
+    const [visibleCount, setVisibleCount] = React.useState<number>(60);
+
+    React.useEffect(() => {
+        setVisibleCount(60);
+    }, [sareeSearchTerm, selectedCategory]);
+
+    const displayedSarees = React.useMemo(() => {
+        return filteredGridSarees.slice(0, visibleCount);
+    }, [filteredGridSarees, visibleCount]);
 
     // Reset highlighted index when search results change
     React.useEffect(() => {
@@ -380,7 +490,51 @@ export default function SalesPage() {
 
     const cartTotal = gstData.grandTotal;
     const appliedVoucherAmount = appliedVoucher ? Math.min(appliedVoucher.amount, Math.max(0, cartTotal)) : 0;
-    const netPayable = Math.max(0, cartTotal - appliedVoucherAmount);
+
+    const currentCustomer = React.useMemo(() => {
+        if (!customerMobile || customerMobile.trim().length < 10) return null;
+        return customers?.find(c => c.mobile?.toString().trim() === customerMobile.trim()) || null;
+    }, [customerMobile, customers]);
+
+    // Configured Loyalty Rules & Thresholds from Admin Settings
+    const isLoyaltyActive = loyaltySettings?.is_active ?? true;
+    const pointValInInr = loyaltySettings?.point_value_in_inr ?? 1;
+    const earnRatePct = (loyaltySettings?.earn_percentage ?? 1) / 100;
+    const minPtsThreshold = loyaltySettings?.min_points_to_redeem ?? 100;
+    const minBillThreshold = loyaltySettings?.min_bill_amount_for_redeem ?? 1000;
+    const maxBillPctCap = (loyaltySettings?.max_redeem_percent_of_bill ?? 25) / 100;
+    const maxPointsCeiling = loyaltySettings?.max_points_per_order > 0 ? loyaltySettings.max_points_per_order : Infinity;
+
+    const billAfterVoucher = Math.max(0, cartTotal - appliedVoucherAmount);
+    const customerPoints = Number(currentCustomer?.loyaltyPointsBalance || 0);
+
+    const hasMinPoints = customerPoints >= minPtsThreshold;
+    const hasMinBill = billAfterVoucher >= minBillThreshold;
+
+    let maxRedeemablePoints = 0;
+    let loyaltyBlockReason = '';
+
+    if (!isLoyaltyActive) {
+        loyaltyBlockReason = 'Loyalty program paused';
+    } else if (customerPoints <= 0) {
+        loyaltyBlockReason = 'No points available';
+    } else if (!hasMinPoints) {
+        loyaltyBlockReason = `Min ${minPtsThreshold} pts required (Balance: ${customerPoints} pts)`;
+    } else if (!hasMinBill) {
+        loyaltyBlockReason = `Min bill ₹${minBillThreshold.toLocaleString('en-IN')} required to use points`;
+    } else {
+        // Calculate maximum points allowed by percentage cap on bill
+        const maxDiscountAllowedInInr = billAfterVoucher * maxBillPctCap;
+        const maxPointsByBillCap = Math.floor(maxDiscountAllowedInInr / pointValInInr);
+        const allowedPoints = Math.min(customerPoints, maxPointsByBillCap, maxPointsCeiling);
+        maxRedeemablePoints = Math.max(0, allowedPoints);
+    }
+
+    const pointsRedeemedCount = Math.min(loyaltyRedeemedPoints, maxRedeemablePoints);
+    const effectiveLoyaltyDiscount = pointsRedeemedCount * pointValInInr;
+
+    const netPayable = Math.max(0, billAfterVoucher - effectiveLoyaltyDiscount);
+    const pointsToEarn = isLoyaltyActive ? Math.floor(netPayable * earnRatePct) : 0;
 
     const handleToggleAddon = (itemIndex: number, addon: ProductAddon) => {
         setCart(prev => {
@@ -482,7 +636,7 @@ export default function SalesPage() {
         toast.success(`Updated unit price for ${item.sareeName}`);
     };
 
-    const handleAddToCart = (saree: Saree) => {
+    const handleAddToCart = React.useCallback((saree: Saree) => {
         if (saree.stock <= 0) {
             toast.error(`Out of stock: ${saree.sareeName}`);
             return;
@@ -516,7 +670,7 @@ export default function SalesPage() {
             }
         });
         toast.success(`${saree.sareeName} added to cart`);
-    };
+    }, []);
 
     const [remoteConnected, setRemoteConnected] = React.useState(false);
     const [connectionStatus, setConnectionStatus] = React.useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
@@ -749,6 +903,30 @@ export default function SalesPage() {
         setVoucherCodeInput('');
     };
 
+    const handleEnrollLoyalty = async () => {
+        if (!currentCustomer) {
+            toast.error('Please enter a valid customer first.');
+            return;
+        }
+        setIsEnrollingLoyalty(true);
+        try {
+            const pinToUse = enrollCustomPin.trim() || loyaltyService.generateRandomPin();
+            const memberCode = currentCustomer.loyaltyMemberCode || loyaltyService.generateMemberCode();
+            const res = await loyaltyService.setCustomerPin(currentCustomer.customerId, pinToUse, memberCode);
+            if (res.success) {
+                setGeneratedPinForDisplay(pinToUse);
+                queryClient.invalidateQueries({ queryKey: ['customers'] });
+                toast.success('Customer rewards activated!');
+            } else {
+                toast.error(res.error || 'Failed to activate rewards');
+            }
+        } catch (err: any) {
+            toast.error(err?.message || 'Error enrolling customer');
+        } finally {
+            setIsEnrollingLoyalty(false);
+        }
+    };
+
     const handleCreateSale = async () => {
         if (cart.length === 0) {
             toast.error('Cart is empty');
@@ -780,6 +958,9 @@ export default function SalesPage() {
             voucherCode: appliedVoucher?.code,
             voucherAmount: appliedVoucherAmount,
             isGstApplied,
+            loyaltyMemberCode: currentCustomer?.loyaltyMemberCode || undefined,
+            loyaltyPointsRedeemed: pointsRedeemedCount,
+            loyaltyPointsEarned: pointsToEarn,
         });
     };
 
@@ -892,7 +1073,11 @@ export default function SalesPage() {
                         </div>
                         <div>
                             <h2 className="text-sm font-bold font-serif text-maroon tracking-wide leading-none">Catalogue</h2>
-                            <p className="text-[10px] text-gray-400 mt-0.5">{filteredGridSarees.length} items shown</p>
+                            <p className="text-[10px] text-gray-400 mt-0.5">
+                                {filteredGridSarees.length > visibleCount 
+                                    ? `${displayedSarees.length} of ${filteredGridSarees.length} items shown` 
+                                    : `${filteredGridSarees.length} items shown`}
+                            </p>
                         </div>
                     </div>
                     <div className="flex items-center gap-1.5">
@@ -984,80 +1169,33 @@ export default function SalesPage() {
                             <Loader2 className="h-10 w-10 animate-spin text-maroon/40" />
                             <span className="text-sm font-medium text-gray-500">Loading catalogue...</span>
                         </div>
-                    ) : filteredGridSarees.length > 0 ? (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
-                            {filteredGridSarees.map((saree, idx) => {
-                                const isHighlighted = idx === highlightedIndex && sareeSearchTerm !== '';
-                                return (
-                                    <motion.button
-                                        key={saree.id}
+                    ) : displayedSarees.length > 0 ? (
+                        <div className="space-y-4">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
+                                {displayedSarees.map((saree, idx) => {
+                                    const isHighlighted = idx === highlightedIndex && sareeSearchTerm !== '';
+                                    return (
+                                        <SareeGridCard
+                                            key={saree.id}
+                                            saree={saree}
+                                            isHighlighted={isHighlighted}
+                                            onAddToCart={handleAddToCart}
+                                        />
+                                    );
+                                })}
+                            </div>
+
+                            {filteredGridSarees.length > visibleCount && (
+                                <div className="text-center pt-2 pb-6">
+                                    <button
                                         type="button"
-                                        disabled={saree.stock <= 0}
-                                        onClick={() => handleAddToCart(saree)}
-                                        initial={{ opacity: 0, scale: 0.97 }}
-                                        animate={{ opacity: 1, scale: 1 }}
-                                        transition={{ duration: 0.15 }}
-                                        className={cn(
-                                            "text-left bg-white border rounded-xl p-3 flex flex-col justify-between shadow-sm hover:shadow-lg transition-all active:scale-[0.97] duration-100 relative overflow-hidden group cursor-pointer w-full text-xs h-[120px]",
-                                            isHighlighted
-                                                ? "border-maroon ring-2 ring-maroon/20 shadow-md"
-                                                : "border-gray-100 hover:border-gold/40",
-                                            saree.stock <= 0 && "opacity-50 cursor-not-allowed bg-gray-50 border-gray-100"
-                                        )}
+                                        onClick={() => setVisibleCount(prev => prev + 60)}
+                                        className="px-5 py-2 bg-white hover:bg-gold/15 border border-gold/35 rounded-xl text-xs font-bold text-maroon shadow-xs hover:shadow-md transition-all cursor-pointer"
                                     >
-                                        {/* Top accent line */}
-                                        <div className={cn(
-                                            "absolute top-0 left-0 right-0 h-0.5",
-                                            saree.stock <= 0 ? "bg-gray-200" : saree.stock < 5 ? "bg-gradient-to-r from-red-400 to-amber-400" : "bg-gradient-to-r from-gold to-maroon/60"
-                                        )} />
-
-                                        {saree.stock <= 0 ? (
-                                            <span className="absolute top-2 right-2 text-[8px] bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded-full font-bold z-10 uppercase tracking-wider">
-                                                Sold Out
-                                            </span>
-                                        ) : saree.stock < 5 ? (
-                                            <span className="absolute top-2 right-2 text-[8px] bg-red-50 text-red-600 px-1.5 py-0.5 rounded-full font-bold animate-pulse z-10">
-                                                {saree.stock} Left
-                                            </span>
-                                        ) : null}
-
-                                        <div className="flex gap-2.5 items-start w-full flex-1">
-                                            {saree.images && saree.images.length > 0 ? (
-                                                <img
-                                                    src={saree.images.find(img => img.isPrimary)?.imageUrl || saree.images[0].imageUrl}
-                                                    alt={saree.sareeName}
-                                                    className="w-11 h-11 object-cover rounded-lg border border-gold/15 flex-shrink-0 shadow-sm"
-                                                />
-                                            ) : (
-                                                <div className="w-11 h-11 bg-cream/35 border border-gold/10 rounded-lg flex items-center justify-center text-[7px] text-gray-400 font-bold flex-shrink-0 uppercase">
-                                                    No Img
-                                                </div>
-                                            )}
-                                            <div className="flex-1 min-w-0 w-full">
-                                                <div className="flex justify-between items-center w-full gap-1 mb-0.5">
-                                                    <span className="text-[8px] text-gray-400 font-mono truncate">{saree.id}</span>
-                                                    <span className="text-[8px] text-maroon/70 bg-cream/40 px-1.5 py-0.5 rounded-full truncate max-w-[55px] font-semibold" title={saree.category}>
-                                                        {saree.category}
-                                                    </span>
-                                                </div>
-                                                <div className="font-semibold text-gray-800 text-xs truncate group-hover:text-maroon transition-colors pr-1" title={saree.sareeName}>
-                                                    {saree.sareeName}
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div className="mt-2 pt-2 border-t border-gray-50 flex justify-between items-center w-full flex-shrink-0">
-                                            <div className="flex items-center gap-1 font-bold text-maroon text-xs">
-                                                <IndianRupee className="h-3 w-3" />
-                                                {saree.sellingPrice.toLocaleString()}
-                                            </div>
-                                            <div className="flex items-center gap-0.5 text-[9px] text-gray-400 font-medium">
-                                                <Package className="h-2.5 w-2.5" /> Qty: {saree.stock}
-                                            </div>
-                                        </div>
-                                    </motion.button>
-                                );
-                            })}
+                                        Showing {displayedSarees.length} of {filteredGridSarees.length} items — Load More (+60)
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     ) : (
                         <div className="h-full flex flex-col items-center justify-center p-12 text-gray-400 space-y-3">
@@ -1215,6 +1353,61 @@ export default function SalesPage() {
                                 ))}
                             </select>
                         </div>
+
+                        {/* Customer Loyalty Status & Quick Enroll */}
+                        {currentCustomer && (
+                            <div className="flex items-center justify-between text-[11px] bg-amber-50/80 border border-amber-200/80 rounded-md px-2 py-1 shadow-2xs">
+                                <div className="flex items-center gap-1.5 truncate">
+                                    <Sparkles className="h-3 w-3 text-amber-600 shrink-0" />
+                                    <span className="font-semibold text-amber-950 truncate">
+                                        {currentCustomer.loyaltyMemberCode ? (
+                                            <>
+                                                <span className="font-mono text-[10px] text-amber-800 bg-amber-100/90 px-1 py-0.2 rounded mr-1">
+                                                    {currentCustomer.loyaltyMemberCode}
+                                                </span>
+                                                {currentCustomer.loyaltyPointsBalance || 0} pts (₹{currentCustomer.loyaltyPointsBalance || 0})
+                                            </>
+                                        ) : (
+                                            'Rewards Not Enrolled'
+                                        )}
+                                    </span>
+                                </div>
+                                <div>
+                                    {!currentCustomer.loyaltyMemberCode || !currentCustomer.hasLoyaltyPin ? (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setGeneratedPinForDisplay(null);
+                                                setEnrollCustomPin('');
+                                                setIsLoyaltyEnrollModalOpen(true);
+                                            }}
+                                            className="text-[10px] font-bold text-maroon hover:text-maroon-dark bg-white hover:bg-gold/20 border border-gold/40 px-1.5 py-0.5 rounded shadow-2xs transition-colors shrink-0"
+                                        >
+                                            {!currentCustomer.loyaltyMemberCode ? '✨ Enroll' : 'Set PIN'}
+                                        </button>
+                                    ) : (
+                                        <span className="text-[10px] font-medium text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded border border-emerald-200">
+                                            Active ({currentCustomer.loyaltyTier || 'Silver'})
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* First-time Customer Auto-Enrollment Badge */}
+                        {!currentCustomer && customerMobile.length === 10 && customerName.trim() && (
+                            <div className="flex items-center justify-between text-[11px] bg-emerald-50/80 border border-emerald-200/80 rounded-md px-2 py-1 shadow-2xs">
+                                <div className="flex items-center gap-1.5 truncate">
+                                    <Sparkles className="h-3 w-3 text-emerald-600 shrink-0" />
+                                    <span className="font-semibold text-emerald-950 truncate">
+                                        New Customer: Auto-enrolling in Shree Rewards
+                                    </span>
+                                </div>
+                                <span className="text-[10px] font-mono text-emerald-800 bg-white px-1.5 py-0.5 rounded border border-emerald-200 font-bold shrink-0">
+                                    PIN: {customerMobile.slice(-6)}
+                                </span>
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -1547,6 +1740,53 @@ export default function SalesPage() {
                             </div>
                         </div>
 
+                        {/* Loyalty Points Redemption Bar */}
+                        {currentCustomer && (currentCustomer.loyaltyPointsBalance || 0) > 0 && isLoyaltyActive && (
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-amber-50/90 border border-amber-300 rounded-lg px-2.5 py-1.5 shadow-xs gap-1.5">
+                                <div className="flex items-center gap-1.5 text-xs text-amber-950">
+                                    <Award className="h-4 w-4 text-amber-600 shrink-0" />
+                                    <div>
+                                        <span className="font-bold">Shree Rewards: </span>
+                                        <span className="text-[11px] font-semibold text-amber-800">
+                                            {currentCustomer.loyaltyPointsBalance} pts (₹{currentCustomer.loyaltyPointsBalance * pointValInInr})
+                                        </span>
+                                        {maxRedeemablePoints > 0 && (
+                                            <span className="text-[10px] text-amber-700/80 hidden md:inline ml-1 font-medium">
+                                                (Cap: {loyaltySettings.max_redeem_percent_of_bill}% of bill)
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-1.5 self-end sm:self-center">
+                                    {loyaltyRedeemedPoints > 0 ? (
+                                        <div className="flex items-center gap-1 bg-amber-200 text-amber-950 font-bold px-2 py-0.5 rounded text-xs">
+                                            <span>-₹{effectiveLoyaltyDiscount} ({pointsRedeemedCount} pts)</span>
+                                            <button
+                                                type="button"
+                                                onClick={() => setLoyaltyRedeemedPoints(0)}
+                                                className="text-red-700 hover:text-red-900 font-bold ml-1 text-xs cursor-pointer"
+                                                title="Remove loyalty discount"
+                                            >
+                                                ✕
+                                            </button>
+                                        </div>
+                                    ) : maxRedeemablePoints > 0 ? (
+                                        <button
+                                            type="button"
+                                            onClick={() => setLoyaltyRedeemedPoints(maxRedeemablePoints)}
+                                            className="bg-amber-600 hover:bg-amber-700 text-white font-bold px-2.5 py-1 rounded text-[11px] transition-colors shadow-2xs cursor-pointer"
+                                        >
+                                            Redeem {maxRedeemablePoints} pts (-₹{maxRedeemablePoints * pointValInInr})
+                                        </button>
+                                    ) : (
+                                        <span className="text-[10px] font-semibold text-amber-900 bg-amber-100/90 border border-amber-200 px-2 py-0.5 rounded">
+                                            {loyaltyBlockReason}
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
                         {/* Complete Price Breakup Summary */}
                         <div className="bg-white rounded-lg border border-stone-200/90 p-2.5 text-xs space-y-1 shadow-xs">
                             <div className="flex justify-between text-stone-600">
@@ -1601,12 +1841,32 @@ export default function SalesPage() {
                                 </div>
                             )}
 
+                            {effectiveLoyaltyDiscount > 0 && (
+                                <div className="flex justify-between text-amber-800 text-[11px] pt-1 border-t border-amber-100 font-semibold">
+                                    <span className="flex items-center gap-1">
+                                        <Award className="h-3 w-3 text-amber-600" />
+                                        <span>Rewards Redeemed ({pointsRedeemedCount} pts)</span>
+                                    </span>
+                                    <span className="font-mono text-emerald-700">-₹{effectiveLoyaltyDiscount.toLocaleString('en-IN')}</span>
+                                </div>
+                            )}
+
                             <div className="flex justify-between items-center text-maroon font-bold text-base pt-1.5 border-t border-stone-200">
                                 <span>Net Payable</span>
                                 <span className="font-mono font-black text-lg text-maroon">
                                     ₹{netPayable.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </span>
                             </div>
+
+                            {pointsToEarn > 0 && (
+                                <div className="text-[10px] text-amber-800 font-medium pt-1 flex items-center justify-between border-t border-stone-100">
+                                    <span className="flex items-center gap-1">
+                                        <Sparkles className="h-3 w-3 text-amber-600" />
+                                        <span>Points earned today</span>
+                                    </span>
+                                    <span className="font-bold font-mono text-emerald-700">+{pointsToEarn} pts</span>
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -1656,6 +1916,98 @@ export default function SalesPage() {
                     isOpen={isRemoteLinkOpen}
                     onClose={() => setIsRemoteLinkOpen(false)}
                 />
+
+                {/* Customer Loyalty Enrollment & PIN Dialog */}
+                <Dialog open={isLoyaltyEnrollModalOpen} onOpenChange={setIsLoyaltyEnrollModalOpen}>
+                    <DialogContent className="max-w-md bg-white border border-gold/30 shadow-2xl p-6 rounded-xl">
+                        <DialogHeader>
+                            <DialogTitle className="text-xl font-bold text-maroon flex items-center gap-2">
+                                <Sparkles className="h-5 w-5 text-gold" />
+                                <span>Shree Rewards Activation</span>
+                            </DialogTitle>
+                        </DialogHeader>
+
+                        {generatedPinForDisplay ? (
+                            <div className="space-y-4 py-3">
+                                <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg text-center space-y-2">
+                                    <div className="text-xs font-bold text-emerald-800 uppercase tracking-wider">
+                                        Rewards Account Activated Successfully!
+                                    </div>
+                                    <div className="text-3xl font-mono font-black text-maroon tracking-widest bg-white py-2 px-4 rounded border border-emerald-300 inline-block shadow-xs">
+                                        {generatedPinForDisplay}
+                                    </div>
+                                    <p className="text-xs text-emerald-700">
+                                        Share this 6-digit PIN with <strong>{customerName || 'the customer'}</strong>.
+                                    </p>
+                                </div>
+                                <div className="bg-amber-50 p-3 rounded-lg border border-amber-200 text-xs text-amber-900 space-y-1">
+                                    <p className="font-semibold">Important Security Notice:</p>
+                                    <p>
+                                        This PIN is encrypted immediately in the database and will <strong>never be shown again</strong>. Please communicate it to the customer now.
+                                    </p>
+                                </div>
+                                <Button
+                                    onClick={() => {
+                                        setIsLoyaltyEnrollModalOpen(false);
+                                        setGeneratedPinForDisplay(null);
+                                        setEnrollCustomPin('');
+                                    }}
+                                    className="w-full bg-maroon hover:bg-maroon-dark text-gold font-bold"
+                                >
+                                    Done
+                                </Button>
+                            </div>
+                        ) : (
+                            <div className="space-y-4 py-3">
+                                <div className="bg-stone-50 p-3 rounded-lg border border-stone-200 text-xs text-stone-700">
+                                    <div><strong>Customer:</strong> {customerName || 'In-Store Customer'}</div>
+                                    <div><strong>Mobile:</strong> {customerMobile}</div>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-xs font-semibold text-stone-800">
+                                        Set 6-Digit PIN (Leave blank to auto-generate)
+                                    </label>
+                                    <Input
+                                        type="text"
+                                        placeholder="Auto-generate random 6 digits"
+                                        value={enrollCustomPin}
+                                        onChange={(e) => setEnrollCustomPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                                        maxLength={6}
+                                        className="h-10 text-center font-mono tracking-widest text-lg font-bold border-gold/30 focus-visible:ring-maroon"
+                                    />
+                                    <p className="text-[11px] text-stone-500">
+                                        Customer can pick 6 memorable digits (e.g. birth year + day).
+                                    </p>
+                                </div>
+
+                                <div className="flex gap-2 pt-2">
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => setIsLoyaltyEnrollModalOpen(false)}
+                                        className="flex-1 border-stone-300"
+                                    >
+                                        Cancel
+                                    </Button>
+                                    <Button
+                                        disabled={isEnrollingLoyalty}
+                                        onClick={handleEnrollLoyalty}
+                                        className="flex-1 bg-maroon hover:bg-maroon-dark text-gold font-bold"
+                                    >
+                                        {isEnrollingLoyalty ? (
+                                            <>
+                                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                                Activating...
+                                            </>
+                                        ) : (
+                                            'Activate Rewards'
+                                        )}
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
+                    </DialogContent>
+                </Dialog>
 
                 {/* Tailoring & Add-on Services Dialog */}
                 <Dialog

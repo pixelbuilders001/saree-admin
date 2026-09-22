@@ -181,7 +181,7 @@ export function DuplicateSareeModal({
                 </div>
 
                 {/* Form */}
-                <form onSubmit={handleSubmit} className="p-4 space-y-4 text-xs font-sans">
+                <form onSubmit={handleSubmit} noValidate className="p-4 space-y-4 text-xs font-sans">
                     {error && (
                         <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
                             <AlertCircle className="h-4 w-4 shrink-0" />

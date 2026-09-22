@@ -833,7 +833,7 @@ export default function AddonsPage() {
                         </DialogDescription>
                     </DialogHeader>
 
-                    <form onSubmit={handleSubmit} className="space-y-4 pt-3">
+                    <form onSubmit={handleSubmit} noValidate className="space-y-4 pt-3">
                         {/* Name */}
                         <div className="space-y-1.5">
                             <label className="text-xs font-bold text-maroon uppercase tracking-wider block">

@@ -439,7 +439,7 @@ export function SareeForm({ initialData, onSubmit, onCancel }: SareeFormProps) {
                     </div>
                 </div>
 
-                <form onSubmit={onFormSubmit} className="space-y-6">
+                <form onSubmit={onFormSubmit} noValidate className="space-y-6">
                     {/* STEP 1: GENERAL DETAILS */}
                     <div className={cn("space-y-4 transition-all duration-300", currentStep !== 1 && "hidden")}>
                         <div className="flex items-center justify-between border-b border-gold/10 pb-2">

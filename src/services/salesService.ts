@@ -54,6 +54,9 @@ export interface Sale {
     igstAmount?: number;
     totalGst?: number;
     placeOfSupply?: string;
+    loyaltyMemberCode?: string | null;
+    loyaltyPointsRedeemed?: number;
+    loyaltyPointsEarned?: number;
 }
 
 export interface SaleReportItem {
@@ -176,6 +179,9 @@ export const salesService = {
         voucherCode?: string;
         voucherAmount?: number;
         isGstApplied?: boolean;
+        loyaltyMemberCode?: string | null;
+        loyaltyPointsRedeemed?: number;
+        loyaltyPointsEarned?: number;
     }): Promise<Sale> => {
         if (!sale.items || sale.items.length === 0) {
             throw new Error("No items in sale");
@@ -183,10 +189,13 @@ export const salesService = {
 
         // 1. Resolve customer ID (find or create)
         let customerId: string | null = null;
+        let customerLoyaltyCode: string | null = sale.loyaltyMemberCode || null;
+        let customerLoyaltyBalance: number = 0;
+
         if (sale.customerMobile) {
             const { data: customer, error: customerFetchError } = await supabase
                 .from('customers')
-                .select('id')
+                .select('id, loyalty_member_code, loyalty_points_balance')
                 .eq('mobile', sale.customerMobile)
                 .maybeSingle();
 
@@ -194,18 +203,52 @@ export const salesService = {
 
             if (customer) {
                 customerId = customer.id;
+                customerLoyaltyCode = customer.loyalty_member_code || customerLoyaltyCode;
+                customerLoyaltyBalance = Number(customer.loyalty_points_balance || 0);
             } else if (sale.customerName) {
+                // Auto-generate member code if none supplied
+                let newCode = sale.loyaltyMemberCode;
+                if (!newCode) {
+                    const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+                    let gen = '';
+                    for (let i = 0; i < 6; i++) {
+                        gen += chars.charAt(Math.floor(Math.random() * chars.length));
+                    }
+                    newCode = `SR-${gen}`;
+                }
+
+                const insertPayload: any = {
+                    name: sale.customerName,
+                    mobile: sale.customerMobile,
+                    loyalty_member_code: newCode,
+                    loyalty_points_balance: 0,
+                    loyalty_tier: 'Silver'
+                };
+
                 const { data: newCustomer, error: customerInsertError } = await supabase
                     .from('customers')
-                    .insert([{
-                        name: sale.customerName,
-                        mobile: sale.customerMobile
-                    }])
+                    .insert([insertPayload])
                     .select()
                     .single();
 
                 if (customerInsertError) throw customerInsertError;
                 customerId = newCustomer?.id;
+                customerLoyaltyCode = newCustomer?.loyalty_member_code || newCode;
+
+                // Auto-set default PIN to last 6 digits of mobile
+                if (customerId) {
+                    try {
+                        const rawMobile = (sale.customerMobile || '').replace(/\D/g, '');
+                        const defaultPin = rawMobile.length >= 6 ? rawMobile.slice(-6) : '123456';
+                        await supabase.rpc('set_customer_loyalty_pin', {
+                            p_customer_id: customerId,
+                            p_pin: defaultPin,
+                            p_member_code: customerLoyaltyCode
+                        });
+                    } catch (pinErr) {
+                        console.error('Failed to auto-set default loyalty pin for new customer:', pinErr);
+                    }
+                }
             }
         }
 
@@ -327,6 +370,51 @@ export const salesService = {
             await creditService.redeemCredit(sale.voucherCode, insertedSale.id, voucherVal);
         }
 
+        // 6. Record Loyalty Points (Earned & Redeemed)
+        const redeemedPoints = Number(sale.loyaltyPointsRedeemed || 0);
+        const earnedPoints = Number(sale.loyaltyPointsEarned || 0);
+
+        if (customerId && (redeemedPoints > 0 || earnedPoints > 0)) {
+            try {
+                const netChange = earnedPoints - redeemedPoints;
+                const newBalance = Math.max(0, customerLoyaltyBalance + netChange);
+
+                // Update customer loyalty points balance
+                await supabase
+                    .from('customers')
+                    .update({ loyalty_points_balance: newBalance })
+                    .eq('id', customerId);
+
+                // Insert into loyalty_transactions audit ledger
+                const txInserts: any[] = [];
+                if (redeemedPoints > 0) {
+                    txInserts.push({
+                        customer_id: customerId,
+                        sale_id: insertedSale.id,
+                        points_change: -redeemedPoints,
+                        balance_after: Math.max(0, customerLoyaltyBalance - redeemedPoints),
+                        transaction_type: 'REDEEMED',
+                        notes: `Redeemed on ${invoiceNumber}`
+                    });
+                }
+                if (earnedPoints > 0) {
+                    txInserts.push({
+                        customer_id: customerId,
+                        sale_id: insertedSale.id,
+                        points_change: earnedPoints,
+                        balance_after: newBalance,
+                        transaction_type: 'EARNED',
+                        notes: `Earned on ${invoiceNumber}`
+                    });
+                }
+                if (txInserts.length > 0) {
+                    await supabase.from('loyalty_transactions').insert(txInserts);
+                }
+            } catch (loyaltyErr) {
+                console.error('Failed to record loyalty transaction:', loyaltyErr);
+            }
+        }
+
         return {
             saleId: getFriendlyId(insertedSale.id, false),
             invoiceNumber,
@@ -361,6 +449,9 @@ export const salesService = {
             igstAmount: gstData.igstAmount,
             totalGst: gstData.totalGst,
             placeOfSupply: gstData.isGstApplied ? 'Bihar (10)' : undefined,
+            loyaltyMemberCode: customerLoyaltyCode,
+            loyaltyPointsRedeemed: redeemedPoints,
+            loyaltyPointsEarned: earnedPoints,
         };
     },
 

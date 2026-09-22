@@ -46,6 +46,7 @@ export interface ReceiptData {
     igstAmount?: number;
     totalGst?: number;
     placeOfSupply?: string;
+    loyaltyMemberCode?: string | null;
 }
 
 /**
@@ -256,6 +257,7 @@ export function mapSaleToReceiptData(saleOrOrder: any): ReceiptData {
         igstAmount,
         totalGst,
         placeOfSupply,
+        loyaltyMemberCode: saleOrOrder.loyaltyMemberCode || saleOrOrder.loyalty_member_code || null,
     };
 }
 

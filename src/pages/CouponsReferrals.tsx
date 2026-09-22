@@ -598,7 +598,7 @@ export default function CouponsReferralsPage() {
         {/* TAB 1: RULES & CONFIGURATION (referral_settings)              */}
         {/* ═════════════════════════════════════════════════════════════ */}
         <TabsContent value="settings" className="space-y-6">
-          <form onSubmit={handleSaveSettings} className="space-y-6">
+          <form onSubmit={handleSaveSettings} noValidate className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
               
               {/* CARD 1: TIERED EARNING SLABS (7 COLS) */}
@@ -1782,7 +1782,7 @@ export default function CouponsReferralsPage() {
           </DialogHeader>
 
           {adjustingWallet && (
-            <form onSubmit={handleAdjustWallet} className="space-y-4 pt-2">
+            <form onSubmit={handleAdjustWallet} noValidate className="space-y-4 pt-2">
               <div className="bg-stone-50 p-3 rounded-lg border border-stone-200/80 text-xs flex justify-between">
                 <div>
                   <span className="text-stone-500 block">Current Available:</span>
@@ -1890,7 +1890,7 @@ export default function CouponsReferralsPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleSaveCoupon} className="space-y-3.5 pt-2">
+          <form onSubmit={handleSaveCoupon} noValidate className="space-y-3.5 pt-2">
             <div>
               <label className="text-xs font-semibold text-stone-700 block mb-1">
                 Coupon Code

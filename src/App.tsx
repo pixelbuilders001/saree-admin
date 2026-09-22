@@ -17,6 +17,7 @@ import ExpensesPage from '@/pages/Expenses';
 import WeaversPage from '@/pages/Weavers';
 import SettingsPage from '@/pages/Settings';
 import ReceiptView from '@/pages/ReceiptView';
+import RewardsPortalView from '@/pages/RewardsPortalView';
 import ReviewsPage from '@/pages/Reviews';
 import WishlistPage from '@/pages/Wishlist';
 import StorefrontReportsPage from '@/pages/StorefrontReports';
@@ -155,6 +156,7 @@ function App() {
             <Route path="coupons-referrals" element={<CouponsReferralsPage />} />
           </Route>
           <Route path="/receipt/:invoiceNumber" element={<ReceiptView />} />
+          <Route path="/rewards/:memberCode" element={<RewardsPortalView />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         <Toaster position="top-right" richColors />

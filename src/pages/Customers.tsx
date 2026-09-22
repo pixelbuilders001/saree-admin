@@ -29,7 +29,8 @@ import {
     Wallet,
     Truck,
     ExternalLink,
-    Check
+    Check,
+    Sparkles
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -888,6 +889,34 @@ export default function CustomersPage() {
                                                         ) : (
                                                             <p className="text-[11px] text-gray-400 italic">No in-store address registered. Click Edit Profile to add an address.</p>
                                                         )}
+                                                    </div>
+                                                )}
+
+                                                {/* In-Store Loyalty Rewards Card */}
+                                                {selectedCustomer?.type === 'instore' && (
+                                                    <div className="rounded-xl border border-amber-300 bg-amber-50/70 p-3 space-y-2">
+                                                        <div className="flex items-center justify-between">
+                                                            <h4 className="text-[10px] font-bold uppercase tracking-wider text-amber-950 flex items-center gap-1.5">
+                                                                <Sparkles className="h-3 w-3 text-amber-600" /> Shree Rewards Passbook
+                                                            </h4>
+                                                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200 text-amber-900">
+                                                                {selectedCustomer.loyaltyTier || 'Silver'} Member
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex items-center justify-between pt-1">
+                                                            <div>
+                                                                <div className="text-[10px] text-amber-800">Member ID:</div>
+                                                                <div className="font-mono font-bold text-xs text-maroon">
+                                                                    {selectedCustomer.loyaltyMemberCode || 'Not Activated'}
+                                                                </div>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <div className="text-[10px] text-amber-800">Points Balance:</div>
+                                                                <div className="font-bold text-sm text-amber-950 font-mono">
+                                                                    {(selectedCustomer.loyaltyPointsBalance || 0).toLocaleString('en-IN')} pts (₹{(selectedCustomer.loyaltyPointsBalance || 0).toLocaleString('en-IN')})
+                                                                </div>
+                                                            </div>
+                                                        </div>
                                                     </div>
                                                 )}
                                             </div>

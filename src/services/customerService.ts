@@ -32,6 +32,10 @@ export interface Customer {
     type: 'instore' | 'online';
     email?: string;
     shippingAddresses?: CustomerShippingAddress[];
+    loyaltyMemberCode?: string | null;
+    loyaltyPointsBalance?: number;
+    loyaltyTier?: string;
+    hasLoyaltyPin?: boolean;
 }
 
 export const customerService = {
@@ -45,6 +49,10 @@ export const customerService = {
                 mobile,
                 address,
                 city,
+                loyalty_member_code,
+                loyalty_points_balance,
+                loyalty_tier,
+                loyalty_pin_hash,
                 sales (
                     total_amount
                 )
@@ -170,7 +178,11 @@ export const customerService = {
                 city: c.city || '',
                 totalPurchases: salesArray.length,
                 totalSpent: totalSpent,
-                type: 'instore'
+                type: 'instore',
+                loyaltyMemberCode: c.loyalty_member_code || null,
+                loyaltyPointsBalance: Number(c.loyalty_points_balance || 0),
+                loyaltyTier: c.loyalty_tier || 'Silver',
+                hasLoyaltyPin: Boolean(c.loyalty_pin_hash)
             };
         });
 

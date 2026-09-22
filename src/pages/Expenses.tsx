@@ -88,7 +88,7 @@ export default function ExpensesPage() {
                             <CardTitle className="text-xs font-bold text-maroon uppercase tracking-wider">Debit Expense</CardTitle>
                         </CardHeader>
                         <CardContent className="p-3">
-                            <form onSubmit={handleSubmit} className="space-y-2.5">
+                            <form onSubmit={handleSubmit} noValidate className="space-y-2.5">
                                 <div className="space-y-1">
                                     <label className="text-[10px] font-bold text-gray-500 uppercase">Expense Category</label>
                                     <Select value={category} onValueChange={(val: any) => setCategory(val)}>

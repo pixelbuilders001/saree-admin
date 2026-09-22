@@ -43,7 +43,10 @@ import {
     Check,
     Timer,
     Store,
-    Scissors
+    Scissors,
+    Award,
+    Calculator,
+    HelpCircle
 } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import {
@@ -69,7 +72,9 @@ import {
     settingsService,
     type UpiSetting,
     type DeliverySettings,
-    DEFAULT_DELIVERY_SETTINGS
+    DEFAULT_DELIVERY_SETTINGS,
+    type LoyaltySettings,
+    DEFAULT_LOYALTY_SETTINGS
 } from '@/services/settingsService';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
@@ -87,8 +92,9 @@ type PasswordFormValues = z.infer<typeof passwordSchema>;
 
 export default function SettingsPage() {
     const [searchParams, setSearchParams] = useSearchParams();
-    const [activeTab, setActiveTab] = React.useState<'delivery' | 'payments' | 'security' | 'system' | 'addons'>(() => {
+    const [activeTab, setActiveTab] = React.useState<'delivery' | 'loyalty' | 'payments' | 'security' | 'system' | 'addons'>(() => {
         const tab = new URLSearchParams(window.location.search).get('tab');
+        if (tab === 'loyalty') return 'loyalty';
         if (tab === 'addons') return 'addons';
         if (tab === 'payments' || tab === 'security' || tab === 'system') return tab;
         return 'delivery';
@@ -102,12 +108,12 @@ export default function SettingsPage() {
 
     React.useEffect(() => {
         const tab = searchParams.get('tab');
-        if (tab && ['delivery', 'payments', 'security', 'system', 'addons'].includes(tab)) {
+        if (tab && ['delivery', 'loyalty', 'payments', 'security', 'system', 'addons'].includes(tab)) {
             setActiveTab(tab as any);
         }
     }, [searchParams]);
 
-    const handleSelectTab = (tab: 'delivery' | 'payments' | 'security' | 'system' | 'addons') => {
+    const handleSelectTab = (tab: 'delivery' | 'loyalty' | 'payments' | 'security' | 'system' | 'addons') => {
         setActiveTab(tab);
         setSearchParams({ tab }, { replace: true });
     };
@@ -140,6 +146,15 @@ export default function SettingsPage() {
     const [addonFormRequiresSize, setAddonFormRequiresSize] = React.useState(false);
     const [addonFormIsActive, setAddonFormIsActive] = React.useState(true);
     const [addonFormDisplayOrder, setAddonFormDisplayOrder] = React.useState<number | string>(1);
+
+    // In-Store Loyalty Program State
+    const [loyaltySettings, setLoyaltySettings] = React.useState<LoyaltySettings>(DEFAULT_LOYALTY_SETTINGS);
+    const [isLoadingLoyalty, setIsLoadingLoyalty] = React.useState(true);
+    const [isSavingLoyalty, setIsSavingLoyalty] = React.useState(false);
+
+    // Interactive simulator inputs for admin testing
+    const [simBillAmount, setSimBillAmount] = React.useState<number>(4000);
+    const [simCustomerPoints, setSimCustomerPoints] = React.useState<number>(500);
 
     const fetchUpiSettings = async () => {
         setIsLoadingUpi(true);
@@ -177,11 +192,56 @@ export default function SettingsPage() {
         }
     };
 
+    const fetchLoyaltySettings = async () => {
+        setIsLoadingLoyalty(true);
+        try {
+            const data = await settingsService.getLoyaltySettings();
+            setLoyaltySettings(data);
+        } catch (err: any) {
+            toast.error(err?.message || 'Failed to load loyalty settings');
+        } finally {
+            setIsLoadingLoyalty(false);
+        }
+    };
+
     React.useEffect(() => {
         fetchUpiSettings();
         fetchDeliverySettings();
         fetchAddons();
+        fetchLoyaltySettings();
     }, []);
+
+    const handleSaveLoyalty = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
+        if (isStaff) {
+            toast.error('Unauthorized: Staff cannot modify loyalty configurations');
+            return;
+        }
+        setIsSavingLoyalty(true);
+        try {
+            const updated = await settingsService.saveLoyaltySettings(loyaltySettings);
+            setLoyaltySettings(updated);
+            queryClient.invalidateQueries({ queryKey: ['loyaltySettings'] });
+            toast.success('Loyalty configurations committed successfully!');
+        } catch (err: any) {
+            toast.error(err?.message || 'Failed to save loyalty configurations');
+        } finally {
+            setIsSavingLoyalty(false);
+        }
+    };
+
+    const handleResetLoyalty = async () => {
+        if (confirm('Reset loyalty configurations to factory defaults?')) {
+            setLoyaltySettings(DEFAULT_LOYALTY_SETTINGS);
+            try {
+                await settingsService.saveLoyaltySettings(DEFAULT_LOYALTY_SETTINGS);
+                queryClient.invalidateQueries({ queryKey: ['loyaltySettings'] });
+                toast.info('Reset to default values and persisted.');
+            } catch {
+                toast.info('Reset in local state. Click "Commit Loyalty Settings" to persist.');
+            }
+        }
+    };
 
     const handleOpenCreateAddon = () => {
         if (isStaff) {
@@ -483,12 +543,12 @@ export default function SettingsPage() {
             text: deliverySettings.is_active ? 'text-emerald-700' : 'text-rose-700'
         },
         {
-            label: 'Express Quick SLA',
-            value: deliverySettings.is_express_20min_enabled ? `≤ ${deliverySettings.express_max_km} km` : 'Disabled',
-            sub: deliverySettings.is_express_20min_enabled ? `₹${deliverySettings.express_charge} • ${deliverySettings.express_min_minutes}-${deliverySettings.express_max_minutes}m` : 'Express mode paused',
-            icon: Zap,
-            from: 'from-amber-400',
-            to: 'to-amber-600',
+            label: 'Loyalty Rewards',
+            value: loyaltySettings.is_active ? `${loyaltySettings.earn_percentage}% Earn` : 'Paused',
+            sub: loyaltySettings.is_active ? `Max ${loyaltySettings.max_redeem_percent_of_bill}% bill cap` : 'Redemptions paused',
+            icon: Award,
+            from: 'from-amber-500',
+            to: 'to-amber-700',
             text: 'text-amber-800'
         },
         { label: 'Active UPI Terminals', value: `${activeTerminals}`, sub: 'Live QR gateways', icon: QrCode, from: 'from-slate-600', to: 'to-slate-800', text: 'text-gray-800' },
@@ -497,6 +557,7 @@ export default function SettingsPage() {
 
     const navItems = [
         { key: 'delivery' as const, icon: Truck, title: 'Delivery & Shipping', sub: 'Zones, rates & SLAs' },
+        { key: 'loyalty' as const, icon: Award, title: 'Loyalty & Rewards', sub: 'Earn rate, redemption caps & rules' },
         { key: 'addons' as const, icon: Scissors, title: 'Tailoring & Add-ons', sub: 'Fall/pico, stitching & pricing' },
         { key: 'payments' as const, icon: QrCode, title: 'UPI Payment Terminals', sub: 'QR checkout accounts' },
         { key: 'security' as const, icon: KeyRound, title: 'Security & Credentials', sub: 'Password & access' },
@@ -738,7 +799,7 @@ export default function SettingsPage() {
                                                 <p className="text-xs text-gray-400 font-medium">Loading delivery engine settings...</p>
                                             </div>
                                         ) : (
-                                            <form onSubmit={handleSaveDelivery} className="space-y-6">
+                                            <form onSubmit={handleSaveDelivery} noValidate className="space-y-6">
 
                                                 {/* SECTION 1: Serviceable Region & Store GPS Origin */}
                                                 <div className="rounded-xl border border-gold/15 bg-cream/5 p-4 space-y-3.5">
@@ -1207,6 +1268,455 @@ export default function SettingsPage() {
                             </motion.div>
                         )}
 
+                        {activeTab === 'loyalty' && (
+                            <motion.div
+                                key="loyalty"
+                                initial={{ opacity: 0, y: 4 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -4 }}
+                                transition={{ duration: 0.15 }}
+                                className="space-y-4"
+                            >
+                                <Card className="border-gold/20 shadow-sm hover:shadow-md transition-shadow bg-white overflow-hidden">
+                                    {/* Panel Header */}
+                                    <CardHeader className="bg-gradient-to-r from-cream/40 via-white to-transparent border-b border-gold/10 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                                        <div className="flex items-center gap-2.5">
+                                            <div className="p-2 bg-gradient-to-br from-amber-600 to-amber-800 text-gold rounded-lg shadow-sm">
+                                                <Award className="h-5 w-5" />
+                                            </div>
+                                            <div>
+                                                <CardTitle className="text-sm font-bold text-maroon tracking-wider uppercase flex items-center gap-2 font-serif">
+                                                    In-Store Loyalty & VIP Rewards
+                                                    <span className={cn(
+                                                        "text-[9px] font-bold px-2 py-0.5 rounded-full border",
+                                                        loyaltySettings.is_active
+                                                            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                                            : "bg-rose-50 text-rose-700 border-rose-200"
+                                                    )}>
+                                                        {loyaltySettings.is_active ? 'Active on POS' : 'Program Paused'}
+                                                    </span>
+                                                </CardTitle>
+                                                <CardDescription className="text-[10px] text-gray-500 mt-0.5">
+                                                    Control point earning percentages, redemption threshold barriers, bill discount caps, and safety limits
+                                                </CardDescription>
+                                            </div>
+                                        </div>
+
+                                        {/* Master Toggle */}
+                                        <div className="flex items-center gap-2 self-start sm:self-center">
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    if (isStaff) {
+                                                        toast.error('Unauthorized: Staff cannot toggle loyalty program');
+                                                        return;
+                                                    }
+                                                    setLoyaltySettings(prev => ({ ...prev, is_active: !prev.is_active }));
+                                                }}
+                                                disabled={isStaff}
+                                                className={cn(
+                                                    "px-3 py-1.5 rounded-lg border text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer",
+                                                    loyaltySettings.is_active
+                                                        ? "bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100"
+                                                        : "bg-gray-100 text-gray-600 border-gray-300 hover:bg-gray-200"
+                                                )}
+                                                title={loyaltySettings.is_active ? "Click to Pause loyalty program" : "Click to Enable loyalty program"}
+                                            >
+                                                {loyaltySettings.is_active ? (
+                                                    <>
+                                                        <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                                                        <ToggleRight className="h-4 w-4 text-emerald-600" />
+                                                        <span>Loyalty Active</span>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <ToggleLeft className="h-4 w-4 text-gray-400" />
+                                                        <span>Program Paused</span>
+                                                    </>
+                                                )}
+                                            </button>
+                                        </div>
+                                    </CardHeader>
+
+                                    <CardContent className="p-3 sm:p-5 space-y-5">
+                                        {isLoadingLoyalty ? (
+                                            <div className="flex flex-col items-center justify-center py-12 space-y-2">
+                                                <Loader2 className="h-6 w-6 animate-spin text-maroon" />
+                                                <p className="text-xs text-gray-400 font-medium">Loading loyalty configurations...</p>
+                                            </div>
+                                        ) : (
+                                            <form onSubmit={handleSaveLoyalty} noValidate className="space-y-5">
+
+                                                {/* SECTION 1: Earning Rules */}
+                                                <div className="rounded-xl border border-amber-200/80 bg-amber-50/20 p-4 space-y-3.5">
+                                                    <div className="flex items-center gap-2 border-b border-amber-200/60 pb-2">
+                                                        <div className="p-1.5 bg-amber-600 text-white rounded-md shadow-xs">
+                                                            <Sparkles className="h-3.5 w-3.5" />
+                                                        </div>
+                                                        <div>
+                                                            <h4 className="text-xs font-bold text-amber-950 uppercase tracking-wide">
+                                                                1. Earning Rules & Point Valuation
+                                                            </h4>
+                                                            <p className="text-[10px] text-amber-800/70">
+                                                                Define how points are calculated when a customer completes an in-store saree purchase
+                                                            </p>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                                                        <div className="space-y-1">
+                                                            <div className="flex justify-between items-center">
+                                                                <label className="text-[10px] font-bold text-gray-700 uppercase">
+                                                                    Points Earning Rate (%)
+                                                                </label>
+                                                                <span className="text-[9px] text-amber-800 font-mono font-semibold">
+                                                                    Default: 1% (1 pt / ₹100)
+                                                                </span>
+                                                            </div>
+                                                            <div className="relative">
+                                                                <Input
+                                                                    type="number"
+                                                                    step="any"
+                                                                    min="0"
+                                                                    max="100"
+                                                                    value={loyaltySettings.earn_percentage}
+                                                                    onChange={(e) => {
+                                                                        const val = e.target.value;
+                                                                        setLoyaltySettings(p => ({ ...p, earn_percentage: val === '' ? 0 : parseFloat(val) || 0 }));
+                                                                    }}
+                                                                    className="h-8 text-xs border-amber-200 focus-visible:ring-amber-500 bg-white font-mono pr-8"
+                                                                />
+                                                                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">%</span>
+                                                            </div>
+                                                            <p className="text-[9px] text-gray-500">
+                                                                Points credited automatically to customer ledger on invoice completion.
+                                                            </p>
+                                                        </div>
+
+                                                        <div className="space-y-1">
+                                                            <div className="flex justify-between items-center">
+                                                                <label className="text-[10px] font-bold text-gray-700 uppercase">
+                                                                    Rupee Value Per Point (₹)
+                                                                </label>
+                                                                <span className="text-[9px] text-amber-800 font-mono font-semibold">
+                                                                    Default: ₹1.00
+                                                                </span>
+                                                            </div>
+                                                            <div className="relative">
+                                                                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">₹</span>
+                                                                <Input
+                                                                    type="number"
+                                                                    step="any"
+                                                                    min="0.01"
+                                                                    value={loyaltySettings.point_value_in_inr}
+                                                                    onChange={(e) => {
+                                                                        const val = e.target.value;
+                                                                        setLoyaltySettings(p => ({ ...p, point_value_in_inr: val === '' ? 1 : parseFloat(val) || 1 }));
+                                                                    }}
+                                                                    className="h-8 text-xs border-amber-200 focus-visible:ring-amber-500 bg-white font-mono pl-6"
+                                                                />
+                                                            </div>
+                                                            <p className="text-[9px] text-gray-500">
+                                                                Cash value discount applied per point during checkout.
+                                                            </p>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="p-2.5 bg-white/80 border border-amber-200/60 rounded-lg text-[10px] text-amber-900 flex items-center gap-2">
+                                                        <Check className="h-3.5 w-3.5 text-amber-700 shrink-0" />
+                                                        <span>
+                                                            At <strong>{loyaltySettings.earn_percentage}%</strong> earn rate, an order of ₹10,000 gives the customer <strong>{Math.floor(10000 * loyaltySettings.earn_percentage / 100)} points</strong> (worth ₹{Math.floor(10000 * loyaltySettings.earn_percentage / 100) * loyaltySettings.point_value_in_inr} store value).
+                                                        </span>
+                                                    </div>
+                                                </div>
+
+                                                {/* SECTION 2: Redemption Safety Thresholds & Protection */}
+                                                <div className="rounded-xl border border-gold/30 bg-cream/10 p-4 space-y-3.5">
+                                                    <div className="flex items-center gap-2 border-b border-gold/20 pb-2">
+                                                        <div className="p-1.5 bg-maroon text-gold rounded-md shadow-xs">
+                                                            <ShieldCheck className="h-3.5 w-3.5" />
+                                                        </div>
+                                                        <div>
+                                                            <h4 className="text-xs font-bold text-maroon uppercase tracking-wide">
+                                                                2. Redemption Thresholds & Store Margin Protections
+                                                            </h4>
+                                                            <p className="text-[10px] text-gray-500">
+                                                                Prevent customers wiping out bills for ₹0 and ensure minimum purchase commitments
+                                                            </p>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                                                        {/* Min Points to Redeem */}
+                                                        <div className="space-y-1">
+                                                            <div className="flex justify-between items-center">
+                                                                <label className="text-[10px] font-bold text-gray-700 uppercase">
+                                                                    Min Points to Unlock Redemption
+                                                                </label>
+                                                                <span className="text-[9px] text-maroon font-mono font-semibold">
+                                                                    Default: 100 pts
+                                                                </span>
+                                                            </div>
+                                                            <div className="relative">
+                                                                <Input
+                                                                    type="number"
+                                                                    step="any"
+                                                                    min="0"
+                                                                    value={loyaltySettings.min_points_to_redeem}
+                                                                    onChange={(e) => {
+                                                                        const val = e.target.value;
+                                                                        setLoyaltySettings(p => ({ ...p, min_points_to_redeem: val === '' ? 0 : parseInt(val, 10) || 0 }));
+                                                                    }}
+                                                                    className="h-8 text-xs border-gold/30 focus-visible:ring-maroon bg-white font-mono"
+                                                                />
+                                                            </div>
+                                                            <p className="text-[9px] text-gray-400">
+                                                                Customers with fewer points cannot redeem until reaching this threshold.
+                                                            </p>
+                                                        </div>
+
+                                                        {/* Min Bill Amount to Redeem */}
+                                                        <div className="space-y-1">
+                                                            <div className="flex justify-between items-center">
+                                                                <label className="text-[10px] font-bold text-gray-700 uppercase">
+                                                                    Min Bill Amount to Redeem (₹)
+                                                                </label>
+                                                                <span className="text-[9px] text-maroon font-mono font-semibold">
+                                                                    Default: ₹1,000
+                                                                </span>
+                                                            </div>
+                                                            <div className="relative">
+                                                                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">₹</span>
+                                                                <Input
+                                                                    type="number"
+                                                                    step="any"
+                                                                    min="0"
+                                                                    value={loyaltySettings.min_bill_amount_for_redeem}
+                                                                    onChange={(e) => {
+                                                                        const val = e.target.value;
+                                                                        setLoyaltySettings(p => ({ ...p, min_bill_amount_for_redeem: val === '' ? 0 : parseFloat(val) || 0 }));
+                                                                    }}
+                                                                    className="h-8 text-xs border-gold/30 focus-visible:ring-maroon bg-white font-mono pl-6"
+                                                                />
+                                                            </div>
+                                                            <p className="text-[9px] text-gray-400">
+                                                                Points cannot be used on small transactions below this amount.
+                                                            </p>
+                                                        </div>
+
+                                                        {/* Max Redeem % of Bill */}
+                                                        <div className="space-y-1">
+                                                            <div className="flex justify-between items-center">
+                                                                <label className="text-[10px] font-bold text-gray-700 uppercase">
+                                                                    Max Bill Redemption Cap (%)
+                                                                </label>
+                                                                <span className="text-[9px] text-maroon font-mono font-semibold">
+                                                                    Default: 25% of bill
+                                                                </span>
+                                                            </div>
+                                                            <div className="relative">
+                                                                <Input
+                                                                    type="number"
+                                                                    step="any"
+                                                                    min="1"
+                                                                    max="100"
+                                                                    value={loyaltySettings.max_redeem_percent_of_bill}
+                                                                    onChange={(e) => {
+                                                                        const val = e.target.value;
+                                                                        setLoyaltySettings(p => ({ ...p, max_redeem_percent_of_bill: val === '' ? 0 : parseFloat(val) || 0 }));
+                                                                    }}
+                                                                    className="h-8 text-xs border-gold/30 focus-visible:ring-maroon bg-white font-mono pr-8"
+                                                                />
+                                                                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">%</span>
+                                                            </div>
+                                                            <p className="text-[9px] text-gray-400">
+                                                                Limits points discount so customer pays at least {100 - loyaltySettings.max_redeem_percent_of_bill}% in cash/UPI.
+                                                            </p>
+                                                        </div>
+
+                                                        {/* Max Points Cap per Order */}
+                                                        <div className="space-y-1">
+                                                            <div className="flex justify-between items-center">
+                                                                <label className="text-[10px] font-bold text-gray-700 uppercase">
+                                                                    Max Points Per Order (Ceiling)
+                                                                </label>
+                                                                <span className="text-[9px] text-maroon font-mono font-semibold">
+                                                                    Default: 1,000 pts (0 = no limit)
+                                                                </span>
+                                                            </div>
+                                                            <Input
+                                                                type="number"
+                                                                step="any"
+                                                                min="0"
+                                                                value={loyaltySettings.max_points_per_order}
+                                                                onChange={(e) => {
+                                                                    const val = e.target.value;
+                                                                    setLoyaltySettings(p => ({ ...p, max_points_per_order: val === '' ? 0 : parseInt(val, 10) || 0 }));
+                                                                }}
+                                                                className="h-8 text-xs border-gold/30 focus-visible:ring-maroon bg-white font-mono"
+                                                            />
+                                                            <p className="text-[9px] text-gray-400">
+                                                                Hard maximum ceiling on points deductible in a single bill.
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* SECTION 3: Live Interactive POS Simulator */}
+                                                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 space-y-3">
+                                                    <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
+                                                        <div className="p-1.5 bg-slate-800 text-white rounded-md shadow-xs">
+                                                            <Calculator className="h-3.5 w-3.5" />
+                                                        </div>
+                                                        <div>
+                                                            <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wide">
+                                                                3. Live Checkout Simulator (Verify Your Thresholds)
+                                                            </h4>
+                                                            <p className="text-[10px] text-slate-500">
+                                                                Test how your configured rules will behave during a real in-store checkout
+                                                            </p>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Simulator Inputs */}
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                        <div className="space-y-1">
+                                                            <label className="text-[9px] font-bold text-slate-600 uppercase">Test Bill Amount (₹)</label>
+                                                            <Input
+                                                                type="number"
+                                                                step="any"
+                                                                min="0"
+                                                                value={simBillAmount || ''}
+                                                                onChange={(e) => {
+                                                                    const val = e.target.value;
+                                                                    setSimBillAmount(val === '' ? 0 : parseFloat(val));
+                                                                }}
+                                                                className="h-8 text-xs border-slate-300 bg-white font-mono"
+                                                            />
+                                                        </div>
+                                                        <div className="space-y-1">
+                                                            <label className="text-[9px] font-bold text-slate-600 uppercase">Customer Points Balance</label>
+                                                            <Input
+                                                                type="number"
+                                                                step="any"
+                                                                min="0"
+                                                                value={simCustomerPoints || ''}
+                                                                onChange={(e) => {
+                                                                    const val = e.target.value;
+                                                                    setSimCustomerPoints(val === '' ? 0 : parseInt(val, 10));
+                                                                }}
+                                                                className="h-8 text-xs border-slate-300 bg-white font-mono"
+                                                            />
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Simulator Outcome Calculation */}
+                                                    {(() => {
+                                                        const isEligibleMinPts = simCustomerPoints >= loyaltySettings.min_points_to_redeem;
+                                                        const isEligibleMinBill = simBillAmount >= loyaltySettings.min_bill_amount_for_redeem;
+                                                        const billCapInr = (simBillAmount * loyaltySettings.max_redeem_percent_of_bill) / 100;
+                                                        const billCapPoints = Math.floor(billCapInr / (loyaltySettings.point_value_in_inr || 1));
+                                                        const maxAllowedPoints = (loyaltySettings.is_active && isEligibleMinPts && isEligibleMinBill)
+                                                            ? Math.min(
+                                                                simCustomerPoints,
+                                                                billCapPoints,
+                                                                loyaltySettings.max_points_per_order > 0 ? loyaltySettings.max_points_per_order : Infinity
+                                                            )
+                                                            : 0;
+                                                        const discountVal = maxAllowedPoints * (loyaltySettings.point_value_in_inr || 1);
+                                                        const finalPayable = Math.max(0, simBillAmount - discountVal);
+                                                        const newPointsEarned = loyaltySettings.is_active ? Math.floor((finalPayable * loyaltySettings.earn_percentage) / 100) : 0;
+
+                                                        return (
+                                                            <div className="bg-white rounded-lg border border-slate-200 p-3 space-y-2 text-xs">
+                                                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center pb-2 border-b border-slate-100">
+                                                                    <div className="bg-cream/20 p-2 rounded border border-gold/15">
+                                                                        <span className="text-[9px] text-gray-500 uppercase block">Min Pts Check</span>
+                                                                        <span className={cn("font-bold text-[11px]", isEligibleMinPts ? "text-emerald-700" : "text-rose-600")}>
+                                                                            {isEligibleMinPts ? '✅ Met' : `❌ Needs ${loyaltySettings.min_points_to_redeem}`}
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="bg-cream/20 p-2 rounded border border-gold/15">
+                                                                        <span className="text-[9px] text-gray-500 uppercase block">Min Bill Check</span>
+                                                                        <span className={cn("font-bold text-[11px]", isEligibleMinBill ? "text-emerald-700" : "text-rose-600")}>
+                                                                            {isEligibleMinBill ? '✅ Met' : `❌ Needs ₹${loyaltySettings.min_bill_amount_for_redeem}`}
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="bg-cream/20 p-2 rounded border border-gold/15">
+                                                                        <span className="text-[9px] text-gray-500 uppercase block">Redeemable Points</span>
+                                                                        <span className="font-bold text-[11px] text-amber-900 font-mono">
+                                                                            {maxAllowedPoints} pts
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="bg-cream/20 p-2 rounded border border-gold/15">
+                                                                        <span className="text-[9px] text-gray-500 uppercase block">Discount Value</span>
+                                                                        <span className="font-bold text-[11px] text-maroon font-mono">
+                                                                            -₹{discountVal.toLocaleString('en-IN')}
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+
+                                                                <div className="flex flex-col sm:flex-row justify-between items-center text-[11px] gap-2 pt-1 text-slate-700">
+                                                                    <div>
+                                                                        Customer Pays: <strong className="text-emerald-800 font-mono text-xs">₹{finalPayable.toLocaleString('en-IN')}</strong> ({((finalPayable / (simBillAmount || 1)) * 100).toFixed(0)}% of bill)
+                                                                    </div>
+                                                                    <div className="text-amber-800 font-semibold">
+                                                                        + Customer will earn {newPointsEarned} new points on this order
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })()}
+                                                </div>
+
+                                                {/* Staff Permission Notice */}
+                                                {isStaff && (
+                                                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-2">
+                                                        <ShieldCheck className="h-4 w-4 text-amber-600 flex-shrink-0" />
+                                                        <span className="text-[10px] text-amber-800 font-medium">
+                                                            Operator Clearance: View-only mode. Only Super Administrators can alter loyalty program settings and thresholds.
+                                                        </span>
+                                                    </div>
+                                                )}
+
+                                                {/* Action Bar */}
+                                                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-gold/10">
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        onClick={handleResetLoyalty}
+                                                        disabled={isStaff || isSavingLoyalty}
+                                                        className="w-full sm:w-auto h-9 text-[10px] font-bold uppercase tracking-wider text-gray-600 border-gray-200 hover:bg-gray-100 gap-1.5 cursor-pointer rounded-lg"
+                                                    >
+                                                        <RotateCcw className="h-3.5 w-3.5 text-gray-500" />
+                                                        Reset to Defaults
+                                                    </Button>
+
+                                                    <Button
+                                                        type="submit"
+                                                        disabled={isStaff || isSavingLoyalty}
+                                                        className="w-full sm:w-auto h-9 text-[11px] font-bold uppercase tracking-wider bg-gradient-to-r from-maroon to-maroon-dark hover:from-maroon-dark hover:to-maroon-dark text-gold shadow-md shadow-maroon/20 gap-1.5 cursor-pointer rounded-lg px-6"
+                                                    >
+                                                        {isSavingLoyalty ? (
+                                                            <>
+                                                                <Loader2 className="h-3.5 w-3.5 animate-spin text-gold" />
+                                                                Saving Loyalty Settings...
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <Save className="h-3.5 w-3.5 text-gold" />
+                                                                Commit Loyalty Settings
+                                                            </>
+                                                        )}
+                                                    </Button>
+                                                </div>
+                                            </form>
+                                        )}
+                                    </CardContent>
+                                </Card>
+                            </motion.div>
+                        )}
+
                         {activeTab === 'addons' && (
                             <motion.div
                                 key="addons"
@@ -1433,7 +1943,7 @@ export default function SettingsPage() {
                                     </CardHeader>
                                     <CardContent className="p-5">
                                         <Form {...form}>
-                                            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                                            <form onSubmit={form.handleSubmit(onSubmit)} noValidate className="space-y-4">
                                                 <FormField
                                                     control={form.control}
                                                     name="password"
@@ -1603,7 +2113,7 @@ export default function SettingsPage() {
                                                 </div>
 
                                                 {!isStaff && (
-                                                    <form onSubmit={handleAddUpi} className="space-y-3.5 pt-3.5 border-t border-gold/10">
+                                                    <form onSubmit={handleAddUpi} noValidate className="space-y-3.5 pt-3.5 border-t border-gold/10">
                                                         <h4 className="text-[10px] font-bold text-maroon uppercase tracking-widest flex items-center gap-1.5">
                                                             <Plus className="h-3 w-3" />
                                                             Register New UPI Terminal
@@ -1775,7 +2285,7 @@ export default function SettingsPage() {
                         </DialogDescription>
                     </DialogHeader>
 
-                    <form onSubmit={handleSaveAddon} className="space-y-3.5 pt-2">
+                    <form onSubmit={handleSaveAddon} noValidate className="space-y-3.5 pt-2">
                         {!editingAddon && (
                             <div className="space-y-1">
                                 <label className="text-[11px] font-bold text-gray-700 uppercase tracking-wide">

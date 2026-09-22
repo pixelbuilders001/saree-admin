@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { Loader2, Printer, AlertTriangle } from 'lucide-react';
+import QRCode from 'react-qr-code';
 import { decodeReceiptData, type ReceiptData, type ReceiptItem } from '@/utils/receiptUtils';
 
 // ── Shop Constants ────────────────────────────────────────────────────────────
@@ -69,7 +70,7 @@ export default function ReceiptView() {
                     id,
                     invoice_number, created_at, payment_mode, total_amount, discount_amount, discount_percentage,
                     is_gst_applied, gst_rate, taxable_amount, cgst_rate, cgst_amount, sgst_rate, sgst_amount, igst_rate, igst_amount, total_gst,
-                    customers ( name, mobile ),
+                    customers ( name, mobile, loyalty_member_code ),
                     sale_items ( quantity, selling_price, inventory ( saree_name, mrp, selling_price, hsn_code, discount_amount, discount_percentage ) )
                 `)
                 .eq('invoice_number', invoiceNumber)
@@ -161,6 +162,7 @@ export default function ReceiptView() {
                     igstAmount: Number(data.igst_amount || 0),
                     totalGst: Number(data.total_gst || 0),
                     placeOfSupply: data.is_gst_applied ? 'Bihar (10)' : undefined,
+                    loyaltyMemberCode: (data.customers as any)?.loyalty_member_code || null,
                 };
             } else {
                 // Fallback: Check online orders table
@@ -735,9 +737,34 @@ export default function ReceiptView() {
 
                     {/* ── AUTHORISATION ─────────────────────────────────── */}
                     <div className="invoice-footer-row" style={{ marginTop: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: '24px' }}>
-                        {/* Left: Thank you */}
-                        <div style={{ fontSize: '11.5px', color: '#444', maxWidth: '320px', lineHeight: '1.7' }}>
+                        {/* Left: Thank you & discreet rewards QR */}
+                        <div style={{ fontSize: '11.5px', color: '#444', maxWidth: '340px', lineHeight: '1.7' }}>
                             <em>Thank you for supporting authentic Indian weavers &amp; handlooms!</em>
+                            {(() => {
+                                const currentOrigin = (typeof window !== 'undefined' && window.location.origin) ? window.location.origin : 'https://shreebanarasisarees.in';
+                                const isLoyalty = Boolean(receipt.loyaltyMemberCode);
+                                const qrTargetUrl = isLoyalty 
+                                    ? `${currentOrigin}/rewards/${receipt.loyaltyMemberCode}`
+                                    : `${currentOrigin}/receipt/${encodeURIComponent(receipt.invoiceNumber)}`;
+                                const qrDisplayUrl = qrTargetUrl.replace(/^https?:\/\//, '');
+
+                                return (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '14px', padding: '6px 8px', border: '1px dashed #bbb', borderRadius: '4px', background: '#fafafa' }}>
+                                        <div style={{ background: '#fff', padding: '2px', lineHeight: 0, flexShrink: 0 }}>
+                                            <QRCode value={qrTargetUrl} size={46} />
+                                        </div>
+                                        <div style={{ fontSize: '10px', color: '#555', lineHeight: '1.3' }}>
+                                            <div style={{ fontWeight: 'bold', color: '#800000', fontSize: '10.5px' }}>
+                                                {isLoyalty ? '✨ SHREE REWARDS' : '✨ VERIFIED RECEIPT'}
+                                            </div>
+                                            <div>{isLoyalty ? 'Scan to view points & passbook' : 'Scan to view digital invoice'}</div>
+                                            <div style={{ fontFamily: 'monospace', color: '#222', fontSize: '9px', wordBreak: 'break-all', maxWidth: '240px' }}>
+                                                {qrDisplayUrl}
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
                         </div>
                         {/* Right: Auth block */}
                         <div className="invoice-footer-right" style={{ textAlign: 'right', fontSize: '11.5px', color: '#333', flexShrink: 0 }}>

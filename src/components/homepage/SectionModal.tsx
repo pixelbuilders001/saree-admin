@@ -202,7 +202,7 @@ const SectionForm: React.FC<SectionFormProps> = ({
     };
 
     return (
-        <form onSubmit={handleSave} className="flex flex-col flex-1 overflow-hidden">
+        <form onSubmit={handleSave} noValidate className="flex flex-col flex-1 overflow-hidden">
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
                 {/* Section Title & Subtitle (Hidden for Image Banner) */}
                 {displayStyle !== 'image_banner' && (
