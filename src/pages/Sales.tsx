@@ -37,6 +37,8 @@ import {
     Check,
     Sparkles,
     Award,
+    ChevronDown,
+    ChevronUp,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -220,6 +222,7 @@ export default function SalesPage() {
     const [isRemoteLinkOpen, setIsRemoteLinkOpen] = React.useState(false);
     const [isCustomerDetailsOpen, setIsCustomerDetailsOpen] = React.useState(false);
     const [isBreakdownOpen, setIsBreakdownOpen] = React.useState(false);
+    const [isDiscountsOpen, setIsDiscountsOpen] = React.useState(false);
     const searchInputRef = React.useRef<HTMLInputElement>(null);
     const scannerBufferRef = React.useRef<{ text: string; lastTime: number }>({ text: '', lastTime: 0 });
     const [searchParams] = useSearchParams();
@@ -969,6 +972,11 @@ export default function SalesPage() {
             toast.error('Cart is empty');
             return;
         }
+        if (!selectedStaffId) {
+            setIsCustomerDetailsOpen(true);
+            toast.error('Please assign a salesperson before checking out.');
+            return;
+        }
         if (paymentMode === 'upi') {
             const txnNote = `SBS-${sessionId}-${Date.now().toString().slice(-4)}`;
             setCurrentTxnNote(txnNote);
@@ -1283,27 +1291,42 @@ export default function SalesPage() {
                     </div>
                 </div>
 
-                {/* Customer & Staff Details Form (Compact & Collapsible on Mobile) */}
-                <div className="border-b border-gray-100 bg-stone-50/50 shrink-0">
+                {/* Customer & Staff Details Summary Bar (Compact & Collapsible) */}
+                <div className="border-b border-gray-100 bg-stone-50/70 shrink-0">
                     <button
                         type="button"
                         onClick={() => setIsCustomerDetailsOpen(prev => !prev)}
-                        className="lg:hidden w-full px-3 py-1.5 flex items-center justify-between text-xs hover:bg-stone-100/70 transition-colors border-b border-stone-100"
+                        className="w-full px-3 py-2 flex items-center justify-between text-xs hover:bg-stone-100/80 transition-colors border-b border-stone-100/60 cursor-pointer select-none"
                     >
-                        <span className="flex items-center gap-1.5 text-gray-700 truncate">
+                        <div className="flex items-center gap-1.5 text-gray-700 truncate min-w-0 pr-1">
                             <User className="h-3.5 w-3.5 text-maroon shrink-0" />
-                            <span className="font-semibold text-gray-800 truncate">
-                                {customerName || customerMobile ? `${customerName || 'Customer'} (${customerMobile || 'No mobile'})` : 'Walk-in Customer'}
+                            <span className="font-semibold text-gray-800 truncate text-[11px]">
+                                {customerName || customerMobile ? `${customerName || 'Customer'}${customerMobile ? ` (${customerMobile})` : ''}` : 'Walk-in Customer'}
                             </span>
-                            <span className="text-[10px] text-gray-400">
-                                • {activeStaff.find(s => s.id === selectedStaffId)?.name || 'Self (0%)'}
+                            <span className="text-[10px] text-gray-400 shrink-0">•</span>
+                            <span className="text-[10px] truncate shrink-0">
+                                {selectedStaffId ? (
+                                    <span className="font-medium text-gray-700">
+                                        Staff: {activeStaff.find(s => s.id === selectedStaffId)?.name || 'Self'}
+                                    </span>
+                                ) : (
+                                    <span className="text-amber-700 bg-amber-100/90 border border-amber-300 px-1.5 py-0.2 rounded font-bold text-[9px] animate-pulse">
+                                        Assign Staff *
+                                    </span>
+                                )}
                             </span>
-                        </span>
-                        <span className="text-[10px] text-maroon font-bold flex items-center gap-0.5 ml-2 shrink-0">
-                            {isCustomerDetailsOpen ? 'Collapse ▴' : 'Edit Customer ▾'}
-                        </span>
+                            {customerPoints > 0 && (
+                                <span className="hidden sm:inline-flex items-center gap-0.5 text-[9px] font-mono text-amber-800 bg-amber-100 px-1 py-0.2 rounded border border-amber-200 shrink-0 font-bold">
+                                    <Sparkles className="h-2.5 w-2.5 text-amber-600" /> {customerPoints} pts
+                                </span>
+                            )}
+                        </div>
+                        <div className="text-[10px] text-maroon font-bold flex items-center gap-1 ml-2 shrink-0">
+                            <span>{isCustomerDetailsOpen ? 'Collapse' : 'Edit Customer'}</span>
+                            {isCustomerDetailsOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                        </div>
                     </button>
-                    <div className={cn("px-3 py-2 space-y-1.5", !isCustomerDetailsOpen && "hidden lg:block")}>
+                    <div className={cn("px-3 py-2 space-y-1.5 bg-stone-50/50", !isCustomerDetailsOpen && "hidden")}>
                         <div className="grid grid-cols-2 gap-1.5">
                             <div className="relative">
                                 <Input
@@ -1352,6 +1375,14 @@ export default function SalesPage() {
                                     </option>
                                 ))}
                             </select>
+                            <button
+                                type="button"
+                                onClick={() => setIsCustomerDetailsOpen(false)}
+                                className="h-8 px-2.5 bg-stone-200 hover:bg-stone-300 text-stone-700 text-[10px] font-bold rounded-lg transition-colors shrink-0"
+                                title="Close details"
+                            >
+                                Done
+                            </button>
                         </div>
 
                         {/* Customer Loyalty Status & Quick Enroll */}
@@ -1445,7 +1476,7 @@ export default function SalesPage() {
                                 <div className="flex gap-2 items-center justify-between">
                                     <div className="flex-1 min-w-0">
                                         <div className="font-bold text-xs text-gray-800 truncate">{item.sareeName}</div>
-                                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[9px] text-gray-400 mt-0.5">
+                                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[9px] text-gray-400 mt-0.5">
                                             <span className="font-mono bg-gray-50 px-1 py-0.2 rounded border border-gray-100">{item.sareeId}</span>
                                             {item.mrp > item.sellingPrice ? (
                                                 <span className="text-red-500 font-semibold">
@@ -1454,19 +1485,28 @@ export default function SalesPage() {
                                             ) : (
                                                 <span className="text-gray-500">MRP ₹{item.mrp}</span>
                                             )}
+                                            <button
+                                                type="button"
+                                                onClick={() => setAddonModalItemIndex(index)}
+                                                className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-maroon hover:text-maroon-dark bg-gold/10 hover:bg-gold/20 border border-gold/30 hover:border-gold/50 px-1.5 py-0.2 rounded transition-all cursor-pointer"
+                                                title="Add blouse stitching, fall/pico, or tailoring services"
+                                            >
+                                                <Scissors className="h-2.5 w-2.5 text-gold-dark shrink-0" />
+                                                <span>{item.addons && item.addons.length > 0 ? '+ More services' : '+ Tailoring'}</span>
+                                            </button>
                                         </div>
 
                                         {/* Selected Add-ons / Tailoring Badges */}
                                         {item.addons && item.addons.length > 0 && (
-                                            <div className="flex flex-wrap gap-1 mt-1.5">
+                                            <div className="flex flex-wrap gap-1 mt-1">
                                                 {item.addons.map((addon, aIdx) => (
                                                     <span
                                                         key={aIdx}
-                                                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 border border-amber-200/90 text-[10px] text-amber-900 font-medium shadow-2xs"
+                                                        className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded bg-amber-50 border border-amber-200/90 text-[9px] text-amber-900 font-medium shadow-2xs"
                                                     >
-                                                        <Scissors className="h-2.5 w-2.5 text-amber-700 shrink-0" />
-                                                        <span className="font-semibold truncate max-w-[110px]">{addon.title}</span>
-                                                        {addon.size && <span className="text-amber-700 font-mono text-[9px]">({addon.size})</span>}
+                                                        <Scissors className="h-2 w-2 text-amber-700 shrink-0" />
+                                                        <span className="font-semibold truncate max-w-[100px]">{addon.title}</span>
+                                                        {addon.size && <span className="text-amber-700 font-mono text-[8px]">({addon.size})</span>}
                                                         <span className="font-bold text-amber-900 font-mono shrink-0">+₹{addon.price}</span>
                                                         <button
                                                             type="button"
@@ -1474,7 +1514,7 @@ export default function SalesPage() {
                                                                 e.stopPropagation();
                                                                 handleRemoveAddonFromCartItem(index, aIdx);
                                                             }}
-                                                            className="text-amber-500 hover:text-red-600 rounded p-0.2 ml-0.5 transition-colors"
+                                                            className="text-amber-500 hover:text-red-600 rounded p-0.2 ml-0.5 transition-colors cursor-pointer"
                                                             title="Remove service"
                                                         >
                                                             <X className="h-2.5 w-2.5" />
@@ -1483,19 +1523,6 @@ export default function SalesPage() {
                                                 ))}
                                             </div>
                                         )}
-
-                                        {/* Add Tailoring / Add-on Options Button */}
-                                        <div className="mt-1">
-                                            <button
-                                                type="button"
-                                                onClick={() => setAddonModalItemIndex(index)}
-                                                className="inline-flex items-center gap-1 text-[10px] font-semibold text-maroon hover:text-maroon-dark bg-gold/10 hover:bg-gold/20 border border-gold/30 hover:border-gold/50 px-1.5 py-0.5 rounded transition-all"
-                                                title="Add blouse stitching, fall/pico, or tailoring services"
-                                            >
-                                                <Scissors className="h-2.5 w-2.5 text-gold-dark shrink-0" />
-                                                <span>{item.addons && item.addons.length > 0 ? '+ Add more services' : '+ Tailoring / Add-ons'}</span>
-                                            </button>
-                                        </div>
                                     </div>
 
                                     <div className="flex items-center gap-1.5 shrink-0">
@@ -1608,7 +1635,7 @@ export default function SalesPage() {
                 </div>
 
                 {/* Cart Financial Breakdown & Checkout Section (Fixed at Bottom) */}
-                <div className="border-t border-stone-200 bg-stone-50/80 p-3 space-y-2 shrink-0 shadow-[0_-4px_16px_rgba(0,0,0,0.05)]">
+                <div className="border-t border-stone-200 bg-stone-50/80 p-2.5 sm:p-3 space-y-2 shrink-0 shadow-[0_-4px_16px_rgba(0,0,0,0.05)]">
                     
                     {/* Controls Row: Payment Mode & GST Toggle */}
                     <div className="grid grid-cols-2 gap-2">
@@ -1620,7 +1647,7 @@ export default function SalesPage() {
                                     type="button"
                                     onClick={() => setPaymentMode(mode)}
                                     className={cn(
-                                        "flex-1 flex items-center justify-center gap-1 py-1 rounded-md text-[10px] font-bold transition-all capitalize select-none h-6.5",
+                                        "flex-1 flex items-center justify-center gap-1 py-1 rounded-md text-[10px] font-bold transition-all capitalize select-none h-6.5 cursor-pointer",
                                         paymentMode === mode
                                             ? "bg-maroon text-gold shadow-xs"
                                             : "text-stone-600 hover:bg-stone-100"
@@ -1641,7 +1668,7 @@ export default function SalesPage() {
                                 type="button"
                                 onClick={() => setIsGstApplied(prev => !prev)}
                                 className={cn(
-                                    "flex items-center gap-1 px-2 py-0.5 rounded border text-[10px] font-bold transition-all select-none h-5.5",
+                                    "flex items-center gap-1 px-2 py-0.5 rounded border text-[10px] font-bold transition-all select-none h-5.5 cursor-pointer",
                                     isGstApplied
                                         ? "bg-emerald-600 text-white border-emerald-700"
                                         : "bg-stone-100 text-stone-500 border-stone-200 hover:bg-stone-200"
@@ -1653,221 +1680,270 @@ export default function SalesPage() {
                         </div>
                     </div>
 
-                    {/* Mobile 1-Line Summary Bar & Toggle */}
-                    <button
-                        type="button"
-                        onClick={() => setIsBreakdownOpen(prev => !prev)}
-                        className="lg:hidden w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 flex items-center justify-between shadow-xs text-xs"
-                    >
-                        <div className="flex items-center gap-1.5 truncate">
-                            <span className="font-bold text-stone-600 text-[11px]">Net Payable:</span>
-                            <span className="font-mono font-black text-sm text-maroon">
-                                ₹{netPayable.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </span>
-                            {totalDiscountAmount > 0 && (
-                                <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200 shrink-0">
-                                    Saved ₹{totalDiscountAmount}
-                                </span>
+                    {/* Discounts & Offers Accordion */}
+                    <div className="bg-white border border-stone-200 rounded-lg overflow-hidden shadow-2xs">
+                        <button
+                            type="button"
+                            onClick={() => setIsDiscountsOpen(prev => !prev)}
+                            className={cn(
+                                "w-full px-2.5 py-1.5 flex items-center justify-between text-xs transition-colors cursor-pointer select-none",
+                                (appliedVoucher || parseFloat(manualDiscountInput) > 0 || loyaltyRedeemedPoints > 0)
+                                    ? "bg-amber-50/80 hover:bg-amber-100/70"
+                                    : "hover:bg-stone-50"
                             )}
-                        </div>
-                        <span className="text-[10px] text-maroon font-bold flex items-center gap-0.5 ml-2 shrink-0">
-                            {isBreakdownOpen ? 'Hide breakdown ▴' : 'Discounts & Breakdown ▾'}
-                        </span>
-                    </button>
-
-                    {/* Collapsible Details Container (Always visible on desktop, toggleable on mobile) */}
-                    <div className={cn("space-y-2", !isBreakdownOpen && "hidden lg:block")}>
-                        {/* Controls Row: Extra Discount & Store Voucher */}
-                        <div className="grid grid-cols-2 gap-2">
-                            {/* Extra Discount Input */}
-                            <div className="flex items-center justify-between bg-white border border-stone-200 rounded-lg px-2 py-1 shadow-xs">
-                                <span className="text-[10px] font-bold text-maroon shrink-0 flex items-center gap-0.5">
-                                    <Edit2 className="h-2.5 w-2.5" /> Extra Disc
-                                </span>
-                                <div className="flex items-center gap-1">
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        value={manualDiscountInput}
-                                        onChange={(e) => setManualDiscountInput(e.target.value)}
-                                        className="w-10 h-5 text-xs font-mono font-bold border border-amber-300 rounded bg-amber-50/80 text-center text-maroon focus:outline-none focus:ring-1 focus:ring-maroon"
-                                        placeholder="0"
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={() => setManualDiscountType(prev => prev === 'percentage' ? 'amount' : 'percentage')}
-                                        className="text-[9px] font-bold bg-maroon text-gold hover:bg-maroon-dark px-1.5 h-5 rounded font-mono transition-colors flex items-center justify-center"
-                                        title="Toggle % or ₹"
-                                    >
-                                        {manualDiscountType === 'percentage' ? '%' : '₹'}
-                                    </button>
-                                </div>
-                            </div>
-
-                            {/* Store Voucher Input / Badge */}
-                            <div className="flex items-center bg-white border border-stone-200 rounded-lg p-1 shadow-xs">
-                                {appliedVoucher ? (
-                                    <div className="flex items-center justify-between w-full text-[10px] bg-amber-50 rounded border border-amber-200 px-1.5 py-0.5 h-5.5">
-                                        <span className="font-bold text-amber-900 font-mono truncate">{appliedVoucher.code} (-₹{appliedVoucherAmount})</span>
-                                        <button
-                                            type="button"
-                                            onClick={handleClearVoucher}
-                                            className="text-[9px] text-red-600 hover:text-red-800 font-bold uppercase ml-1 shrink-0"
-                                        >
-                                            ✕
-                                        </button>
-                                    </div>
-                                ) : (
-                                    <div className="flex items-center gap-1 w-full">
-                                        <input
-                                            type="text"
-                                            placeholder="Voucher Code"
-                                            value={voucherCodeInput}
-                                            onChange={(e) => setVoucherCodeInput(e.target.value.toUpperCase())}
-                                            className="w-full text-[10px] border border-stone-200 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-maroon uppercase font-mono h-5.5 bg-white text-stone-800"
-                                            onKeyDown={(e) => e.key === 'Enter' && handleApplyVoucher()}
-                                        />
-                                        <button
-                                            type="button"
-                                            disabled={isCheckingVoucher || !voucherCodeInput.trim()}
-                                            onClick={handleApplyVoucher}
-                                            className="bg-maroon hover:bg-maroon-dark text-gold disabled:opacity-50 text-[9px] font-bold px-2 rounded transition-colors h-5.5 uppercase shrink-0"
-                                        >
-                                            {isCheckingVoucher ? '...' : 'APPLY'}
-                                        </button>
-                                    </div>
+                        >
+                            <div className="flex items-center gap-1.5 truncate min-w-0 pr-1">
+                                <Tag className={cn("h-3.5 w-3.5 shrink-0", (appliedVoucher || parseFloat(manualDiscountInput) > 0 || loyaltyRedeemedPoints > 0) ? "text-amber-700" : "text-maroon")} />
+                                <span className="font-semibold text-stone-800 text-[11px] truncate">Discounts &amp; Offers</span>
+                                {appliedVoucher && (
+                                    <span className="text-[9px] font-bold text-amber-900 bg-amber-100 border border-amber-200 px-1.5 py-0.2 rounded truncate">
+                                        {appliedVoucher.code} (-₹{appliedVoucherAmount})
+                                    </span>
+                                )}
+                                {parseFloat(manualDiscountInput) > 0 && (
+                                    <span className="text-[9px] font-bold text-amber-900 bg-amber-100 border border-amber-200 px-1.5 py-0.2 rounded">
+                                        Extra: {manualDiscountInput}{manualDiscountType === 'percentage' ? '%' : '₹'}
+                                    </span>
+                                )}
+                                {loyaltyRedeemedPoints > 0 && (
+                                    <span className="text-[9px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-200 px-1.5 py-0.2 rounded">
+                                        Pts: -₹{effectiveLoyaltyDiscount}
+                                    </span>
+                                )}
+                                {!appliedVoucher && !(parseFloat(manualDiscountInput) > 0) && !(loyaltyRedeemedPoints > 0) && currentCustomer && (currentCustomer.loyaltyPointsBalance || 0) > 0 && (
+                                    <span className="text-[9px] text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded font-medium border border-amber-100 hidden sm:inline">
+                                        {customerPoints} pts available
+                                    </span>
                                 )}
                             </div>
-                        </div>
+                            <div className="flex items-center gap-0.5 text-[10px] text-maroon font-bold shrink-0 ml-1">
+                                <span>{isDiscountsOpen ? 'Hide' : (appliedVoucher || parseFloat(manualDiscountInput) > 0 || loyaltyRedeemedPoints > 0 ? 'Edit' : 'Apply')}</span>
+                                {isDiscountsOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                            </div>
+                        </button>
 
-                        {/* Loyalty Points Redemption Bar */}
-                        {currentCustomer && (currentCustomer.loyaltyPointsBalance || 0) > 0 && isLoyaltyActive && (
-                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-amber-50/90 border border-amber-300 rounded-lg px-2.5 py-1.5 shadow-xs gap-1.5">
-                                <div className="flex items-center gap-1.5 text-xs text-amber-950">
-                                    <Award className="h-4 w-4 text-amber-600 shrink-0" />
-                                    <div>
-                                        <span className="font-bold">Shree Rewards: </span>
-                                        <span className="text-[11px] font-semibold text-amber-800">
-                                            {customerPoints} pts (₹{(customerPoints * pointValInInr).toLocaleString('en-IN')})
+                        {isDiscountsOpen && (
+                            <div className="p-2 pt-1.5 border-t border-stone-100 bg-stone-50/50 space-y-1.5">
+                                {/* Controls Row: Extra Discount & Store Voucher */}
+                                <div className="grid grid-cols-2 gap-1.5">
+                                    {/* Extra Discount Input */}
+                                    <div className="flex items-center justify-between bg-white border border-stone-200 rounded-lg px-2 py-1 shadow-2xs">
+                                        <span className="text-[10px] font-bold text-maroon shrink-0 flex items-center gap-0.5">
+                                            <Edit2 className="h-2.5 w-2.5" /> Extra Disc
                                         </span>
-                                        {maxRedeemablePoints > 0 && (
-                                            <span className="text-[10px] text-amber-700/80 hidden md:inline ml-1 font-medium">
-                                                (Cap: {loyaltySettings?.max_redeem_percent_of_bill ?? 25}% of bill)
-                                            </span>
+                                        <div className="flex items-center gap-1">
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                value={manualDiscountInput}
+                                                onChange={(e) => setManualDiscountInput(e.target.value)}
+                                                className="w-10 h-5 text-xs font-mono font-bold border border-amber-300 rounded bg-amber-50/80 text-center text-maroon focus:outline-none focus:ring-1 focus:ring-maroon"
+                                                placeholder="0"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => setManualDiscountType(prev => prev === 'percentage' ? 'amount' : 'percentage')}
+                                                className="text-[9px] font-bold bg-maroon text-gold hover:bg-maroon-dark px-1.5 h-5 rounded font-mono transition-colors flex items-center justify-center cursor-pointer"
+                                                title="Toggle % or ₹"
+                                            >
+                                                {manualDiscountType === 'percentage' ? '%' : '₹'}
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* Store Voucher Input / Badge */}
+                                    <div className="flex items-center bg-white border border-stone-200 rounded-lg p-1 shadow-2xs">
+                                        {appliedVoucher ? (
+                                            <div className="flex items-center justify-between w-full text-[10px] bg-amber-50 rounded border border-amber-200 px-1.5 py-0.5 h-5.5">
+                                                <span className="font-bold text-amber-900 font-mono truncate">{appliedVoucher.code} (-₹{appliedVoucherAmount})</span>
+                                                <button
+                                                    type="button"
+                                                    onClick={handleClearVoucher}
+                                                    className="text-[9px] text-red-600 hover:text-red-800 font-bold uppercase ml-1 shrink-0 cursor-pointer"
+                                                >
+                                                    ✕
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <div className="flex items-center gap-1 w-full">
+                                                <input
+                                                    type="text"
+                                                    placeholder="Voucher Code"
+                                                    value={voucherCodeInput}
+                                                    onChange={(e) => setVoucherCodeInput(e.target.value.toUpperCase())}
+                                                    className="w-full text-[10px] border border-stone-200 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-maroon uppercase font-mono h-5.5 bg-white text-stone-800"
+                                                    onKeyDown={(e) => e.key === 'Enter' && handleApplyVoucher()}
+                                                />
+                                                <button
+                                                    type="button"
+                                                    disabled={isCheckingVoucher || !voucherCodeInput.trim()}
+                                                    onClick={handleApplyVoucher}
+                                                    className="bg-maroon hover:bg-maroon-dark text-gold disabled:opacity-50 text-[9px] font-bold px-2 rounded transition-colors h-5.5 uppercase shrink-0 cursor-pointer"
+                                                >
+                                                    {isCheckingVoucher ? '...' : 'APPLY'}
+                                                </button>
+                                            </div>
                                         )}
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-1.5 self-end sm:self-center">
-                                    {loyaltyRedeemedPoints > 0 ? (
-                                        <div className="flex items-center gap-1 bg-amber-200 text-amber-950 font-bold px-2 py-0.5 rounded text-xs">
-                                            <span>-₹{effectiveLoyaltyDiscount} ({pointsRedeemedCount} pts)</span>
-                                            <button
-                                                type="button"
-                                                onClick={() => setLoyaltyRedeemedPoints(0)}
-                                                className="text-red-700 hover:text-red-900 font-bold ml-1 text-xs cursor-pointer"
-                                                title="Remove loyalty discount"
-                                            >
-                                                ✕
-                                            </button>
+
+                                {/* Loyalty Points Redemption Bar */}
+                                {currentCustomer && (currentCustomer.loyaltyPointsBalance || 0) > 0 && isLoyaltyActive && (
+                                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-amber-50/90 border border-amber-300 rounded-lg px-2.5 py-1.5 shadow-2xs gap-1.5">
+                                        <div className="flex items-center gap-1.5 text-xs text-amber-950">
+                                            <Award className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                                            <div>
+                                                <span className="font-bold text-[11px]">Shree Rewards: </span>
+                                                <span className="text-[10px] font-semibold text-amber-800">
+                                                    {customerPoints} pts (₹{(customerPoints * pointValInInr).toLocaleString('en-IN')})
+                                                </span>
+                                                {maxRedeemablePoints > 0 && (
+                                                    <span className="text-[9px] text-amber-700/80 hidden md:inline ml-1 font-medium">
+                                                        (Cap: {loyaltySettings?.max_redeem_percent_of_bill ?? 25}%)
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
-                                    ) : maxRedeemablePoints > 0 ? (
-                                        <button
-                                            type="button"
-                                            onClick={() => setLoyaltyRedeemedPoints(maxRedeemablePoints)}
-                                            className="bg-amber-600 hover:bg-amber-700 text-white font-bold px-2.5 py-1 rounded text-[11px] transition-colors shadow-2xs cursor-pointer"
-                                        >
-                                            Redeem {maxRedeemablePoints} pts (-₹{maxRedeemablePoints * pointValInInr})
-                                        </button>
-                                    ) : (
-                                        <span className="text-[10px] font-semibold text-amber-900 bg-amber-100/90 border border-amber-200 px-2 py-0.5 rounded">
-                                            {loyaltyBlockReason}
-                                        </span>
-                                    )}
-                                </div>
+                                        <div className="flex items-center gap-1.5 self-end sm:self-center">
+                                            {loyaltyRedeemedPoints > 0 ? (
+                                                <div className="flex items-center gap-1 bg-amber-200 text-amber-950 font-bold px-2 py-0.5 rounded text-[11px]">
+                                                    <span>-₹{effectiveLoyaltyDiscount} ({pointsRedeemedCount} pts)</span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setLoyaltyRedeemedPoints(0)}
+                                                        className="text-red-700 hover:text-red-900 font-bold ml-1 text-xs cursor-pointer"
+                                                        title="Remove loyalty discount"
+                                                    >
+                                                        ✕
+                                                    </button>
+                                                </div>
+                                            ) : maxRedeemablePoints > 0 ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setLoyaltyRedeemedPoints(maxRedeemablePoints)}
+                                                    className="bg-amber-600 hover:bg-amber-700 text-white font-bold px-2.5 py-1 rounded text-[10px] transition-colors shadow-2xs cursor-pointer"
+                                                >
+                                                    Redeem {maxRedeemablePoints} pts (-₹{maxRedeemablePoints * pointValInInr})
+                                                </button>
+                                            ) : (
+                                                <span className="text-[9px] font-semibold text-amber-900 bg-amber-100/90 border border-amber-200 px-1.5 py-0.5 rounded">
+                                                    {loyaltyBlockReason}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         )}
+                    </div>
 
-                        {/* Complete Price Breakup Summary */}
-                        <div className="bg-white rounded-lg border border-stone-200/90 p-2.5 text-xs space-y-1 shadow-xs">
-                            <div className="flex justify-between text-stone-600">
-                                <span>Sarees Subtotal (MRP)</span>
-                                <span className="font-mono font-medium">₹{sareesMrpSubtotal.toLocaleString('en-IN')}</span>
-                            </div>
-                            {cartAddonsTotal > 0 && (
-                                <div className="flex justify-between text-amber-900 text-[11px] font-semibold">
-                                    <span className="flex items-center gap-1">
-                                        <Scissors className="h-3 w-3 text-amber-700 shrink-0" />
-                                        <span>Tailoring &amp; Add-ons</span>
-                                    </span>
-                                    <span className="font-mono font-bold">+₹{cartAddonsTotal.toLocaleString('en-IN')}</span>
-                                </div>
-                            )}
-                            {itemDiscountAmount > 0 && (
-                                <div className="flex justify-between text-emerald-700 text-[11px]">
-                                    <span>Item Discount</span>
-                                    <span className="font-mono font-medium">-₹{itemDiscountAmount.toLocaleString('en-IN')}</span>
-                                </div>
-                            )}
-                            {totalDiscountAmount > itemDiscountAmount && (
-                                <div className="flex justify-between text-amber-700 text-[11px]">
-                                    <span>Extra Discount</span>
-                                    <span className="font-mono font-medium">-₹{(totalDiscountAmount - itemDiscountAmount).toLocaleString('en-IN')}</span>
-                                </div>
-                            )}
-                            {overallDiscountPercentage > 0 && (
-                                <div className="flex justify-between text-emerald-800 text-[10px] font-semibold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                                    <span>Total Savings</span>
-                                    <span className="font-mono">-₹{totalDiscountAmount.toLocaleString('en-IN')} ({overallDiscountPercentage}%)</span>
-                                </div>
-                            )}
-
-                            {isGstApplied && (
-                                <div className="pt-1 mt-1 border-t border-stone-100 space-y-0.5">
-                                    <div className="flex justify-between text-stone-700 font-semibold text-[11px]">
-                                        <span>Taxable Amount</span>
-                                        <span className="font-mono">₹{gstData.taxableAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                                    </div>
-                                    <div className="flex justify-between text-stone-500 text-[10px] pl-1.5">
-                                        <span>CGST (2.5%) + SGST (2.5%)</span>
-                                        <span className="font-mono">₹{gstData.totalGst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                                    </div>
-                                </div>
-                            )}
-
-                            {appliedVoucherAmount > 0 && (
-                                <div className="flex justify-between text-amber-800 text-[11px] pt-1 border-t border-amber-100">
-                                    <span>Voucher Redeem</span>
-                                    <span className="font-mono">-₹{appliedVoucherAmount.toLocaleString('en-IN')}</span>
-                                </div>
-                            )}
-
-                            {effectiveLoyaltyDiscount > 0 && (
-                                <div className="flex justify-between text-amber-800 text-[11px] pt-1 border-t border-amber-100 font-semibold">
-                                    <span className="flex items-center gap-1">
-                                        <Award className="h-3 w-3 text-amber-600" />
-                                        <span>Rewards Redeemed ({pointsRedeemedCount} pts)</span>
-                                    </span>
-                                    <span className="font-mono text-emerald-700">-₹{effectiveLoyaltyDiscount.toLocaleString('en-IN')}</span>
-                                </div>
-                            )}
-
-                            <div className="flex justify-between items-center text-maroon font-bold text-base pt-1.5 border-t border-stone-200">
-                                <span>Net Payable</span>
-                                <span className="font-mono font-black text-lg text-maroon">
-                                    ₹{netPayable.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                </span>
-                            </div>
-
-                            {pointsToEarn > 0 && (
-                                <div className="text-[10px] text-amber-800 font-medium pt-1 flex items-center justify-between border-t border-stone-100">
-                                    <span className="flex items-center gap-1">
-                                        <Sparkles className="h-3 w-3 text-amber-600" />
-                                        <span>Points earned today</span>
-                                    </span>
-                                    <span className="font-bold font-mono text-emerald-700">+{pointsToEarn} pts</span>
-                                </div>
-                            )}
+                    {/* High-Level Bill Summary Card */}
+                    <div className="bg-white rounded-lg border border-stone-200/90 p-2 sm:p-2.5 text-xs shadow-2xs space-y-1">
+                        <div className="flex justify-between items-center text-stone-600 text-[11px]">
+                            <span>Items Subtotal ({cart.reduce((sum, item) => sum + item.quantity, 0)})</span>
+                            <span className="font-mono font-medium">₹{sareesMrpSubtotal.toLocaleString('en-IN')}</span>
                         </div>
+                        {cartAddonsTotal > 0 && (
+                            <div className="flex justify-between items-center text-amber-900 text-[10px] font-semibold">
+                                <span className="flex items-center gap-1">
+                                    <Scissors className="h-2.5 w-2.5 text-amber-700 shrink-0" />
+                                    <span>Tailoring Services</span>
+                                </span>
+                                <span className="font-mono font-bold">+₹{cartAddonsTotal.toLocaleString('en-IN')}</span>
+                            </div>
+                        )}
+                        {totalDiscountAmount > 0 && (
+                            <div className="flex justify-between items-center text-emerald-700 text-[11px]">
+                                <span>Total Savings</span>
+                                <span className="font-mono font-bold">-₹{totalDiscountAmount.toLocaleString('en-IN')} ({overallDiscountPercentage}%)</span>
+                            </div>
+                        )}
+                        <div className="flex justify-between items-center text-maroon font-bold pt-1 border-t border-stone-100">
+                            <span className="text-xs">Net Payable</span>
+                            <span className="font-mono font-black text-base text-maroon">
+                                ₹{netPayable.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                        </div>
+
+                        {/* Detailed Breakdown Toggle */}
+                        <button
+                            type="button"
+                            onClick={() => setIsBreakdownOpen(prev => !prev)}
+                            className="w-full pt-1 flex items-center justify-between text-[10px] text-stone-500 hover:text-maroon border-t border-dashed border-stone-100 transition-colors cursor-pointer select-none"
+                        >
+                            <span className="font-medium">
+                                {isGstApplied ? 'GST 5% Included' : 'GST not applied'}
+                                {pointsToEarn > 0 && ` • +${pointsToEarn} pts`}
+                            </span>
+                            <span className="font-bold flex items-center gap-0.5 text-maroon">
+                                {isBreakdownOpen ? 'Hide Tax Breakdown' : 'Tax & Bill Details'}
+                                {isBreakdownOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                            </span>
+                        </button>
+
+                        {/* Itemized Tax & Bill Details (when expanded) */}
+                        {isBreakdownOpen && (
+                            <div className="pt-1.5 mt-1 border-t border-stone-100 space-y-1 text-[11px] text-stone-600 bg-stone-50/50 p-1.5 rounded">
+                                <div className="flex justify-between">
+                                    <span>Sarees Subtotal (MRP)</span>
+                                    <span className="font-mono font-medium">₹{sareesMrpSubtotal.toLocaleString('en-IN')}</span>
+                                </div>
+                                {cartAddonsTotal > 0 && (
+                                    <div className="flex justify-between text-amber-900 font-semibold">
+                                        <span>Tailoring &amp; Add-ons</span>
+                                        <span className="font-mono font-bold">+₹{cartAddonsTotal.toLocaleString('en-IN')}</span>
+                                    </div>
+                                )}
+                                {itemDiscountAmount > 0 && (
+                                    <div className="flex justify-between text-emerald-700">
+                                        <span>Item Discount</span>
+                                        <span className="font-mono font-medium">-₹{itemDiscountAmount.toLocaleString('en-IN')}</span>
+                                    </div>
+                                )}
+                                {totalDiscountAmount > itemDiscountAmount && (
+                                    <div className="flex justify-between text-amber-700">
+                                        <span>Extra Discount</span>
+                                        <span className="font-mono font-medium">-₹{(totalDiscountAmount - itemDiscountAmount).toLocaleString('en-IN')}</span>
+                                    </div>
+                                )}
+                                {isGstApplied && (
+                                    <div className="pt-0.5 border-t border-stone-200/60 space-y-0.5">
+                                        <div className="flex justify-between text-stone-700 font-semibold text-[10px]">
+                                            <span>Taxable Amount</span>
+                                            <span className="font-mono">₹{gstData.taxableAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                        </div>
+                                        <div className="flex justify-between text-stone-500 text-[10px] pl-1.5">
+                                            <span>CGST (2.5%) + SGST (2.5%)</span>
+                                            <span className="font-mono">₹{gstData.totalGst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                        </div>
+                                    </div>
+                                )}
+                                {appliedVoucherAmount > 0 && (
+                                    <div className="flex justify-between text-amber-800 pt-0.5 border-t border-amber-100">
+                                        <span>Voucher Redeem</span>
+                                        <span className="font-mono">-₹{appliedVoucherAmount.toLocaleString('en-IN')}</span>
+                                    </div>
+                                )}
+                                {effectiveLoyaltyDiscount > 0 && (
+                                    <div className="flex justify-between text-amber-800 pt-0.5 border-t border-amber-100 font-semibold">
+                                        <span className="flex items-center gap-1">
+                                            <Award className="h-3 w-3 text-amber-600" />
+                                            <span>Rewards Redeemed ({pointsRedeemedCount} pts)</span>
+                                        </span>
+                                        <span className="font-mono text-emerald-700">-₹{effectiveLoyaltyDiscount.toLocaleString('en-IN')}</span>
+                                    </div>
+                                )}
+                                {pointsToEarn > 0 && (
+                                    <div className="text-[10px] text-amber-800 font-medium pt-0.5 flex items-center justify-between border-t border-stone-200/60">
+                                        <span className="flex items-center gap-1">
+                                            <Sparkles className="h-3 w-3 text-amber-600" />
+                                            <span>Points earned today</span>
+                                        </span>
+                                        <span className="font-bold font-mono text-emerald-700">+{pointsToEarn} pts</span>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
 
                     {/* Primary Checkout Button */}
