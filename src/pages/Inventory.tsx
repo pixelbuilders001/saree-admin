@@ -70,6 +70,7 @@ import { CsvImportModal } from '@/components/inventory/CsvImportModal';
 import { BulkImageUploadModal } from '@/components/inventory/BulkImageUploadModal';
 import { CategoryProductsModal } from '@/components/inventory/CategoryProductsModal';
 import { DuplicateSareeModal } from '@/components/inventory/DuplicateSareeModal';
+import { BulkEditModal } from '@/components/inventory/BulkEditModal';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 
@@ -108,6 +109,7 @@ export default function InventoryPage() {
     const [galleryActiveIndex, setGalleryActiveIndex] = React.useState<number>(0);
     const [viewingSaree, setViewingSaree] = React.useState<Saree | null>(null);
     const [duplicatingSaree, setDuplicatingSaree] = React.useState<Saree | null>(null);
+    const [isBulkEditOpen, setIsBulkEditOpen] = React.useState(false);
 
     const queryClient = useQueryClient();
 
@@ -314,6 +316,11 @@ export default function InventoryPage() {
 
     const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
     const [isBulkUpdating, setIsBulkUpdating] = React.useState(false);
+
+    const selectedSareesList = React.useMemo(() => {
+        if (!sarees || selectedIds.size === 0) return [];
+        return sarees.filter(s => selectedIds.has(s.id));
+    }, [sarees, selectedIds]);
 
     const isAllSelected = paginatedSarees.length > 0 && paginatedSarees.every(s => selectedIds.has(s.id));
     const isSomeSelected = paginatedSarees.some(s => selectedIds.has(s.id)) && !isAllSelected;
@@ -951,9 +958,17 @@ export default function InventoryPage() {
                                 <span className="bg-gold/20 text-gold text-xs font-bold px-2.5 py-1 rounded-full border border-gold/30 font-mono">
                                     {selectedIds.size} row{selectedIds.size > 1 ? 's' : ''} selected
                                 </span>
-                                <span className="text-xs text-cream/90 font-medium hidden sm:inline">Bulk Status:</span>
+                                <span className="text-xs text-cream/90 font-medium hidden sm:inline">Bulk Actions:</span>
                             </div>
                             <div className="flex items-center gap-2">
+                                <Button
+                                    size="sm"
+                                    onClick={() => setIsBulkEditOpen(true)}
+                                    className="h-8 px-3.5 text-xs font-bold bg-gold hover:bg-gold-light text-maroon-dark gap-1.5 shadow-sm border border-gold/50 cursor-pointer transition-all"
+                                >
+                                    <Edit className="h-3.5 w-3.5" />
+                                    Bulk Edit ({selectedIds.size})
+                                </Button>
                                 <Button
                                     size="sm"
                                     disabled={isBulkUpdating}
@@ -1387,6 +1402,17 @@ export default function InventoryPage() {
                 onClose={() => setDuplicatingSaree(null)}
                 onSuccess={() => {
                     queryClient.invalidateQueries({ queryKey: ['sarees'] });
+                }}
+            />
+
+            <BulkEditModal
+                isOpen={isBulkEditOpen}
+                onClose={() => setIsBulkEditOpen(false)}
+                selectedSarees={selectedSareesList}
+                availableFabrics={fabrics}
+                onSuccess={() => {
+                    queryClient.invalidateQueries({ queryKey: ['sarees'] });
+                    clearSelection();
                 }}
             />
 

@@ -88,6 +88,18 @@ export interface BulkImportRowInput {
     hasBlouse?: boolean | null;
 }
 
+export interface BulkUpdateItem {
+    id: string;
+    category?: string;
+    category_id?: string | null;
+    fabric?: string;
+    status?: 'active' | 'inactive';
+    mrp?: number;
+    selling_price?: number;
+    discount_amount?: number;
+    discount_percentage?: number;
+}
+
 export interface DuplicatePiecesOptions {
     sourceSareeId: string;
     numberOfPieces: number;
@@ -614,6 +626,55 @@ export const inventoryService = {
             .in('id', ids);
 
         if (error) throw error;
+    },
+
+    bulkUpdateSarees: async (items: BulkUpdateItem[]): Promise<void> => {
+        if (!items || items.length === 0) return;
+        const userEmail = useAuthStore.getState().user?.email || 'system';
+
+        // Check if all items have identical update values (excluding id)
+        const firstChanges = { ...items[0] };
+        delete (firstChanges as any).id;
+        const firstChangesStr = JSON.stringify(firstChanges);
+        const isUniform = items.every(item => {
+            const c = { ...item };
+            delete (c as any).id;
+            return JSON.stringify(c) === firstChangesStr;
+        });
+
+        if (isUniform) {
+            const ids = items.map(i => i.id);
+            const { error } = await supabase
+                .from('inventory')
+                .update({
+                    ...firstChanges,
+                    updated_by: userEmail
+                })
+                .in('id', ids);
+
+            if (error) throw error;
+            return;
+        }
+
+        // Parallel batch updates for customized pricing / values per item
+        const BATCH_SIZE = 25;
+        for (let i = 0; i < items.length; i += BATCH_SIZE) {
+            const batch = items.slice(i, i + BATCH_SIZE);
+            const promises = batch.map(item => {
+                const { id, ...changes } = item;
+                return supabase
+                    .from('inventory')
+                    .update({
+                        ...changes,
+                        updated_by: userEmail
+                    })
+                    .eq('id', id);
+            });
+            const results = await Promise.all(promises);
+            for (const res of results) {
+                if (res.error) throw res.error;
+            }
+        }
     },
 
     uploadImage: async (file: File, inventoryId: string): Promise<SareeImage> => {
