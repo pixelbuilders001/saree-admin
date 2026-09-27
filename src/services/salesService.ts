@@ -77,6 +77,59 @@ export interface SaleReportItem {
     commissionEarned?: number;
 }
 
+export interface DetailedSaleItem {
+    id: string;
+    sareeId: string;
+    sareeName: string;
+    sku?: string;
+    barcode?: string;
+    category?: string;
+    imageUrl?: string;
+    quantity: number;
+    sellingPrice: number;
+    purchasePrice: number;
+    totalAmount: number;
+    profit: number;
+    isReturn: boolean;
+}
+
+export interface DetailedSale {
+    id: string;
+    friendlyId: string;
+    invoiceNumber: string;
+    createdAt: string;
+    totalAmount: number;
+    subtotal: number;
+    profit: number;
+    paymentMode: string;
+    discountAmount: number;
+    discountPercentage: number;
+    isGstApplied: boolean;
+    gstRate: number;
+    taxableAmount?: number;
+    cgstAmount?: number;
+    sgstAmount?: number;
+    igstAmount?: number;
+    totalGst?: number;
+    commissionEarned: number;
+    createdBy?: string;
+    updatedBy?: string;
+    isExchange: boolean;
+    itemCount: number;
+    customer?: {
+        id?: string;
+        name?: string;
+        mobile?: string;
+        loyaltyMemberCode?: string;
+        loyaltyTier?: string;
+    } | null;
+    salesperson?: {
+        id?: string;
+        name?: string;
+    } | null;
+    items: DetailedSaleItem[];
+}
+
 export const getFriendlyId = (uuid: string, isExchange: boolean): string => {
     if (!uuid) return '';
     const clean = uuid.replace(/-/g, '');
@@ -165,6 +218,144 @@ export const salesService = {
         });
 
         return reportItems;
+    },
+
+    getDetailedSales: async (): Promise<DetailedSale[]> => {
+        const { data, error } = await supabase
+            .from('sales')
+            .select(`
+                id,
+                invoice_number,
+                created_at,
+                total_amount,
+                profit,
+                payment_mode,
+                discount_amount,
+                discount_percentage,
+                is_gst_applied,
+                gst_rate,
+                taxable_amount,
+                cgst_amount,
+                sgst_amount,
+                igst_amount,
+                total_gst,
+                commission_earned,
+                created_by,
+                updated_by,
+                customers (
+                    id,
+                    name,
+                    mobile,
+                    loyalty_member_code,
+                    loyalty_tier
+                ),
+                staff (
+                    id,
+                    name
+                ),
+                sale_items (
+                    id,
+                    saree_id,
+                    quantity,
+                    selling_price,
+                    inventory (
+                        id,
+                        saree_name,
+                        sku,
+                        barcode,
+                        category,
+                        purchase_price,
+                        selling_price,
+                        inventory_images (
+                            image_url,
+                            is_primary
+                        )
+                    )
+                )
+            `)
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        return (data || []).map((sale: any) => {
+            const rawItems = sale.sale_items || [];
+            const hasReturn = rawItems.some((item: any) => Number(item.quantity || 0) < 0 || Number(item.selling_price || 0) < 0);
+            const isExchange = hasReturn || (sale.invoice_number && sale.invoice_number.includes('-EX-'));
+            const friendlyId = getFriendlyId(sale.id, isExchange);
+
+            let calculatedSubtotal = 0;
+            let totalItemCount = 0;
+
+            const items: DetailedSaleItem[] = rawItems.map((item: any) => {
+                const quantity = Math.abs(Number(item.quantity || 0));
+                const sellingPrice = Number(item.selling_price || 0);
+                const isItemReturn = Number(item.selling_price || 0) < 0 || Number(item.quantity || 0) < 0;
+                const totalAmount = isItemReturn ? -Math.abs(quantity * sellingPrice) : quantity * sellingPrice;
+                const purchasePrice = Number(item.inventory?.purchase_price || 0);
+                const profit = isItemReturn
+                    ? totalAmount + (quantity * purchasePrice)
+                    : totalAmount - (quantity * purchasePrice);
+
+                calculatedSubtotal += (isItemReturn ? -1 : 1) * Math.abs(quantity * sellingPrice);
+                totalItemCount += (isItemReturn ? -quantity : quantity);
+
+                const images = item.inventory?.inventory_images || [];
+                const primaryImage = images.find((img: any) => img.is_primary)?.image_url || images[0]?.image_url || '';
+
+                return {
+                    id: item.id || `${sale.id}-${item.saree_id}`,
+                    sareeId: item.saree_id,
+                    sareeName: item.inventory?.saree_name || 'Item',
+                    sku: item.inventory?.sku || '',
+                    barcode: item.inventory?.barcode || '',
+                    category: item.inventory?.category || '',
+                    imageUrl: primaryImage,
+                    quantity,
+                    sellingPrice: Math.abs(sellingPrice),
+                    purchasePrice,
+                    totalAmount,
+                    profit,
+                    isReturn: isItemReturn
+                };
+            });
+
+            return {
+                id: sale.id,
+                friendlyId,
+                invoiceNumber: sale.invoice_number || friendlyId,
+                createdAt: sale.created_at,
+                totalAmount: Number(sale.total_amount || 0),
+                subtotal: Math.max(0, calculatedSubtotal),
+                profit: Number(sale.profit || 0),
+                paymentMode: (sale.payment_mode || 'cash').toLowerCase(),
+                discountAmount: Number(sale.discount_amount || 0),
+                discountPercentage: Number(sale.discount_percentage || 0),
+                isGstApplied: Boolean(sale.is_gst_applied),
+                gstRate: Number(sale.gst_rate || 0),
+                taxableAmount: sale.taxable_amount !== null && sale.taxable_amount !== undefined ? Number(sale.taxable_amount) : undefined,
+                cgstAmount: sale.cgst_amount !== null && sale.cgst_amount !== undefined ? Number(sale.cgst_amount) : undefined,
+                sgstAmount: sale.sgst_amount !== null && sale.sgst_amount !== undefined ? Number(sale.sgst_amount) : undefined,
+                igstAmount: sale.igst_amount !== null && sale.igst_amount !== undefined ? Number(sale.igst_amount) : undefined,
+                totalGst: sale.total_gst !== null && sale.total_gst !== undefined ? Number(sale.total_gst) : undefined,
+                commissionEarned: Number(sale.commission_earned || 0),
+                createdBy: sale.created_by || '',
+                updatedBy: sale.updated_by || '',
+                isExchange,
+                itemCount: Math.max(0, totalItemCount),
+                customer: sale.customers ? {
+                    id: sale.customers.id,
+                    name: sale.customers.name || 'Walk-in Customer',
+                    mobile: sale.customers.mobile || '',
+                    loyaltyMemberCode: sale.customers.loyalty_member_code || '',
+                    loyaltyTier: sale.customers.loyalty_tier || 'Silver'
+                } : null,
+                salesperson: sale.staff ? {
+                    id: sale.staff.id,
+                    name: sale.staff.name || ''
+                } : null,
+                items
+            };
+        });
     },
 
     createSale: async (sale: {

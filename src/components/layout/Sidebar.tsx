@@ -22,7 +22,8 @@ import {
     Presentation,
     LayoutGrid,
     Gift,
-    PackagePlus
+    PackagePlus,
+    Store
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -40,6 +41,7 @@ const navGroups = [
             { icon: ShoppingCart, label: 'Sales', path: '/sales' },
             { icon: ArrowLeftRight, label: 'Exchange', path: '/exchange' },
             { icon: ShoppingBag, label: 'Online Orders', path: '/orders' },
+            { icon: Store, label: 'In-Store Sales', path: '/instore-sales' },
         ]
     },
     {
