@@ -1,5 +1,5 @@
 import React from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { salesService, type DetailedSale } from '@/services/salesService';
 import {
@@ -25,7 +25,10 @@ import {
     Phone,
     Award,
     Eye,
-    Package
+    Package,
+    Clock,
+    HandCoins,
+    AlertCircle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -72,6 +75,7 @@ export default function InstoreSalesPage() {
     const [searchQuery, setSearchQuery] = React.useState('');
     const [paymentFilter, setPaymentFilter] = React.useState<string>('all');
     const [typeFilter, setTypeFilter] = React.useState<string>('all'); // all, regular, exchange
+    const [dueFilter, setDueFilter] = React.useState<string>('all'); // all, due, paid
 
     // Pagination
     const [currentPage, setCurrentPage] = React.useState(1);
@@ -82,6 +86,14 @@ export default function InstoreSalesPage() {
     const [selectedSaleForReceipt, setSelectedSaleForReceipt] = React.useState<any | null>(null);
     const [isReceiptModalOpen, setIsReceiptModalOpen] = React.useState(false);
     const [copiedInvoice, setCopiedInvoice] = React.useState<string | null>(null);
+
+    // Due Collection Modal State
+    const [saleForDueCollection, setSaleForDueCollection] = React.useState<DetailedSale | null>(null);
+    const [repayAmount, setRepayAmount] = React.useState('');
+    const [repayPaymentMode, setRepayPaymentMode] = React.useState<'cash' | 'upi' | 'card'>('cash');
+    const [repayNotes, setRepayNotes] = React.useState('');
+
+    const queryClient = useQueryClient();
 
     // Fetch detailed in-store sales
     const {
@@ -94,10 +106,62 @@ export default function InstoreSalesPage() {
         queryFn: salesService.getDetailedSales,
     });
 
+    // Due Repayment Mutation
+    const dueRepaymentMutation = useMutation({
+        mutationFn: salesService.recordDueRepayment,
+        onSuccess: (updatedSale) => {
+            queryClient.invalidateQueries({ queryKey: ['detailed-instore-sales'] });
+            queryClient.invalidateQueries({ queryKey: ['sales'] });
+            toast.success(`Payment of ₹${repayAmount} collected successfully!`);
+            setSaleForDueCollection(null);
+            setRepayAmount('');
+            setRepayNotes('');
+            if (selectedSaleForDetails && selectedSaleForDetails.id === updatedSale.saleId) {
+                setSelectedSaleForDetails(prev => prev ? {
+                    ...prev,
+                    amountPaid: updatedSale.amountPaid,
+                    dueAmount: updatedSale.dueAmount,
+                    paymentStatus: updatedSale.paymentStatus,
+                } : null);
+            }
+        },
+        onError: (err: any) => {
+            toast.error(err?.message || 'Failed to record repayment. Please ensure the database migration script has been run in Supabase.');
+        }
+    });
+
+    const handleOpenCollectDue = (sale: DetailedSale) => {
+        setSaleForDueCollection(sale);
+        setRepayAmount(String(sale.dueAmount || 0));
+        setRepayPaymentMode('cash');
+        setRepayNotes('');
+    };
+
+    const handleConfirmRepayment = () => {
+        if (!saleForDueCollection) return;
+        const amountNum = parseFloat(repayAmount);
+        if (isNaN(amountNum) || amountNum <= 0) {
+            toast.error('Please enter a valid repayment amount greater than 0');
+            return;
+        }
+        if (amountNum > (saleForDueCollection.dueAmount || 0)) {
+            toast.error(`Amount cannot exceed current outstanding due of ₹${saleForDueCollection.dueAmount}`);
+            return;
+        }
+
+        dueRepaymentMutation.mutate({
+            saleId: saleForDueCollection.id,
+            customerId: saleForDueCollection.customer?.id || saleForDueCollection.customerId || null,
+            amount: amountNum,
+            paymentMode: repayPaymentMode,
+            notes: repayNotes.trim() ? repayNotes.trim() : undefined,
+        });
+    };
+
     // Reset page when filter criteria change
     React.useEffect(() => {
         setCurrentPage(1);
-    }, [startDate, endDate, searchQuery, paymentFilter, typeFilter]);
+    }, [startDate, endDate, searchQuery, paymentFilter, typeFilter, dueFilter]);
 
     // Handle Quick Date Presets
     const handleSetPreset = (preset: DatePreset) => {
@@ -158,6 +222,13 @@ export default function InstoreSalesPage() {
             if (typeFilter === 'regular' && sale.isExchange) return false;
             if (typeFilter === 'exchange' && !sale.isExchange) return false;
 
+            // Due Status Filter
+            if (dueFilter === 'due') {
+                if (!sale.dueAmount || sale.dueAmount <= 0) return false;
+            } else if (dueFilter === 'paid') {
+                if (sale.dueAmount && sale.dueAmount > 0) return false;
+            }
+
             // Search Filter
             if (searchQuery.trim()) {
                 const q = searchQuery.toLowerCase().trim();
@@ -180,7 +251,7 @@ export default function InstoreSalesPage() {
 
             return true;
         });
-    }, [sales, startDate, endDate, paymentFilter, typeFilter, searchQuery]);
+    }, [sales, startDate, endDate, paymentFilter, typeFilter, dueFilter, searchQuery]);
 
     // Financial KPIs
     const stats = React.useMemo(() => {
@@ -196,6 +267,10 @@ export default function InstoreSalesPage() {
         const upiAmount = filteredSales.filter(s => s.paymentMode === 'upi').reduce((sum, s) => sum + s.totalAmount, 0);
         const cardAmount = filteredSales.filter(s => s.paymentMode === 'card').reduce((sum, s) => sum + s.totalAmount, 0);
 
+        // Due / Credit Ledger
+        const totalDueOutstanding = filteredSales.reduce((acc, s) => acc + (s.dueAmount || 0), 0);
+        const countWithDue = filteredSales.filter(s => (s.dueAmount || 0) > 0).length;
+
         return {
             totalRevenue,
             totalProfit,
@@ -205,7 +280,9 @@ export default function InstoreSalesPage() {
             profitMarginPct,
             cashAmount,
             upiAmount,
-            cardAmount
+            cardAmount,
+            totalDueOutstanding,
+            countWithDue
         };
     }, [filteredSales]);
 
@@ -268,6 +345,10 @@ export default function InstoreSalesPage() {
             'Customer Name',
             'Customer Phone',
             'Payment Mode',
+            'Payment Status',
+            'Amount Paid (₹)',
+            'Due Amount (₹)',
+            'Due Date',
             'Type',
             'Total Items',
             'Products List',
@@ -291,6 +372,10 @@ export default function InstoreSalesPage() {
                 `"${s.customer?.name || 'Walk-in'}"`,
                 `"${s.customer?.mobile || 'N/A'}"`,
                 `"${s.paymentMode.toUpperCase()}"`,
+                `"${(s.dueAmount && s.dueAmount > 0) ? 'DUE / PARTIAL' : 'PAID'}"`,
+                s.amountPaid ?? (s.totalAmount - (s.dueAmount || 0)),
+                s.dueAmount || 0,
+                `"${s.dueDate || 'N/A'}"`,
                 `"${s.isExchange ? 'Exchange/Return' : 'Regular Sale'}"`,
                 s.itemCount,
                 `"${productNames.replace(/"/g, '""')}"`,
@@ -391,7 +476,7 @@ export default function InstoreSalesPage() {
             </div>
 
             {/* Top KPI Metric Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3.5">
                 {[
                     {
                         label: 'Gross POS Revenue',
@@ -410,6 +495,15 @@ export default function InstoreSalesPage() {
                         from: 'from-amber-600',
                         to: 'to-amber-700',
                         text: 'text-amber-800'
+                    },
+                    {
+                        label: 'Outstanding Dues (Udhar)',
+                        value: formatCurrency(stats.totalDueOutstanding),
+                        sub: `${stats.countWithDue} bills pending collection`,
+                        icon: Clock,
+                        from: 'from-rose-600',
+                        to: 'to-rose-800',
+                        text: 'text-rose-700'
                     },
                     {
                         label: 'Net Margin Realized',
@@ -521,35 +615,35 @@ export default function InstoreSalesPage() {
                     </div>
 
                     {/* Search & Secondary Filter Row */}
-                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 pt-1 border-t border-gold/10">
-                        {/* Search Input (6 cols) */}
-                        <div className="md:col-span-6 relative">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 pt-1 border-t border-gold/10">
+                        {/* Search Input (4 cols) */}
+                        <div className="lg:col-span-4 relative">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                             <Input
-                                placeholder="Search by Invoice #, SL-ID, Customer, Mobile, Saree, Cashier, Agent..."
+                                placeholder="Search by Invoice #, SL-ID, Customer, Mobile, Saree, Cashier..."
                                 className="pl-9 h-9 text-xs border-gold/25 focus-visible:ring-maroon bg-white w-full"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                             />
                         </div>
 
-                        {/* Payment Mode (3 cols) */}
-                        <div className="md:col-span-3">
+                        {/* Payment Mode (2 cols) */}
+                        <div className="lg:col-span-2">
                             <Select value={paymentFilter} onValueChange={setPaymentFilter}>
                                 <SelectTrigger className="h-9 text-xs border-gold/25 bg-white">
                                     <SelectValue placeholder="Payment Mode" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="all">All Payment Modes</SelectItem>
+                                    <SelectItem value="all">All Modes</SelectItem>
                                     <SelectItem value="cash">Cash Only</SelectItem>
                                     <SelectItem value="upi">UPI / QR Code</SelectItem>
-                                    <SelectItem value="card">Card / POS Machine</SelectItem>
+                                    <SelectItem value="card">Card / POS</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
 
                         {/* Type Filter (3 cols) */}
-                        <div className="md:col-span-3">
+                        <div className="lg:col-span-3">
                             <Select value={typeFilter} onValueChange={setTypeFilter}>
                                 <SelectTrigger className="h-9 text-xs border-gold/25 bg-white">
                                     <SelectValue placeholder="Transaction Type" />
@@ -558,6 +652,20 @@ export default function InstoreSalesPage() {
                                     <SelectItem value="all">All Transaction Types</SelectItem>
                                     <SelectItem value="regular">Regular Sales Only</SelectItem>
                                     <SelectItem value="exchange">Exchanges & Returns</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        {/* Due Filter (3 cols) */}
+                        <div className="lg:col-span-3">
+                            <Select value={dueFilter} onValueChange={setDueFilter}>
+                                <SelectTrigger className="h-9 text-xs border-gold/25 bg-white">
+                                    <SelectValue placeholder="Payment Status" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">All Statuses (Paid & Due)</SelectItem>
+                                    <SelectItem value="due">⚠️ Has Pending Due (Udhar)</SelectItem>
+                                    <SelectItem value="paid">✓ Fully Paid Only</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
@@ -588,7 +696,7 @@ export default function InstoreSalesPage() {
                                     <TableHead className="h-10 text-[10px] font-bold text-maroon py-1.5">Invoice # / ID</TableHead>
                                     <TableHead className="h-10 text-[10px] font-bold text-maroon py-1.5">Customer</TableHead>
                                     <TableHead className="h-10 text-[10px] font-bold text-maroon py-1.5">Items Summary</TableHead>
-                                    <TableHead className="h-10 text-[10px] font-bold text-maroon py-1.5">Payment</TableHead>
+                                    <TableHead className="h-10 text-[10px] font-bold text-maroon py-1.5">Payment & Status</TableHead>
                                     <TableHead className="h-10 text-[10px] font-bold text-maroon py-1.5 text-right">Subtotal</TableHead>
                                     <TableHead className="h-10 text-[10px] font-bold text-maroon py-1.5 text-right">Tax (GST)</TableHead>
                                     <TableHead className="h-10 text-[10px] font-bold text-maroon py-1.5 text-right">Grand Total</TableHead>
@@ -724,20 +832,32 @@ export default function InstoreSalesPage() {
                                                     </div>
                                                 </TableCell>
 
-                                                {/* Payment Mode */}
+                                                {/* Payment Mode & Due Status */}
                                                 <TableCell className="py-2.5">
-                                                    <span className={cn(
-                                                        "inline-flex items-center gap-1 text-[9.5px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider font-mono",
-                                                        sale.paymentMode === 'cash' ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
-                                                        sale.paymentMode === 'upi' ? "bg-indigo-50 text-indigo-700 border border-indigo-200" :
-                                                        sale.paymentMode === 'card' ? "bg-blue-50 text-blue-700 border border-blue-200" :
-                                                        "bg-gray-100 text-gray-700 border border-gray-200"
-                                                    )}>
-                                                        {sale.paymentMode === 'cash' && <Coins className="h-3 w-3" />}
-                                                        {sale.paymentMode === 'upi' && <QrCode className="h-3 w-3" />}
-                                                        {sale.paymentMode === 'card' && <CreditCard className="h-3 w-3" />}
-                                                        {sale.paymentMode}
-                                                    </span>
+                                                    <div className="flex flex-col items-start gap-1">
+                                                        <span className={cn(
+                                                            "inline-flex items-center gap-1 text-[9.5px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider font-mono",
+                                                            sale.paymentMode === 'cash' ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
+                                                            sale.paymentMode === 'upi' ? "bg-indigo-50 text-indigo-700 border border-indigo-200" :
+                                                            sale.paymentMode === 'card' ? "bg-blue-50 text-blue-700 border border-blue-200" :
+                                                            "bg-gray-100 text-gray-700 border border-gray-200"
+                                                        )}>
+                                                            {sale.paymentMode === 'cash' && <Coins className="h-3 w-3" />}
+                                                            {sale.paymentMode === 'upi' && <QrCode className="h-3 w-3" />}
+                                                            {sale.paymentMode === 'card' && <CreditCard className="h-3 w-3" />}
+                                                            {sale.paymentMode}
+                                                        </span>
+                                                        {sale.dueAmount && sale.dueAmount > 0 ? (
+                                                            <span className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200 font-mono">
+                                                                <Clock className="h-2.5 w-2.5 text-rose-600" />
+                                                                Due: ₹{sale.dueAmount.toLocaleString('en-IN')}
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-[8.5px] font-bold text-emerald-700 font-mono">
+                                                                ✓ Fully Paid
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 </TableCell>
 
                                                 {/* Subtotal */}
@@ -757,8 +877,13 @@ export default function InstoreSalesPage() {
                                                 </TableCell>
 
                                                 {/* Grand Total */}
-                                                <TableCell className="py-2.5 text-xs text-right font-bold font-mono text-maroon">
-                                                    {formatCurrency(sale.totalAmount)}
+                                                <TableCell className="py-2.5 text-xs text-right font-bold font-mono">
+                                                    <span className="text-maroon block">{formatCurrency(sale.totalAmount)}</span>
+                                                    {sale.dueAmount && sale.dueAmount > 0 ? (
+                                                        <span className="text-[9.5px] font-normal text-gray-500 font-mono block">
+                                                            Recvd: ₹{(sale.amountPaid ?? (sale.totalAmount - sale.dueAmount)).toLocaleString('en-IN')}
+                                                        </span>
+                                                    ) : null}
                                                 </TableCell>
 
                                                 {/* Net Margin / Profit */}
@@ -785,6 +910,17 @@ export default function InstoreSalesPage() {
                                                 {/* Actions */}
                                                 <TableCell className="py-2.5 px-3 text-center" onClick={(e) => e.stopPropagation()}>
                                                     <div className="flex items-center justify-center gap-1">
+                                                        {sale.dueAmount && sale.dueAmount > 0 ? (
+                                                            <button
+                                                                onClick={() => handleOpenCollectDue(sale)}
+                                                                className="inline-flex items-center gap-1 px-2 py-1 rounded bg-amber-500 text-white hover:bg-amber-600 transition-colors text-[10px] font-bold shadow-xs cursor-pointer mr-1"
+                                                                title="Collect Due Payment"
+                                                            >
+                                                                <HandCoins className="h-3 w-3" />
+                                                                <span>Collect</span>
+                                                            </button>
+                                                        ) : null}
+
                                                         {/* Details button */}
                                                         <button
                                                             onClick={() => setSelectedSaleForDetails(sale)}
@@ -1052,11 +1188,46 @@ export default function InstoreSalesPage() {
                                     )}
 
                                     <div className="flex justify-between items-center text-sm font-bold text-maroon pt-2 border-t border-gold/20">
-                                        <span>Grand Net Amount Paid:</span>
+                                        <span>Total Bill Amount:</span>
                                         <span className="text-base font-mono">{formatCurrency(selectedSaleForDetails.totalAmount)}</span>
                                     </div>
 
-                                    <div className="flex justify-between items-center text-[11px] font-bold text-emerald-700 pt-1">
+                                    {selectedSaleForDetails.dueAmount && selectedSaleForDetails.dueAmount > 0 ? (
+                                        <>
+                                            <div className="flex justify-between items-center text-xs font-semibold text-emerald-800">
+                                                <span>Amount Received:</span>
+                                                <span className="font-mono">
+                                                    {formatCurrency(selectedSaleForDetails.amountPaid ?? (selectedSaleForDetails.totalAmount - selectedSaleForDetails.dueAmount))}
+                                                </span>
+                                            </div>
+
+                                            <div className="flex justify-between items-center text-xs font-bold text-rose-700 p-2.5 rounded-lg bg-rose-50 border border-rose-200">
+                                                <span className="flex items-center gap-1.5">
+                                                    <Clock className="h-4 w-4 text-rose-600" />
+                                                    Balance Due Outstanding (Udhar):
+                                                </span>
+                                                <span className="text-sm font-mono font-bold">
+                                                    {formatCurrency(selectedSaleForDetails.dueAmount)}
+                                                </span>
+                                            </div>
+
+                                            {selectedSaleForDetails.dueDate && (
+                                                <div className="flex justify-between text-amber-800 text-[11px] font-medium px-1">
+                                                    <span>Promised Repayment Date:</span>
+                                                    <span className="font-mono font-bold">
+                                                        {new Date(selectedSaleForDetails.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                    </span>
+                                                </div>
+                                            )}
+                                        </>
+                                    ) : (
+                                        <div className="text-[11px] font-semibold text-emerald-700 flex items-center justify-between pt-0.5">
+                                            <span>Payment Status:</span>
+                                            <span className="font-mono">✓ Fully Paid</span>
+                                        </div>
+                                    )}
+
+                                    <div className="flex justify-between items-center text-[11px] font-bold text-emerald-700 pt-1 border-t border-gold/10">
                                         <span>Total Realized Profit:</span>
                                         <span className="font-mono">{formatCurrency(selectedSaleForDetails.profit)}</span>
                                     </div>
@@ -1064,7 +1235,7 @@ export default function InstoreSalesPage() {
                             </div>
 
                             {/* Modal Footer */}
-                            <div className="p-3 border-t border-gold/15 bg-white flex items-center justify-between gap-2">
+                            <div className="p-3 border-t border-gold/15 bg-white flex flex-wrap items-center justify-between gap-2">
                                 <Button
                                     variant="outline"
                                     size="sm"
@@ -1076,6 +1247,17 @@ export default function InstoreSalesPage() {
                                 </Button>
 
                                 <div className="flex items-center gap-2">
+                                    {selectedSaleForDetails.dueAmount && selectedSaleForDetails.dueAmount > 0 ? (
+                                        <Button
+                                            size="sm"
+                                            className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold gap-1.5 cursor-pointer shadow"
+                                            onClick={() => handleOpenCollectDue(selectedSaleForDetails)}
+                                        >
+                                            <HandCoins className="h-3.5 w-3.5" />
+                                            Collect Due (₹{selectedSaleForDetails.dueAmount})
+                                        </Button>
+                                    ) : null}
+
                                     <Button
                                         variant="outline"
                                         size="sm"
@@ -1093,6 +1275,164 @@ export default function InstoreSalesPage() {
                                         Print Tax Receipt
                                     </Button>
                                 </div>
+                            </div>
+                        </>
+                    )}
+                </DialogContent>
+            </Dialog>
+
+            {/* Collect Due Repayment Dialog */}
+            <Dialog open={Boolean(saleForDueCollection)} onOpenChange={(open) => !open && setSaleForDueCollection(null)}>
+                <DialogContent className="max-w-md bg-white border border-gold/30 p-0 overflow-hidden shadow-2xl">
+                    {saleForDueCollection && (
+                        <>
+                            <div className="bg-gradient-to-r from-amber-700 to-maroon text-cream p-4 border-b border-gold/20">
+                                <div className="flex items-center gap-2.5">
+                                    <div className="p-2 rounded-lg bg-gold/20 text-gold">
+                                        <HandCoins className="h-5 w-5" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-base font-bold font-serif text-gold">
+                                            Collect Customer Due Payment
+                                        </h3>
+                                        <p className="text-[11px] text-cream/80 font-mono">
+                                            Invoice: {saleForDueCollection.invoiceNumber}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="p-4 space-y-4 text-xs">
+                                {/* Customer Info Box */}
+                                <div className="p-3 rounded-lg bg-cream/10 border border-gold/20 space-y-1.5">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-gray-500">Customer:</span>
+                                        <span className="font-bold text-gray-900">{saleForDueCollection.customer?.name || 'Walk-in'}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-gray-500">Mobile:</span>
+                                        <span className="font-mono font-medium text-gray-800">{saleForDueCollection.customer?.mobile || 'N/A'}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center pt-1 border-t border-gold/10">
+                                        <span className="text-gray-500">Original Total Bill:</span>
+                                        <span className="font-mono font-bold text-gray-800">{formatCurrency(saleForDueCollection.totalAmount)}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center text-emerald-700">
+                                        <span>Total Paid So Far:</span>
+                                        <span className="font-mono font-bold">
+                                            {formatCurrency(saleForDueCollection.amountPaid ?? (saleForDueCollection.totalAmount - (saleForDueCollection.dueAmount || 0)))}
+                                        </span>
+                                    </div>
+                                    <div className="flex justify-between items-center text-rose-700 font-bold pt-1 border-t border-gold/10">
+                                        <span>Current Outstanding Due:</span>
+                                        <span className="font-mono text-sm">{formatCurrency(saleForDueCollection.dueAmount || 0)}</span>
+                                    </div>
+                                    {saleForDueCollection.dueDate && (
+                                        <div className="flex justify-between items-center text-amber-800 text-[11px] pt-0.5">
+                                            <span>Expected Date:</span>
+                                            <span className="font-mono font-bold">{new Date(saleForDueCollection.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Payment Input */}
+                                <div className="space-y-1.5">
+                                    <label className="text-[11px] font-bold text-maroon uppercase tracking-wider block">
+                                        Amount Received Now (₹) *
+                                    </label>
+                                    <div className="relative">
+                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">₹</span>
+                                        <Input
+                                            type="number"
+                                            min="1"
+                                            max={saleForDueCollection.dueAmount || 0}
+                                            step="1"
+                                            placeholder="Enter repayment amount"
+                                            className="pl-8 text-sm font-mono font-bold border-gold/30 focus-visible:ring-maroon h-10"
+                                            value={repayAmount}
+                                            onChange={(e) => setRepayAmount(e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="flex items-center justify-between text-[10px] text-gray-500">
+                                        <span>Max Outstanding: ₹{saleForDueCollection.dueAmount || 0}</span>
+                                        {parseFloat(repayAmount) > 0 && parseFloat(repayAmount) < (saleForDueCollection.dueAmount || 0) && (
+                                            <span className="text-amber-700 font-medium">
+                                                Remaining after pay: ₹{(saleForDueCollection.dueAmount || 0) - parseFloat(repayAmount)}
+                                            </span>
+                                        )}
+                                        {parseFloat(repayAmount) === (saleForDueCollection.dueAmount || 0) && (
+                                            <span className="text-emerald-700 font-bold">
+                                                ✓ Fully marks invoice as cleared
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Payment Mode */}
+                                <div className="space-y-1.5">
+                                    <label className="text-[11px] font-bold text-maroon uppercase tracking-wider block">
+                                        Payment Method *
+                                    </label>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {(['cash', 'upi', 'card'] as const).map(mode => (
+                                            <button
+                                                key={mode}
+                                                type="button"
+                                                className={cn(
+                                                    "p-2.5 rounded-lg border text-center transition-all cursor-pointer font-bold text-xs uppercase flex flex-col items-center justify-center gap-1",
+                                                    repayPaymentMode === mode
+                                                        ? "bg-maroon text-gold border-maroon shadow-sm"
+                                                        : "bg-white text-gray-700 border-gold/20 hover:border-maroon/50"
+                                                )}
+                                                onClick={() => setRepayPaymentMode(mode)}
+                                            >
+                                                {mode === 'cash' && <Coins className="h-4 w-4" />}
+                                                {mode === 'upi' && <QrCode className="h-4 w-4" />}
+                                                {mode === 'card' && <CreditCard className="h-4 w-4" />}
+                                                {mode}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Repayment Notes */}
+                                <div className="space-y-1.5">
+                                    <label className="text-[11px] font-bold text-maroon uppercase tracking-wider block">
+                                        Notes / Reference (Optional)
+                                    </label>
+                                    <Input
+                                        placeholder="e.g. Paid cash at counter / GPay ref 9482"
+                                        className="text-xs border-gold/25 focus-visible:ring-maroon h-8"
+                                        value={repayNotes}
+                                        onChange={(e) => setRepayNotes(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Modal Footer */}
+                            <div className="p-3 border-t border-gold/15 bg-cream/5 flex items-center justify-end gap-2">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="border-gold/20 text-gray-600 text-xs cursor-pointer"
+                                    onClick={() => setSaleForDueCollection(null)}
+                                    disabled={dueRepaymentMutation.isPending}
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    className="bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold gap-1.5 cursor-pointer shadow"
+                                    onClick={handleConfirmRepayment}
+                                    disabled={dueRepaymentMutation.isPending || !parseFloat(repayAmount)}
+                                >
+                                    {dueRepaymentMutation.isPending ? (
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    ) : (
+                                        <Check className="h-3.5 w-3.5" />
+                                    )}
+                                    Confirm Collection
+                                </Button>
                             </div>
                         </>
                     )}

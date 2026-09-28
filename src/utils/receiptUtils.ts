@@ -134,6 +134,8 @@ export function mapSaleToReceiptData(saleOrOrder: any): ReceiptData {
 
         const hsnCode = i.hsnCode || i.hsn_code || snap?.hsn_code || '5208';
         const explicitItemDiscount = Number(i.discountAmount ?? i.discount_amount ?? 0);
+        const calculatedItemDiscount = mrpVal > sellingPrice ? (mrpVal - sellingPrice) : 0;
+        const itemDiscount = explicitItemDiscount > 0 ? explicitItemDiscount : calculatedItemDiscount;
 
         return {
             sareeName: (i.item_status === 'cancelled' || i.itemStatus === 'cancelled') ? `[Cancelled] ${sareeName}` : sareeName,
@@ -142,7 +144,7 @@ export function mapSaleToReceiptData(saleOrOrder: any): ReceiptData {
             sellingPrice,
             hsnCode,
             addons: addons.length > 0 ? addons : undefined,
-            discountAmount: explicitItemDiscount > 0 ? explicitItemDiscount : undefined,
+            discountAmount: itemDiscount > 0 ? itemDiscount : undefined,
         };
     });
 
@@ -173,28 +175,12 @@ export function mapSaleToReceiptData(saleOrOrder: any): ReceiptData {
     const subtotal = calculatedSubtotal > 0 ? calculatedSubtotal : (saleOrOrder.subtotal != null && Number(saleOrOrder.subtotal) > 0 ? Number(saleOrOrder.subtotal) : 0);
     const totalAmount = Number(saleOrOrder.totalAmount ?? saleOrOrder.total_amount ?? saleOrOrder.total ?? 0);
 
-    // If order/sale has an overall discount but items don't have individual discountAmount, allocate pro-rata
-    const hasItemDiscounts = items.some(it => (it.discountAmount || 0) > 0);
-    if (!hasItemDiscounts && discountAmount > 0 && calculatedSubtotal > 0) {
-        let allocatedSum = 0;
-        items.forEach((it, idx) => {
-            if (idx === items.length - 1) {
-                it.discountAmount = Math.max(0, Math.round((discountAmount - allocatedSum) * 100) / 100);
-            } else {
-                const itemPortion = Math.round((discountAmount * (it.quantity * it.sellingPrice) / calculatedSubtotal) * 100) / 100;
-                it.discountAmount = itemPortion;
-                allocatedSum += itemPortion;
-            }
-        });
-    }
-
     // Set discountPercentage on items
     items.forEach(it => {
         const itemMrpTotal = it.quantity * (it.mrp || it.sellingPrice);
-        const itemProdDisc = Math.max(0, itemMrpTotal - (it.quantity * it.sellingPrice));
-        const totalLineDisc = itemProdDisc + Number(it.discountAmount || 0);
-        if (itemMrpTotal > 0 && totalLineDisc > 0) {
-            it.discountPercentage = parseFloat(((totalLineDisc / itemMrpTotal) * 100).toFixed(1));
+        const itemDisc = Number(it.discountAmount || 0);
+        if (itemMrpTotal > 0 && itemDisc > 0) {
+            it.discountPercentage = parseFloat(((itemDisc / itemMrpTotal) * 100).toFixed(1));
         }
     });
 
@@ -229,12 +215,12 @@ export function mapSaleToReceiptData(saleOrOrder: any): ReceiptData {
 
     return {
         invoiceNumber: saleOrOrder.invoiceNumber || saleOrOrder.invoice_number || saleOrOrder.orderNumber || saleOrOrder.order_number || 'INV',
-        date: saleOrOrder.date || saleOrOrder.invoiceDate || saleOrOrder.invoice_date || saleOrOrder.createdAt || saleOrOrder.created_at || new Date().toISOString(),
+        date: saleOrOrder.date || saleOrOrder.createdAt || saleOrOrder.created_at || saleOrOrder.invoiceDate || saleOrOrder.invoice_date || new Date().toISOString(),
         paymentMode: saleOrOrder.paymentMode || saleOrOrder.payment_mode || saleOrOrder.paymentMethod || saleOrOrder.payment_method || 'cash',
-        customerName: saleOrOrder.customerName || saleOrOrder.customer_name || null,
-        customerMobile: saleOrOrder.customerMobile || saleOrOrder.customer_phone || saleOrOrder.customerPhone || null,
+        customerName: saleOrOrder.customerName || saleOrOrder.customer_name || saleOrOrder.customer?.name || null,
+        customerMobile: saleOrOrder.customerMobile || saleOrOrder.customer_phone || saleOrOrder.customerPhone || saleOrOrder.customer?.mobile || saleOrOrder.customer?.phone || null,
         customerAddress,
-        customerEmail: saleOrOrder.customerEmail || saleOrOrder.customer_email || null,
+        customerEmail: saleOrOrder.customerEmail || saleOrOrder.customer_email || saleOrOrder.customer?.email || null,
         items,
         subtotal,
         totalAmount,
@@ -257,7 +243,7 @@ export function mapSaleToReceiptData(saleOrOrder: any): ReceiptData {
         igstAmount,
         totalGst,
         placeOfSupply,
-        loyaltyMemberCode: saleOrOrder.loyaltyMemberCode || saleOrOrder.loyalty_member_code || null,
+        loyaltyMemberCode: saleOrOrder.loyaltyMemberCode || saleOrOrder.loyalty_member_code || saleOrOrder.customer?.loyaltyMemberCode || saleOrOrder.customer?.loyalty_member_code || null,
     };
 }
 

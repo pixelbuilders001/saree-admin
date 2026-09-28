@@ -57,6 +57,10 @@ export interface Sale {
     loyaltyMemberCode?: string | null;
     loyaltyPointsRedeemed?: number;
     loyaltyPointsEarned?: number;
+    amountPaid?: number;
+    dueAmount?: number;
+    paymentStatus?: 'paid' | 'partial' | 'due';
+    dueDate?: string | null;
 }
 
 export interface SaleReportItem {
@@ -81,41 +85,34 @@ export interface DetailedSaleItem {
     id: string;
     sareeId: string;
     sareeName: string;
+    quantity: number;
+    sellingPrice: number;
+    mrp: number;
+    discountAmount: number;
+    discountPercentage: number;
+    hsnCode: string;
+    addons?: SaleItemAddon[];
+    purchasePrice: number;
+    totalAmount: number;
+    profit: number;
     sku?: string;
     barcode?: string;
     category?: string;
     imageUrl?: string;
-    quantity: number;
-    sellingPrice: number;
-    purchasePrice: number;
-    totalAmount: number;
-    profit: number;
     isReturn: boolean;
 }
 
 export interface DetailedSale {
     id: string;
+    saleId: string;
     friendlyId: string;
     invoiceNumber: string;
+    date: string;
     createdAt: string;
-    totalAmount: number;
-    subtotal: number;
-    profit: number;
-    paymentMode: string;
-    discountAmount: number;
-    discountPercentage: number;
-    isGstApplied: boolean;
-    gstRate: number;
-    taxableAmount?: number;
-    cgstAmount?: number;
-    sgstAmount?: number;
-    igstAmount?: number;
-    totalGst?: number;
-    commissionEarned: number;
-    createdBy?: string;
-    updatedBy?: string;
-    isExchange: boolean;
-    itemCount: number;
+    customerName?: string;
+    customerMobile?: string;
+    customerAddress?: string | null;
+    customerId?: string | null;
     customer?: {
         id?: string;
         name?: string;
@@ -123,11 +120,46 @@ export interface DetailedSale {
         loyaltyMemberCode?: string;
         loyaltyTier?: string;
     } | null;
+    salespersonId?: string;
+    salespersonName?: string;
     salesperson?: {
         id?: string;
         name?: string;
     } | null;
     items: DetailedSaleItem[];
+    subtotal: number;
+    totalAmount: number;
+    profit: number;
+    discountAmount: number;
+    discountPercentage: number;
+    paymentMode: string;
+    appliedVoucherCode?: string | null;
+    appliedVoucherAmount?: number | null;
+    issuedVoucherCode?: string | null;
+    issuedVoucherAmount?: number | null;
+    isGstApplied: boolean;
+    gstRate: number;
+    taxableAmount?: number;
+    cgstRate?: number;
+    cgstAmount?: number;
+    sgstRate?: number;
+    sgstAmount?: number;
+    igstRate?: number;
+    igstAmount?: number;
+    totalGst?: number;
+    placeOfSupply?: string;
+    loyaltyMemberCode?: string | null;
+    loyaltyPointsRedeemed?: number;
+    loyaltyPointsEarned?: number;
+    commissionEarned: number;
+    createdBy?: string;
+    updatedBy?: string;
+    isExchange: boolean;
+    itemCount: number;
+    amountPaid: number;
+    dueAmount: number;
+    paymentStatus: 'paid' | 'partial' | 'due';
+    dueDate?: string | null;
 }
 
 export const getFriendlyId = (uuid: string, isExchange: boolean): string => {
@@ -221,61 +253,160 @@ export const salesService = {
     },
 
     getDetailedSales: async (): Promise<DetailedSale[]> => {
-        const { data, error } = await supabase
-            .from('sales')
-            .select(`
+        const fullSelect = `
+            id,
+            invoice_number,
+            created_at,
+            total_amount,
+            profit,
+            payment_mode,
+            discount_amount,
+            discount_percentage,
+            is_gst_applied,
+            gst_rate,
+            taxable_amount,
+            cgst_rate,
+            cgst_amount,
+            sgst_rate,
+            sgst_amount,
+            igst_rate,
+            igst_amount,
+            total_gst,
+            commission_earned,
+            created_by,
+            updated_by,
+            amount_paid,
+            due_amount,
+            payment_status,
+            due_date,
+            customers (
                 id,
-                invoice_number,
-                created_at,
-                total_amount,
-                profit,
-                payment_mode,
-                discount_amount,
-                discount_percentage,
-                is_gst_applied,
-                gst_rate,
-                taxable_amount,
-                cgst_amount,
-                sgst_amount,
-                igst_amount,
-                total_gst,
-                commission_earned,
-                created_by,
-                updated_by,
-                customers (
+                name,
+                mobile,
+                loyalty_member_code,
+                loyalty_tier
+            ),
+            staff (
+                id,
+                name
+            ),
+            sale_items (
+                id,
+                saree_id,
+                quantity,
+                selling_price,
+                inventory (
                     id,
-                    name,
-                    mobile,
-                    loyalty_member_code,
-                    loyalty_tier
-                ),
-                staff (
-                    id,
-                    name
-                ),
-                sale_items (
-                    id,
-                    saree_id,
-                    quantity,
+                    saree_name,
+                    sku,
+                    barcode,
+                    category,
+                    purchase_price,
                     selling_price,
-                    inventory (
-                        id,
-                        saree_name,
-                        sku,
-                        barcode,
-                        category,
-                        purchase_price,
-                        selling_price,
-                        inventory_images (
-                            image_url,
-                            is_primary
-                        )
+                    mrp,
+                    hsn_code,
+                    discount_amount,
+                    discount_percentage,
+                    inventory_images (
+                        image_url,
+                        is_primary
                     )
                 )
-            `)
+            )
+        `;
+
+        const fallbackSelect = `
+            id,
+            invoice_number,
+            created_at,
+            total_amount,
+            profit,
+            payment_mode,
+            discount_amount,
+            discount_percentage,
+            is_gst_applied,
+            gst_rate,
+            taxable_amount,
+            cgst_rate,
+            cgst_amount,
+            sgst_rate,
+            sgst_amount,
+            igst_rate,
+            igst_amount,
+            total_gst,
+            commission_earned,
+            created_by,
+            updated_by,
+            customers (
+                id,
+                name,
+                mobile,
+                loyalty_member_code,
+                loyalty_tier
+            ),
+            staff (
+                id,
+                name
+            ),
+            sale_items (
+                id,
+                saree_id,
+                quantity,
+                selling_price,
+                inventory (
+                    id,
+                    saree_name,
+                    sku,
+                    barcode,
+                    category,
+                    purchase_price,
+                    selling_price,
+                    mrp,
+                    hsn_code,
+                    discount_amount,
+                    discount_percentage,
+                    inventory_images (
+                        image_url,
+                        is_primary
+                    )
+                )
+            )
+        `;
+
+        let { data, error } = await supabase
+            .from('sales')
+            .select(fullSelect)
             .order('created_at', { ascending: false });
 
+        if (error && (error.message?.includes('amount_paid') || error.message?.includes('due_amount') || error.message?.includes('payment_status'))) {
+            const fallbackRes = await supabase
+                .from('sales')
+                .select(fallbackSelect)
+                .order('created_at', { ascending: false });
+            data = fallbackRes.data as any;
+            error = fallbackRes.error;
+        }
+
         if (error) throw error;
+
+        // Fetch store credits for voucher mapping
+        let storeCreditsMap: Record<string, { code: string; amount: number }> = {};
+        try {
+            const { data: credits } = await supabase
+                .from('store_credits')
+                .select('voucher_code, original_amount, used_in_sale_id')
+                .not('used_in_sale_id', 'is', null);
+            (credits || []).forEach((c: any) => {
+                if (c.used_in_sale_id) {
+                    storeCreditsMap[c.used_in_sale_id] = {
+                        code: c.voucher_code,
+                        amount: Number(c.original_amount || 0)
+                    };
+                }
+            });
+        } catch {
+            // graceful fallback if store_credits query fails
+        }
 
         return (data || []).map((sale: any) => {
             const rawItems = sale.sale_items || [];
@@ -288,8 +419,9 @@ export const salesService = {
 
             const items: DetailedSaleItem[] = rawItems.map((item: any) => {
                 const quantity = Math.abs(Number(item.quantity || 0));
-                const sellingPrice = Number(item.selling_price || 0);
-                const isItemReturn = Number(item.selling_price || 0) < 0 || Number(item.quantity || 0) < 0;
+                const rawSellingPrice = Number(item.selling_price || 0);
+                const isItemReturn = rawSellingPrice < 0 || Number(item.quantity || 0) < 0;
+                const sellingPrice = Math.abs(rawSellingPrice);
                 const totalAmount = isItemReturn ? -Math.abs(quantity * sellingPrice) : quantity * sellingPrice;
                 const purchasePrice = Number(item.inventory?.purchase_price || 0);
                 const profit = isItemReturn
@@ -302,6 +434,22 @@ export const salesService = {
                 const images = item.inventory?.inventory_images || [];
                 const primaryImage = images.find((img: any) => img.is_primary)?.image_url || images[0]?.image_url || '';
 
+                const invMrp = Number(item.inventory?.mrp || 0);
+                const invDisc = Number(item.inventory?.discount_amount || 0);
+                let mrpVal = invMrp;
+                if (mrpVal <= sellingPrice && invDisc > 0) {
+                    mrpVal = sellingPrice + invDisc;
+                }
+                if (mrpVal <= 0) {
+                    mrpVal = sellingPrice;
+                }
+                const itemDiscountAmount = invDisc > 0 ? invDisc : Math.max(0, mrpVal - sellingPrice);
+                const itemDiscountPct = Number(
+                    item.inventory?.discount_percentage ||
+                    (mrpVal > 0 && itemDiscountAmount > 0 ? parseFloat(((itemDiscountAmount / mrpVal) * 100).toFixed(1)) : 0)
+                );
+                const hsnCode = item.inventory?.hsn_code || '5208';
+
                 return {
                     id: item.id || `${sale.id}-${item.saree_id}`,
                     sareeId: item.saree_id,
@@ -311,7 +459,12 @@ export const salesService = {
                     category: item.inventory?.category || '',
                     imageUrl: primaryImage,
                     quantity,
-                    sellingPrice: Math.abs(sellingPrice),
+                    sellingPrice,
+                    mrp: mrpVal,
+                    discountAmount: itemDiscountAmount,
+                    discountPercentage: itemDiscountPct,
+                    hsnCode,
+                    addons: [],
                     purchasePrice,
                     totalAmount,
                     profit,
@@ -319,41 +472,73 @@ export const salesService = {
                 };
             });
 
+            const appliedCredit = storeCreditsMap[sale.id];
+            const isGst = Boolean(sale.is_gst_applied);
+            const gstRate = Number(sale.gst_rate || (isGst ? 5 : 0));
+            const cgstRate = sale.cgst_rate != null ? Number(sale.cgst_rate) : (isGst ? gstRate / 2 : 0);
+            const sgstRate = sale.sgst_rate != null ? Number(sale.sgst_rate) : (isGst ? gstRate / 2 : 0);
+            const igstRate = sale.igst_rate != null ? Number(sale.igst_rate) : 0;
+
+            const customerName = sale.customers?.name || 'Walk-in Customer';
+            const customerMobile = sale.customers?.mobile || '';
+            const loyaltyMemberCode = sale.customers?.loyalty_member_code || null;
+
             return {
                 id: sale.id,
+                saleId: friendlyId,
                 friendlyId,
                 invoiceNumber: sale.invoice_number || friendlyId,
+                date: sale.created_at,
                 createdAt: sale.created_at,
-                totalAmount: Number(sale.total_amount || 0),
+                customerName,
+                customerMobile,
+                customerAddress: null,
+                customerId: sale.customer_id || sale.customers?.id || null,
+                customer: sale.customers ? {
+                    id: sale.customers.id,
+                    name: customerName,
+                    mobile: customerMobile,
+                    loyaltyMemberCode: loyaltyMemberCode || '',
+                    loyaltyTier: sale.customers.loyalty_tier || 'Silver'
+                } : null,
+                salespersonId: sale.staff?.id || null,
+                salespersonName: sale.staff?.name || '',
+                salesperson: sale.staff ? {
+                    id: sale.staff.id,
+                    name: sale.staff.name || ''
+                } : null,
+                items,
                 subtotal: Math.max(0, calculatedSubtotal),
+                totalAmount: Number(sale.total_amount || 0),
                 profit: Number(sale.profit || 0),
-                paymentMode: (sale.payment_mode || 'cash').toLowerCase(),
                 discountAmount: Number(sale.discount_amount || 0),
                 discountPercentage: Number(sale.discount_percentage || 0),
-                isGstApplied: Boolean(sale.is_gst_applied),
-                gstRate: Number(sale.gst_rate || 0),
+                paymentMode: (sale.payment_mode || 'cash').toLowerCase(),
+                appliedVoucherCode: appliedCredit?.code || null,
+                appliedVoucherAmount: appliedCredit?.amount || null,
+                issuedVoucherCode: null,
+                issuedVoucherAmount: null,
+                isGstApplied: isGst,
+                gstRate,
                 taxableAmount: sale.taxable_amount !== null && sale.taxable_amount !== undefined ? Number(sale.taxable_amount) : undefined,
+                cgstRate,
                 cgstAmount: sale.cgst_amount !== null && sale.cgst_amount !== undefined ? Number(sale.cgst_amount) : undefined,
+                sgstRate,
                 sgstAmount: sale.sgst_amount !== null && sale.sgst_amount !== undefined ? Number(sale.sgst_amount) : undefined,
+                igstRate,
                 igstAmount: sale.igst_amount !== null && sale.igst_amount !== undefined ? Number(sale.igst_amount) : undefined,
                 totalGst: sale.total_gst !== null && sale.total_gst !== undefined ? Number(sale.total_gst) : undefined,
+                placeOfSupply: isGst ? 'Bihar (10)' : undefined,
+                loyaltyMemberCode,
                 commissionEarned: Number(sale.commission_earned || 0),
                 createdBy: sale.created_by || '',
                 updatedBy: sale.updated_by || '',
                 isExchange,
                 itemCount: Math.max(0, totalItemCount),
-                customer: sale.customers ? {
-                    id: sale.customers.id,
-                    name: sale.customers.name || 'Walk-in Customer',
-                    mobile: sale.customers.mobile || '',
-                    loyaltyMemberCode: sale.customers.loyalty_member_code || '',
-                    loyaltyTier: sale.customers.loyalty_tier || 'Silver'
-                } : null,
-                salesperson: sale.staff ? {
-                    id: sale.staff.id,
-                    name: sale.staff.name || ''
-                } : null,
-                items
+                amountPaid: sale.amount_paid !== undefined && sale.amount_paid !== null ? Number(sale.amount_paid) : Math.max(0, Number(sale.total_amount || 0) - Number(sale.due_amount || 0)),
+                dueAmount: Number(sale.due_amount || 0),
+                paymentStatus: (sale.payment_status || (Number(sale.due_amount || 0) > 0 ? (Number(sale.amount_paid || 0) > 0 ? 'partial' : 'due') : 'paid')) as 'paid' | 'partial' | 'due',
+                dueDate: sale.due_date || null,
             };
         });
     },
@@ -373,6 +558,10 @@ export const salesService = {
         loyaltyMemberCode?: string | null;
         loyaltyPointsRedeemed?: number;
         loyaltyPointsEarned?: number;
+        amountPaid?: number;
+        dueAmount?: number;
+        paymentStatus?: 'paid' | 'partial' | 'due';
+        dueDate?: string | null;
     }): Promise<Sale> => {
         if (!sale.items || sale.items.length === 0) {
             throw new Error("No items in sale");
@@ -492,35 +681,70 @@ export const salesService = {
         const grandTotal = Math.max(0, gstData.grandTotal - voucherVal);
         const netProfit = Math.max(0, totalProfit - discount - voucherVal);
 
-        const { data: insertedSale, error: saleInsertError } = await supabase
+        // Due & payment status
+        const finalDueAmount = Math.max(0, sale.dueAmount ?? 0);
+        const finalAmountPaid = sale.amountPaid !== undefined 
+            ? Math.max(0, sale.amountPaid) 
+            : Math.max(0, grandTotal - finalDueAmount);
+        const finalPaymentStatus: 'paid' | 'partial' | 'due' = sale.paymentStatus || (finalDueAmount <= 0 ? 'paid' : (finalAmountPaid > 0 ? 'partial' : 'due'));
+        const finalDueDate = sale.dueDate || null;
+
+        const saleInsertPayload: any = {
+            customer_id: customerId,
+            total_amount: grandTotal,
+            profit: netProfit,
+            salesperson_id: sale.salespersonId || null,
+            commission_earned: sale.commissionEarned ?? 0,
+            invoice_number: invoiceNumber,
+            payment_mode: sale.paymentMode || 'cash',
+            discount_amount: discount,
+            discount_percentage: discountPct,
+            created_by: userEmail,
+            updated_by: userEmail,
+            is_gst_applied: gstData.isGstApplied,
+            gst_rate: gstData.gstRate,
+            taxable_amount: gstData.taxableAmount,
+            cgst_rate: gstData.cgstRate,
+            cgst_amount: gstData.cgstAmount,
+            sgst_rate: gstData.sgstRate,
+            sgst_amount: gstData.sgstAmount,
+            igst_rate: gstData.igstRate,
+            igst_amount: gstData.igstAmount,
+            total_gst: gstData.totalGst,
+            amount_paid: finalAmountPaid,
+            due_amount: finalDueAmount,
+            payment_status: finalPaymentStatus,
+            due_date: finalDueDate,
+        };
+
+        let insertedSale: any = null;
+        const { data: firstTry, error: saleInsertError } = await supabase
             .from('sales')
-            .insert([{
-                customer_id: customerId,
-                total_amount: grandTotal,
-                profit: netProfit,
-                salesperson_id: sale.salespersonId || null,
-                commission_earned: sale.commissionEarned ?? 0,
-                invoice_number: invoiceNumber,
-                payment_mode: sale.paymentMode || 'cash',
-                discount_amount: discount,
-                discount_percentage: discountPct,
-                created_by: userEmail,
-                updated_by: userEmail,
-                is_gst_applied: gstData.isGstApplied,
-                gst_rate: gstData.gstRate,
-                taxable_amount: gstData.taxableAmount,
-                cgst_rate: gstData.cgstRate,
-                cgst_amount: gstData.cgstAmount,
-                sgst_rate: gstData.sgstRate,
-                sgst_amount: gstData.sgstAmount,
-                igst_rate: gstData.igstRate,
-                igst_amount: gstData.igstAmount,
-                total_gst: gstData.totalGst,
-            }])
+            .insert([saleInsertPayload])
             .select()
             .single();
 
-        if (saleInsertError) throw saleInsertError;
+        if (saleInsertError) {
+            // Check if failure is due to missing columns before migration
+            if (saleInsertError.message?.includes('amount_paid') || saleInsertError.message?.includes('due_amount') || saleInsertError.message?.includes('payment_status')) {
+                console.warn('Due columns not found in sales table. Falling back to basic insert. Please run scripts/add_due_payment_system.sql in Supabase SQL Editor.');
+                delete saleInsertPayload.amount_paid;
+                delete saleInsertPayload.due_amount;
+                delete saleInsertPayload.payment_status;
+                delete saleInsertPayload.due_date;
+                const { data: retryData, error: retryError } = await supabase
+                    .from('sales')
+                    .insert([saleInsertPayload])
+                    .select()
+                    .single();
+                if (retryError) throw retryError;
+                insertedSale = retryData;
+            } else {
+                throw saleInsertError;
+            }
+        } else {
+            insertedSale = firstTry;
+        }
 
         // 4. Create Sale Items and deduct stock
         const saleItemsToInsert = [];
@@ -643,6 +867,10 @@ export const salesService = {
             loyaltyMemberCode: customerLoyaltyCode,
             loyaltyPointsRedeemed: redeemedPoints,
             loyaltyPointsEarned: earnedPoints,
+            amountPaid: finalAmountPaid,
+            dueAmount: finalDueAmount,
+            paymentStatus: finalPaymentStatus,
+            dueDate: finalDueDate,
         };
     },
 
@@ -796,6 +1024,80 @@ export const salesService = {
             success: true,
             netTotalAmount,
             customerId,
+        };
+    },
+
+    recordDueRepayment: async (params: {
+        saleId: string;
+        customerId?: string | null;
+        amount: number;
+        paymentMode?: string;
+        notes?: string;
+    }): Promise<{
+        success: boolean;
+        saleId: string;
+        amountPaid: number;
+        dueAmount: number;
+        newDueAmount: number;
+        paymentStatus: 'paid' | 'partial' | 'due';
+    }> => {
+        const userEmail = useAuthStore.getState().user?.email || 'system';
+
+        const { data: currentSale, error: fetchErr } = await supabase
+            .from('sales')
+            .select('id, total_amount, amount_paid, due_amount, payment_status')
+            .eq('id', params.saleId)
+            .single();
+
+        if (fetchErr) throw fetchErr;
+
+        const currentTotal = Number(currentSale.total_amount || 0);
+        const currentPaid = Number(currentSale.amount_paid ?? 0);
+        const currentDue = Number(
+            currentSale.due_amount !== undefined && currentSale.due_amount !== null
+                ? currentSale.due_amount
+                : Math.max(0, currentTotal - currentPaid)
+        );
+
+        const repayAmount = Math.min(params.amount, currentDue);
+        const newPaid = currentPaid + repayAmount;
+        const newDue = Math.max(0, currentDue - repayAmount);
+        const newStatus: 'paid' | 'partial' | 'due' = newDue <= 0 ? 'paid' : (newPaid > 0 ? 'partial' : 'due');
+
+        const { error: updateErr } = await supabase
+            .from('sales')
+            .update({
+                amount_paid: newPaid,
+                due_amount: newDue,
+                payment_status: newStatus,
+                updated_by: userEmail
+            })
+            .eq('id', params.saleId);
+
+        if (updateErr) throw updateErr;
+
+        try {
+            await supabase
+                .from('due_payments')
+                .insert([{
+                    sale_id: params.saleId,
+                    customer_id: params.customerId || null,
+                    amount: repayAmount,
+                    payment_mode: params.paymentMode || 'cash',
+                    notes: params.notes || `Repayment received on ${new Date().toLocaleDateString()}`,
+                    collected_by: userEmail
+                }]);
+        } catch (ledgerErr) {
+            console.warn('due_payments table insert skipped or table does not exist:', ledgerErr);
+        }
+
+        return {
+            success: true,
+            saleId: params.saleId,
+            amountPaid: newPaid,
+            dueAmount: newDue,
+            newDueAmount: newDue,
+            paymentStatus: newStatus
         };
     },
 };

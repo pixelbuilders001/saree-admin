@@ -110,31 +110,20 @@ export default function ReceiptView() {
                             mrpVal = price;
                         }
                         const isRet = qty < 0 || price < 0;
+                        const itemDiscount = invDiscount > 0 ? invDiscount : Math.max(0, mrpVal - Math.abs(price));
                         return {
                             sareeName: i.inventory?.saree_name || 'Item',
                             quantity: Math.abs(qty),
                             mrp: Math.abs(mrpVal),
                             sellingPrice: isRet ? -Math.abs(price) : Math.abs(price),
                             hsnCode: (i.inventory as any)?.hsn_code || '5208',
+                            discountAmount: itemDiscount > 0 ? itemDiscount : undefined,
+                            discountPercentage: (mrpVal > 0 && itemDiscount > 0) ? parseFloat(((itemDiscount / mrpVal) * 100).toFixed(1)) : undefined,
                         };
                     });
 
                 const salesSubtotal = items.reduce((s, it) => s + it.quantity * it.sellingPrice, 0);
                 const salesDiscount = Number(data.discount_amount || 0);
-
-                // If sale has an overall discount, allocate pro-rata to items for the table's DISCOUNT column
-                if (salesDiscount > 0 && salesSubtotal > 0) {
-                    let allocatedSum = 0;
-                    items.forEach((it, idx) => {
-                        if (idx === items.length - 1) {
-                            it.discountAmount = Math.max(0, Math.round((salesDiscount - allocatedSum) * 100) / 100);
-                        } else {
-                            const itemPortion = Math.round((salesDiscount * (it.quantity * it.sellingPrice) / salesSubtotal) * 100) / 100;
-                            it.discountAmount = itemPortion;
-                            allocatedSum += itemPortion;
-                        }
-                    });
-                }
 
                 receiptData = {
                     invoiceNumber: data.invoice_number,
@@ -330,19 +319,12 @@ export default function ReceiptView() {
     const dateShort = fmtDate(receipt.date);
     const dateLong = fmtLong(receipt.date);
 
-    const totalMrp = receipt.items.reduce((s, i) => s + i.quantity * (i.mrp || i.sellingPrice), 0);
+    const totalMrp = receipt.items.reduce((s, i) => s + (i.quantity || 1) * ((i.mrp && i.mrp > 0) ? i.mrp : i.sellingPrice), 0);
+    const itemsSellingTotal = receipt.items.reduce((s, i) => s + (i.quantity || 1) * (i.sellingPrice || 0), 0);
 
-    // Backward-compatible per-item total discount
-    const perItemTotalDisc = receipt.items.map(i => {
-        const mrp = i.mrp || i.sellingPrice;
-        const prodDisc = Math.max(0, (mrp - i.sellingPrice) * i.quantity);
-        const dbDisc = i.discountAmount || 0;
-        // New orders: dbDisc >= prodDisc (includes mrp disc) → use dbDisc
-        // Old orders: dbDisc < prodDisc or 0 (coupon only) → add prodDisc + dbDisc
-        return (dbDisc >= prodDisc && prodDisc > 0) ? dbDisc : prodDisc + dbDisc;
-    });
-    const totalItemDiscount = perItemTotalDisc.reduce((s, d) => s + d, 0);
-
+    // Product discount is the difference between total MRP and total selling price
+    const mrpDiscountTotal = Math.max(0, totalMrp - itemsSellingTotal);
+    const totalItemDiscount = mrpDiscountTotal;
     const totalItemDiscountPercent = totalMrp > 0 ? (totalItemDiscount / totalMrp) * 100 : 0;
     const totalItemDiscountPercentText = totalItemDiscountPercent > 0 ? ` (${parseFloat(totalItemDiscountPercent.toFixed(1))}%)` : '';
 
@@ -352,16 +334,13 @@ export default function ReceiptView() {
         return sum + addonsPerUnit * (item.quantity || 1);
     }, 0);
 
-    const itemsSellingTotal = receipt.items.reduce((s, i) => s + i.quantity * i.sellingPrice, 0);
-    const subtotal = totalItemDiscount > 0
-        ? Math.max(0, totalMrp - totalItemDiscount)
-        : (itemsSellingTotal > 0 ? itemsSellingTotal : (receipt.subtotal || totalMrp));
+    const subtotal = itemsSellingTotal > 0
+        ? itemsSellingTotal
+        : ((receipt.subtotal && receipt.subtotal > 0) ? receipt.subtotal : totalMrp);
 
-    // billDiscount: any order-level discount not already in per-item totalDisc
-    const mrpDiscountTotal = Math.max(0, totalMrp - itemsSellingTotal);
-    const extraItemDiscount = Math.max(0, totalItemDiscount - mrpDiscountTotal);
+    // Order/bill discount is explicitly preserved
     const rawBillDiscount = Number(receipt.discountAmount || 0);
-    const billDiscount = Math.max(0, rawBillDiscount - extraItemDiscount);
+    const billDiscount = rawBillDiscount;
     const billDiscountPercent = (receipt.discountPercentage && receipt.discountPercentage > 0)
         ? receipt.discountPercentage
         : ((subtotal > 0 && billDiscount > 0) ? (billDiscount / subtotal) * 100 : 0);
@@ -555,15 +534,14 @@ export default function ReceiptView() {
                             </thead>
                             <tbody>
                                 {receipt.items.map((item, idx) => {
-                                    const itemMrp = item.mrp && item.mrp > 0 ? item.mrp : item.sellingPrice;
+                                    const itemSelling = item.sellingPrice || 0;
+                                    const itemMrp = item.mrp && item.mrp > 0 ? item.mrp : itemSelling;
                                     const itemMrpTotal = item.quantity * itemMrp;
-                                    const prodDisc = Math.max(0, itemMrpTotal - (item.quantity * item.sellingPrice));
+                                    const prodDisc = Math.max(0, itemMrpTotal - (item.quantity * itemSelling));
                                     const dbDisc = Number(item.discountAmount || 0);
-                                    // New orders: dbDisc = mrpDisc + couponDisc (>= prodDisc) → use dbDisc
-                                    // Old orders: dbDisc = couponDisc only (< prodDisc or 0) → add prodDisc + dbDisc
-                                    const totalLineDisc = (dbDisc >= prodDisc && prodDisc > 0) ? dbDisc : prodDisc + dbDisc;
-                                    const itemDiscPct = itemMrpTotal > 0 ? (totalLineDisc / itemMrpTotal) * 100 : 0;
-                                    const itemPayableTotal = Math.max(0, itemMrpTotal - totalLineDisc);
+                                    const totalLineDisc = prodDisc > 0 ? prodDisc : dbDisc;
+                                    const itemDiscPct = itemMrpTotal > 0 && totalLineDisc > 0 ? (totalLineDisc / itemMrpTotal) * 100 : 0;
+                                    const itemPayableTotal = Math.max(0, item.quantity * itemSelling);
 
                                     return (
                                         <tr key={idx} style={{ borderBottom: '1px dashed #ccc' }}>

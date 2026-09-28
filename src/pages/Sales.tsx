@@ -39,6 +39,7 @@ import {
     Award,
     ChevronDown,
     ChevronUp,
+    Clock,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -198,6 +199,9 @@ export default function SalesPage() {
     const [manualDiscountType, setManualDiscountType] = React.useState<'amount' | 'percentage'>('percentage');
     const [manualDiscountInput, setManualDiscountInput] = React.useState<string>('0');
     const [isGstApplied, setIsGstApplied] = React.useState<boolean>(false);
+    const [isDuePayment, setIsDuePayment] = React.useState<boolean>(false);
+    const [amountPaidInput, setAmountPaidInput] = React.useState<string>('');
+    const [dueDateInput, setDueDateInput] = React.useState<string>('');
     const [editingCartIndex, setEditingCartIndex] = React.useState<number | null>(null);
     const [editingSellingPriceInput, setEditingSellingPriceInput] = React.useState<string>('');
     const [cart, setCart] = React.useState<Array<{
@@ -300,6 +304,9 @@ export default function SalesPage() {
             setVoucherCodeInput('');
             setIsGstApplied(false);
             setLoyaltyRedeemedPoints(0);
+            setIsDuePayment(false);
+            setAmountPaidInput('');
+            setDueDateInput('');
             setLastCompletedSale(data);
             setIsReceiptModalOpen(true);
         },
@@ -538,6 +545,16 @@ export default function SalesPage() {
 
     const netPayable = Math.max(0, billAfterVoucher - effectiveLoyaltyDiscount);
     const pointsToEarn = isLoyaltyActive ? Math.floor(netPayable * earnRatePct) : 0;
+
+    const parsedAmountPaid = isDuePayment
+        ? (amountPaidInput === '' ? 0 : Math.max(0, parseFloat(amountPaidInput) || 0))
+        : netPayable;
+    const computedDueAmount = isDuePayment
+        ? Math.max(0, netPayable - parsedAmountPaid)
+        : 0;
+    const computedPaymentStatus: 'paid' | 'partial' | 'due' = !isDuePayment || computedDueAmount <= 0
+        ? 'paid'
+        : (parsedAmountPaid > 0 ? 'partial' : 'due');
 
     const handleToggleAddon = (itemIndex: number, addon: ProductAddon) => {
         setCart(prev => {
@@ -940,6 +957,19 @@ export default function SalesPage() {
             return;
         }
 
+        if (isDuePayment && computedDueAmount > 0) {
+            const cleanMobile = (customerMobile || '').replace(/\D/g, '');
+            if (!customerName?.trim() || cleanMobile.length < 10) {
+                setIsCustomerDetailsOpen(true);
+                toast.error('Customer Name and 10-digit Mobile number are required for Due / Udhar sales.');
+                return;
+            }
+            if (parsedAmountPaid > netPayable) {
+                toast.error('Amount paid cannot exceed total bill amount');
+                return;
+            }
+        }
+
         const staffMember = selectedStaffId === 'self' ? null : activeStaff.find(s => s.id === selectedStaffId);
         const commissionEarned = staffMember
             ? parseFloat(((cartTotal * staffMember.commission_rate) / 100).toFixed(2))
@@ -964,6 +994,10 @@ export default function SalesPage() {
             loyaltyMemberCode: currentCustomer?.loyaltyMemberCode || undefined,
             loyaltyPointsRedeemed: pointsRedeemedCount,
             loyaltyPointsEarned: pointsToEarn,
+            amountPaid: parsedAmountPaid,
+            dueAmount: computedDueAmount,
+            paymentStatus: computedPaymentStatus,
+            dueDate: isDuePayment && dueDateInput ? dueDateInput : null,
         });
     };
 
@@ -977,7 +1011,22 @@ export default function SalesPage() {
             toast.error('Please assign a salesperson before checking out.');
             return;
         }
-        if (paymentMode === 'upi') {
+
+        if (isDuePayment && computedDueAmount > 0) {
+            const cleanMobile = (customerMobile || '').replace(/\D/g, '');
+            if (!customerName?.trim() || cleanMobile.length < 10) {
+                setIsCustomerDetailsOpen(true);
+                toast.error('Customer Name and 10-digit Mobile number are required for Due / Udhar sales.');
+                return;
+            }
+            if (parsedAmountPaid > netPayable) {
+                toast.error('Amount paid cannot exceed total bill amount');
+                return;
+            }
+        }
+
+        // If paying via UPI and paying > 0, open UPI modal. If amount paid is 0 (full udhar), no need for QR code!
+        if (paymentMode === 'upi' && parsedAmountPaid > 0) {
             const txnNote = `SBS-${sessionId}-${Date.now().toString().slice(-4)}`;
             setCurrentTxnNote(txnNote);
             // Pre-select first active UPI if none selected yet
@@ -991,8 +1040,9 @@ export default function SalesPage() {
     };
 
     const currentUpi = activeUpiSettings.find(u => u.upi_id === selectedUpiId) || activeUpiSettings[0];
+    const upiAmountToCharge = isDuePayment ? parsedAmountPaid : netPayable;
     const upiQrValue = currentUpi
-        ? `upi://pay?pa=${currentUpi.upi_id}&pn=${encodeURIComponent(currentUpi.label)}&am=${netPayable}&tn=${currentTxnNote}&cu=INR`
+        ? `upi://pay?pa=${currentUpi.upi_id}&pn=${encodeURIComponent(currentUpi.label)}&am=${upiAmountToCharge}&tn=${currentTxnNote}&cu=INR`
         : '';
 
     if (remoteMode === 'scanner') {
@@ -1680,6 +1730,98 @@ export default function SalesPage() {
                         </div>
                     </div>
 
+                    {/* Due / Udhar / Partial Payment Box */}
+                    <div className={cn(
+                        "rounded-lg border transition-all p-2 text-xs",
+                        isDuePayment ? "bg-amber-50/80 border-amber-300 shadow-xs" : "bg-white border-stone-200"
+                    )}>
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5">
+                                <Clock className={cn("h-3.5 w-3.5", isDuePayment ? "text-amber-700" : "text-stone-400")} />
+                                <span className="text-[11px] font-bold text-stone-800">Partial Payment / Due (उधार)</span>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    const next = !isDuePayment;
+                                    setIsDuePayment(next);
+                                    if (next && !amountPaidInput) {
+                                        setAmountPaidInput(netPayable.toString());
+                                    }
+                                }}
+                                className={cn(
+                                    "px-2 py-0.5 rounded text-[10px] font-bold transition-all border cursor-pointer",
+                                    isDuePayment
+                                        ? "bg-amber-600 text-white border-amber-700 shadow-xs"
+                                        : "bg-stone-100 text-stone-600 border-stone-200 hover:bg-stone-200"
+                                )}
+                            >
+                                {isDuePayment ? "DUE ACTIVE" : "+ ADD DUE"}
+                            </button>
+                        </div>
+
+                        {isDuePayment && (
+                            <div className="mt-2 pt-2 border-t border-amber-200/70 space-y-2">
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div>
+                                        <label className="text-[10px] font-semibold text-stone-600 block mb-0.5">
+                                            Amount Paid Now ({paymentMode.toUpperCase()})
+                                        </label>
+                                        <div className="relative">
+                                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400 text-xs">₹</span>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                max={netPayable}
+                                                value={amountPaidInput}
+                                                onChange={(e) => setAmountPaidInput(e.target.value)}
+                                                placeholder="0"
+                                                className="w-full pl-5 pr-2 py-1 border border-amber-300 rounded text-xs font-mono font-bold bg-white text-stone-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-semibold text-stone-600 block mb-0.5">
+                                            Balance Due (बकाया)
+                                        </label>
+                                        <div className="px-2 py-1 rounded bg-amber-100/90 border border-amber-300 text-xs font-mono font-bold text-amber-900 flex items-center justify-between h-[28px]">
+                                            <span>₹{computedDueAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                            <span className="text-[9px] px-1 rounded uppercase font-sans font-bold bg-amber-200 text-amber-950">
+                                                {computedPaymentStatus}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Optional Promise Due Date */}
+                                <div className="flex items-center justify-between gap-2 pt-0.5 text-[11px]">
+                                    <span className="text-[10px] text-stone-500 font-medium">Promise Due Date:</span>
+                                    <input
+                                        type="date"
+                                        value={dueDateInput}
+                                        min={new Date().toISOString().split('T')[0]}
+                                        onChange={(e) => setDueDateInput(e.target.value)}
+                                        className="px-2 py-0.5 text-[11px] border border-stone-200 rounded bg-white text-stone-700"
+                                    />
+                                </div>
+
+                                {/* Customer requirement indicator */}
+                                {computedDueAmount > 0 && (!customerName || (customerMobile || '').replace(/\D/g, '').length < 10) && (
+                                    <div className="text-[10px] text-amber-900 bg-amber-100/90 border border-amber-300 p-1.5 rounded flex items-center justify-between">
+                                        <span>⚠️ Customer Name &amp; Phone required</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsCustomerDetailsOpen(true)}
+                                            className="font-bold underline cursor-pointer text-amber-950 hover:text-black"
+                                        >
+                                            Enter Details
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
                     {/* Discounts & Offers Accordion */}
                     <div className="bg-white border border-stone-200 rounded-lg overflow-hidden shadow-2xs">
                         <button
@@ -1961,6 +2103,23 @@ export default function SalesPage() {
                                 <Loader2 className="h-4 w-4 animate-spin text-gold" />
                                 Processing...
                             </>
+                        ) : isDuePayment && computedDueAmount > 0 ? (
+                            parsedAmountPaid === 0 ? (
+                                <>
+                                    <Clock className="h-4 w-4 text-gold" />
+                                    <span>Record Full Due (₹{netPayable.toLocaleString('en-IN')})</span>
+                                </>
+                            ) : paymentMode === 'upi' ? (
+                                <>
+                                    <QrCode className="h-4 w-4 text-gold" />
+                                    <span>Pay ₹{parsedAmountPaid.toLocaleString('en-IN')} via UPI &amp; Record Due</span>
+                                </>
+                            ) : (
+                                <>
+                                    <Clock className="h-4 w-4 text-gold" />
+                                    <span>Collect ₹{parsedAmountPaid.toLocaleString('en-IN')} &amp; Record Due</span>
+                                </>
+                            )
                         ) : paymentMode === 'upi' ? (
                             <>
                                 <QrCode className="h-4 w-4 text-gold" />
@@ -2342,7 +2501,14 @@ export default function SalesPage() {
                             )}
 
                             <div className="text-center space-y-1">
-                                <p className="text-sm font-bold text-gray-800">Amount: ₹{cartTotal.toLocaleString()}</p>
+                                <p className="text-sm font-bold text-gray-800">
+                                    Amount to Pay via UPI: ₹{upiAmountToCharge.toLocaleString('en-IN')}
+                                    {isDuePayment && computedDueAmount > 0 && (
+                                        <span className="block text-xs font-semibold text-amber-700 mt-0.5">
+                                            (Remaining Balance Due: ₹{computedDueAmount.toLocaleString('en-IN')})
+                                        </span>
+                                    )}
+                                </p>
                                 {activeUpiSettings.length === 1 && (
                                     <p className="text-[10px] text-gray-400 font-mono">{currentUpi?.upi_id}</p>
                                 )}
