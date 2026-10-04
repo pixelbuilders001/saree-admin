@@ -20,11 +20,13 @@ export interface GstBreakdown {
 }
 
 /**
- * Calculates GST breakdown for a given taxable base amount.
+ * Calculates GST breakdown for a given gross bill amount.
+ * The price is treated as GST-INCLUSIVE (matching online orders):
+ * grandTotal remains the gross total, with taxable amount and GST broken down inside it.
  * All amounts are cleanly rounded to 2 decimal places.
  */
-export function calculateGst(taxableBase: number, isGstApplied: boolean): GstBreakdown {
-    const base = Math.max(0, Math.round((taxableBase + Number.EPSILON) * 100) / 100);
+export function calculateGst(grossTotal: number, isGstApplied: boolean): GstBreakdown {
+    const base = Math.max(0, Math.round((grossTotal + Number.EPSILON) * 100) / 100);
 
     if (!isGstApplied) {
         return {
@@ -47,17 +49,18 @@ export function calculateGst(taxableBase: number, isGstApplied: boolean): GstBre
     const sgstRate = GST_CONFIG.DEFAULT_SGST_RATE;
     const igstRate = GST_CONFIG.DEFAULT_IGST_RATE;
 
-    const cgstAmount = Math.round((base * (cgstRate / 100) + Number.EPSILON) * 100) / 100;
-    const sgstAmount = Math.round((base * (sgstRate / 100) + Number.EPSILON) * 100) / 100;
-    const totalGst = Math.round(((cgstAmount + sgstAmount) + Number.EPSILON) * 100) / 100;
-    const grandTotal = Math.round(((base + totalGst) + Number.EPSILON) * 100) / 100;
-
+    // Inclusive GST breakdown: taxableAmount = base / (1 + rate/100)
+    const taxableAmount = Math.max(0, Math.round(((base / (1 + gstRate / 100)) + Number.EPSILON) * 100) / 100);
+    const totalGst = Math.max(0, Math.round(((base - taxableAmount) + Number.EPSILON) * 100) / 100);
+    const cgstAmount = Math.round(((totalGst / 2) + Number.EPSILON) * 100) / 100;
+    const sgstAmount = Math.round(((totalGst - cgstAmount) + Number.EPSILON) * 100) / 100;
     const igstAmount = 0;
+    const grandTotal = base; // Total customer payable remains unchanged
 
     return {
         isGstApplied: true,
         gstRate,
-        taxableAmount: base,
+        taxableAmount,
         cgstRate,
         cgstAmount,
         sgstRate,

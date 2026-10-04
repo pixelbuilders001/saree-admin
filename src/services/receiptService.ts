@@ -147,7 +147,8 @@ export const receiptService = {
         }
 
         if (sale.isGstApplied) {
-            drawText(`Taxable Amount: Rs. ${(sale.taxableAmount || (itemsSubtotal - saleDiscount)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, 190, currentY, { align: 'right' });
+            const fallbackTaxable = Math.round(((itemsSubtotal - saleDiscount) / 1.05) * 100) / 100;
+            drawText(`Taxable Amount: Rs. ${(sale.taxableAmount || fallbackTaxable).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, 190, currentY, { align: 'right' });
             currentY += 6;
             drawText(`CGST @ ${sale.cgstRate || 2.5}%: Rs. ${(sale.cgstAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, 190, currentY, { align: 'right' });
             currentY += 6;

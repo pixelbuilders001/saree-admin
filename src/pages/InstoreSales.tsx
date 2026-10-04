@@ -57,6 +57,7 @@ import { ReceiptModal } from '@/components/ReceiptModal';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 import { generateReceiptUrl } from '@/utils/receiptUtils';
+import { calculateGst } from '@/config/gstConfig';
 
 type DatePreset = 'today' | 'yesterday' | 'week' | 'month' | '30days' | 'year' | 'all';
 
@@ -156,6 +157,62 @@ export default function InstoreSalesPage() {
             paymentMode: repayPaymentMode,
             notes: repayNotes.trim() ? repayNotes.trim() : undefined,
         });
+    };
+
+    const [updatingSaleId, setUpdatingSaleId] = React.useState<string | null>(null);
+    const [isBulkUpdatingGst, setIsBulkUpdatingGst] = React.useState(false);
+
+    const handleToggleSaleGst = async (sale: DetailedSale) => {
+        try {
+            setUpdatingSaleId(sale.id);
+            const targetGst = !sale.isGstApplied;
+            await salesService.updateSaleGst(sale.id, targetGst);
+            await queryClient.invalidateQueries({ queryKey: ['detailed-instore-sales'] });
+
+            const gross = Number(sale.totalAmount || 0);
+            const gst = calculateGst(gross, targetGst);
+            if (selectedSaleForDetails && selectedSaleForDetails.id === sale.id) {
+                setSelectedSaleForDetails(prev => prev ? {
+                    ...prev,
+                    isGstApplied: targetGst,
+                    gstRate: gst.gstRate,
+                    taxableAmount: gst.taxableAmount,
+                    cgstRate: gst.cgstRate,
+                    cgstAmount: gst.cgstAmount,
+                    sgstRate: gst.sgstRate,
+                    sgstAmount: gst.sgstAmount,
+                    totalGst: gst.totalGst,
+                } : null);
+            }
+
+            toast.success(targetGst ? `Added 5% inclusive GST to invoice ${sale.invoiceNumber}` : `Changed ${sale.invoiceNumber} to non-GST retail bill`);
+        } catch (err: any) {
+            console.error('Failed to update sale GST:', err);
+            toast.error(err?.message || 'Failed to update GST on sale');
+        } finally {
+            setUpdatingSaleId(null);
+        }
+    };
+
+    const handleBulkBackfillGst = async () => {
+        const confirmed = window.confirm(
+            'Apply 5% Inclusive GST to all past in-store sales?\n\n' +
+            '• The total amounts paid by customers will NOT change.\n' +
+            '• Receipts and invoices will now show the Taxable Value and 5% GST (CGST 2.5% + SGST 2.5%) breakdown.'
+        );
+        if (!confirmed) return;
+
+        try {
+            setIsBulkUpdatingGst(true);
+            const count = await salesService.bulkUpdatePastSalesGst(true);
+            await queryClient.invalidateQueries({ queryKey: ['detailed-instore-sales'] });
+            toast.success(`Successfully added 5% inclusive GST to ${count} past sales!`);
+        } catch (err: any) {
+            console.error('Failed bulk GST update:', err);
+            toast.error(err?.message || 'Failed to bulk update past sales GST');
+        } finally {
+            setIsBulkUpdatingGst(false);
+        }
     };
 
     // Reset page when filter criteria change
@@ -681,9 +738,26 @@ export default function InstoreSalesPage() {
                             <FileText className="h-4 w-4 text-maroon/70" />
                             In-Store Transaction Records ({filteredSales.length})
                         </span>
-                        <span className="text-[10px] text-gray-500 normal-case font-normal hidden sm:inline">
-                            Showing page {currentPage} of {totalPages || 1}
-                        </span>
+                        <div className="flex items-center gap-2">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={isBulkUpdatingGst}
+                                onClick={handleBulkBackfillGst}
+                                className="h-7 text-[10px] font-bold border-gold/30 text-maroon hover:bg-gold/10 gap-1 cursor-pointer"
+                                title="Add 5% inclusive GST details to all past sales receipts"
+                            >
+                                {isBulkUpdatingGst ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                    <Receipt className="h-3 w-3 text-maroon" />
+                                )}
+                                <span>{isBulkUpdatingGst ? 'Updating...' : 'Add GST to All Past Sales'}</span>
+                            </Button>
+                            <span className="text-[10px] text-gray-500 normal-case font-normal hidden sm:inline">
+                                Showing page {currentPage} of {totalPages || 1}
+                            </span>
+                        </div>
                     </CardTitle>
                 </CardHeader>
 
@@ -866,13 +940,24 @@ export default function InstoreSalesPage() {
                                                 </TableCell>
 
                                                 {/* GST */}
-                                                <TableCell className="py-2.5 text-xs text-right font-mono text-gray-600">
+                                                <TableCell className="py-2.5 text-xs text-right font-mono" onClick={(e) => e.stopPropagation()}>
                                                     {sale.isGstApplied && sale.totalGst ? (
-                                                        <span title={`GST Rate: ${sale.gstRate}%`}>
+                                                        <span
+                                                            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-bold"
+                                                            title={`GST 5% Included: ₹${sale.totalGst} (Taxable: ₹${sale.taxableAmount || (sale.totalAmount - sale.totalGst)})`}
+                                                        >
                                                             {formatCurrency(sale.totalGst)}
                                                         </span>
                                                     ) : (
-                                                        <span className="text-gray-400 text-[10px]">None</span>
+                                                        <button
+                                                            type="button"
+                                                            disabled={updatingSaleId === sale.id}
+                                                            onClick={() => handleToggleSaleGst(sale)}
+                                                            className="text-[9.5px] font-semibold text-stone-500 hover:text-emerald-700 hover:bg-emerald-50 px-1.5 py-0.5 rounded border border-dashed border-stone-200 hover:border-emerald-300 transition-colors cursor-pointer"
+                                                            title="Click to apply 5% inclusive GST to this sale receipt"
+                                                        >
+                                                            {updatingSaleId === sale.id ? 'Updating...' : '+ Add GST'}
+                                                        </button>
                                                     )}
                                                 </TableCell>
 
@@ -1231,6 +1316,44 @@ export default function InstoreSalesPage() {
                                         <span>Total Realized Profit:</span>
                                         <span className="font-mono">{formatCurrency(selectedSaleForDetails.profit)}</span>
                                     </div>
+                                </div>
+
+                                {/* GST Status & Quick Toggle */}
+                                <div className="flex items-center justify-between p-2.5 rounded-lg bg-cream/15 border border-gold/20 shadow-2xs">
+                                    <div className="flex items-center gap-2">
+                                        <Receipt className={cn("h-4 w-4 shrink-0", selectedSaleForDetails.isGstApplied ? "text-emerald-700" : "text-stone-400")} />
+                                        <div>
+                                            <span className="text-xs font-bold text-gray-800 block">
+                                                {selectedSaleForDetails.isGstApplied ? 'GST Tax Invoice (5% Included)' : 'Retail Bill (Non-GST)'}
+                                            </span>
+                                            <span className="text-[10.5px] text-gray-500 block">
+                                                {selectedSaleForDetails.isGstApplied
+                                                    ? 'Receipt displays Taxable Base & 5% GST breakdown'
+                                                    : 'Click to enable 5% GST breakdown on this receipt'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    {selectedSaleForDetails.isGstApplied ? (
+                                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-100/70 border border-emerald-300 px-2.5 py-1 rounded-md shrink-0">
+                                            <Check className="h-3 w-3 text-emerald-700" />
+                                            <span>GST Included</span>
+                                        </span>
+                                    ) : (
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
+                                            disabled={updatingSaleId === selectedSaleForDetails.id}
+                                            onClick={() => handleToggleSaleGst(selectedSaleForDetails)}
+                                            className="h-7 px-3 text-[10px] font-bold rounded border transition-all cursor-pointer bg-emerald-600 text-white border-emerald-700 hover:bg-emerald-700 hover:text-white shrink-0"
+                                        >
+                                            {updatingSaleId === selectedSaleForDetails.id ? (
+                                                <Loader2 className="h-3 w-3 animate-spin" />
+                                            ) : (
+                                                '+ Apply 5% GST'
+                                            )}
+                                        </Button>
+                                    )}
                                 </div>
                             </div>
 

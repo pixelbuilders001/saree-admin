@@ -196,14 +196,15 @@ export function mapSaleToReceiptData(saleOrOrder: any): ReceiptData {
 
     const gstRate = Number(saleOrOrder.gstRate || saleOrOrder.gst_rate || (isGstApplied ? 5 : 0));
     const rawTotalGst = Number(saleOrOrder.totalGst ?? saleOrOrder.total_gst ?? saleOrOrder.gstAmount ?? saleOrOrder.gst_amount ?? 0);
+    const netBase = Math.max(0, subtotal - discountAmount);
 
     const taxableAmount = saleOrOrder.taxableAmount !== undefined && saleOrOrder.taxableAmount !== null
         ? Number(saleOrOrder.taxableAmount)
         : (saleOrOrder.taxable_amount !== undefined && saleOrOrder.taxable_amount !== null
             ? Number(saleOrOrder.taxable_amount)
-            : (isGstApplied ? Math.max(0, subtotal - discountAmount - rawTotalGst) : undefined));
+            : (isGstApplied ? (rawTotalGst > 0 ? Math.max(0, netBase - rawTotalGst) : Math.round((netBase / (1 + gstRate / 100)) * 100) / 100) : undefined));
 
-    const totalGst = rawTotalGst > 0 ? rawTotalGst : (isGstApplied && taxableAmount ? Math.round(taxableAmount * (gstRate / 100) * 100) / 100 : 0);
+    const totalGst = rawTotalGst > 0 ? rawTotalGst : (isGstApplied && taxableAmount ? Math.max(0, Math.round((netBase - taxableAmount) * 100) / 100) : 0);
 
     const cgstRate = Number(saleOrOrder.cgstRate ?? saleOrOrder.cgst_rate ?? (isGstApplied && isIntraState ? gstRate / 2 : 0));
     const sgstRate = Number(saleOrOrder.sgstRate ?? saleOrOrder.sgst_rate ?? (isGstApplied && isIntraState ? gstRate / 2 : 0));

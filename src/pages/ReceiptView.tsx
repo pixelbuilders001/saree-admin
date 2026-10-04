@@ -622,7 +622,7 @@ export default function ReceiptView() {
                                 <>
                                     <div className="totals-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', padding: '5px 0', borderBottom: '1px dashed #ccc', fontSize: '12.5px' }}>
                                         <span style={{ fontWeight: 'bold', letterSpacing: '0.5px' }}>TAXABLE AMOUNT</span>
-                                        <span style={{ textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap' }}>{fmtCurrency(receipt.taxableAmount || (subtotal - billDiscount))}</span>
+                                        <span style={{ textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap' }}>{fmtCurrency(receipt.taxableAmount ?? Math.round(((subtotal - billDiscount) / 1.05) * 100) / 100)}</span>
                                     </div>
                                     <div className="totals-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', padding: '4px 0', borderBottom: '1px dashed #eee', fontSize: '12px', color: '#444' }}>
                                         <span>CGST @ {receipt.cgstRate || 2.5}%</span>

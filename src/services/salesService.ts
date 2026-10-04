@@ -1100,4 +1100,74 @@ export const salesService = {
             paymentStatus: newStatus
         };
     },
+
+    updateSaleGst: async (saleId: string, applyGst: boolean): Promise<any> => {
+        const userEmail = useAuthStore.getState().user?.email || 'system';
+        const { data: sale, error: fetchErr } = await supabase
+            .from('sales')
+            .select('id, total_amount, discount_amount')
+            .eq('id', saleId)
+            .single();
+
+        if (fetchErr || !sale) throw new Error('Sale not found');
+
+        const grossTotal = Number(sale.total_amount || 0);
+        const gstData = calculateGst(grossTotal, applyGst);
+
+        const { data: updated, error: updateErr } = await supabase
+            .from('sales')
+            .update({
+                is_gst_applied: gstData.isGstApplied,
+                gst_rate: gstData.gstRate,
+                taxable_amount: gstData.taxableAmount,
+                cgst_rate: gstData.cgstRate,
+                cgst_amount: gstData.cgstAmount,
+                sgst_rate: gstData.sgstRate,
+                sgst_amount: gstData.sgstAmount,
+                igst_rate: gstData.igstRate,
+                igst_amount: gstData.igstAmount,
+                total_gst: gstData.totalGst,
+                updated_by: userEmail
+            })
+            .eq('id', saleId)
+            .select()
+            .single();
+
+        if (updateErr) throw updateErr;
+        return updated;
+    },
+
+    bulkUpdatePastSalesGst: async (applyGst: boolean = true): Promise<number> => {
+        const userEmail = useAuthStore.getState().user?.email || 'system';
+        const { data: sales, error: fetchErr } = await supabase
+            .from('sales')
+            .select('id, total_amount, is_gst_applied');
+
+        if (fetchErr) throw fetchErr;
+        if (!sales || sales.length === 0) return 0;
+
+        let count = 0;
+        for (const s of sales) {
+            const grossTotal = Number(s.total_amount || 0);
+            const gstData = calculateGst(grossTotal, applyGst);
+            const { error: updErr } = await supabase
+                .from('sales')
+                .update({
+                    is_gst_applied: gstData.isGstApplied,
+                    gst_rate: gstData.gstRate,
+                    taxable_amount: gstData.taxableAmount,
+                    cgst_rate: gstData.cgstRate,
+                    cgst_amount: gstData.cgstAmount,
+                    sgst_rate: gstData.sgstRate,
+                    sgst_amount: gstData.sgstAmount,
+                    igst_rate: gstData.igstRate,
+                    igst_amount: gstData.igstAmount,
+                    total_gst: gstData.totalGst,
+                    updated_by: userEmail
+                })
+                .eq('id', s.id);
+            if (!updErr) count++;
+        }
+        return count;
+    }
 };

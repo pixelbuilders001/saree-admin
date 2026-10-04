@@ -29,6 +29,7 @@ import {
     Zap,
     UserRound,
     ReceiptText,
+    Receipt,
     Edit2,
     Percent,
     Calculator,
@@ -495,8 +496,8 @@ export default function SalesPage() {
     const totalDiscountAmount = itemDiscountAmount + manualBillDiscountAmount;
     const overallDiscountPercentage = subtotal > 0 ? parseFloat(((totalDiscountAmount / subtotal) * 100).toFixed(2)) : 0;
 
-    const taxableAmount = Math.max(0, subtotal - totalDiscountAmount);
-    const gstData = calculateGst(taxableAmount, isGstApplied);
+    const billBeforeVoucher = Math.max(0, subtotal - totalDiscountAmount);
+    const gstData = calculateGst(billBeforeVoucher, isGstApplied);
 
     const cartTotal = gstData.grandTotal;
     const appliedVoucherAmount = appliedVoucher ? Math.min(appliedVoucher.amount, Math.max(0, cartTotal)) : 0;
@@ -1712,20 +1713,26 @@ export default function SalesPage() {
                         </div>
 
                         {/* GST Toggle Control */}
-                        <div className="flex items-center justify-between bg-white border border-stone-200 rounded-lg px-2 py-0.5 shadow-xs">
-                            <span className="text-[10px] font-bold text-stone-700">Apply GST</span>
+                        <div className={cn(
+                            "flex items-center justify-between border rounded-lg px-2 py-1 transition-all shadow-xs h-[34px]",
+                            isGstApplied ? "bg-emerald-50/70 border-emerald-300" : "bg-white border-stone-200"
+                        )}>
+                            <div className="flex items-center gap-1 min-w-0">
+                                <Receipt className={cn("h-3 w-3 shrink-0", isGstApplied ? "text-emerald-700" : "text-stone-500")} />
+                                <span className="text-[10px] font-bold text-stone-700 whitespace-nowrap">GST (5%)</span>
+                            </div>
                             <button
                                 type="button"
                                 onClick={() => setIsGstApplied(prev => !prev)}
                                 className={cn(
-                                    "flex items-center gap-1 px-2 py-0.5 rounded border text-[10px] font-bold transition-all select-none h-5.5 cursor-pointer",
+                                    "flex items-center gap-1 px-2 py-0.5 rounded border text-[9px] font-bold transition-all select-none h-5.5 cursor-pointer whitespace-nowrap shrink-0",
                                     isGstApplied
-                                        ? "bg-emerald-600 text-white border-emerald-700"
+                                        ? "bg-emerald-600 text-white border-emerald-700 shadow-2xs"
                                         : "bg-stone-100 text-stone-500 border-stone-200 hover:bg-stone-200"
                                 )}
                             >
-                                <span className={cn("w-1.5 h-1.5 rounded-full", isGstApplied ? "bg-white animate-pulse" : "bg-stone-400")} />
-                                <span>{isGstApplied ? "5% [ ON ]" : "OFF"}</span>
+                                <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", isGstApplied ? "bg-white animate-pulse" : "bg-stone-400")} />
+                                <span>{isGstApplied ? "GST" : "OFF"}</span>
                             </button>
                         </div>
                     </div>
@@ -2001,7 +2008,14 @@ export default function SalesPage() {
                             </div>
                         )}
                         <div className="flex justify-between items-center text-maroon font-bold pt-1 border-t border-stone-100">
-                            <span className="text-xs">Net Payable</span>
+                            <div>
+                                <span className="text-xs block">Net Payable</span>
+                                {isGstApplied && (
+                                    <span className="text-[9px] font-semibold text-emerald-700 block">
+                                        Incl. 5% GST (₹{gstData.totalGst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+                                    </span>
+                                )}
+                            </div>
                             <span className="font-mono font-black text-base text-maroon">
                                 ₹{netPayable.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </span>
@@ -2015,7 +2029,6 @@ export default function SalesPage() {
                         >
                             <span className="font-medium">
                                 {isGstApplied ? 'GST 5% Included' : 'GST not applied'}
-                                {pointsToEarn > 0 && ` • +${pointsToEarn} pts`}
                             </span>
                             <span className="font-bold flex items-center gap-0.5 text-maroon">
                                 {isBreakdownOpen ? 'Hide Tax Breakdown' : 'Tax & Bill Details'}
@@ -2049,14 +2062,29 @@ export default function SalesPage() {
                                     </div>
                                 )}
                                 {isGstApplied && (
-                                    <div className="pt-0.5 border-t border-stone-200/60 space-y-0.5">
-                                        <div className="flex justify-between text-stone-700 font-semibold text-[10px]">
-                                            <span>Taxable Amount</span>
-                                            <span className="font-mono">₹{gstData.taxableAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                    <div className="pt-1 border-t border-stone-200/60 space-y-1 bg-emerald-50/50 p-1.5 rounded border border-emerald-200/60">
+                                        <div className="flex items-center justify-between text-emerald-900 font-semibold text-[10px]">
+                                            <span className="flex items-center gap-1">
+                                                <Receipt className="h-3 w-3 text-emerald-700" />
+                                                <span>GST 5% Included Breakdown</span>
+                                            </span>
+                                            <span className="font-mono font-bold text-emerald-800">
+                                                ₹{gstData.totalGst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            </span>
                                         </div>
-                                        <div className="flex justify-between text-stone-500 text-[10px] pl-1.5">
-                                            <span>CGST (2.5%) + SGST (2.5%)</span>
-                                            <span className="font-mono">₹{gstData.totalGst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                        <div className="grid grid-cols-3 gap-1 pt-0.5 text-center">
+                                            <div className="bg-white p-1 rounded border border-emerald-100 shadow-2xs">
+                                                <span className="text-[8.5px] text-stone-500 uppercase block font-medium">Taxable Base</span>
+                                                <span className="text-[10px] font-mono font-bold text-stone-800">₹{gstData.taxableAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                            </div>
+                                            <div className="bg-white p-1 rounded border border-emerald-100 shadow-2xs">
+                                                <span className="text-[8.5px] text-blue-700 uppercase block font-medium">CGST (2.5%)</span>
+                                                <span className="text-[10px] font-mono font-bold text-blue-800">₹{gstData.cgstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                            </div>
+                                            <div className="bg-white p-1 rounded border border-emerald-100 shadow-2xs">
+                                                <span className="text-[8.5px] text-blue-700 uppercase block font-medium">SGST (2.5%)</span>
+                                                <span className="text-[10px] font-mono font-bold text-blue-800">₹{gstData.sgstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                            </div>
                                         </div>
                                     </div>
                                 )}
@@ -2073,15 +2101,6 @@ export default function SalesPage() {
                                             <span>Rewards Redeemed ({pointsRedeemedCount} pts)</span>
                                         </span>
                                         <span className="font-mono text-emerald-700">-₹{effectiveLoyaltyDiscount.toLocaleString('en-IN')}</span>
-                                    </div>
-                                )}
-                                {pointsToEarn > 0 && (
-                                    <div className="text-[10px] text-amber-800 font-medium pt-0.5 flex items-center justify-between border-t border-stone-200/60">
-                                        <span className="flex items-center gap-1">
-                                            <Sparkles className="h-3 w-3 text-amber-600" />
-                                            <span>Points earned today</span>
-                                        </span>
-                                        <span className="font-bold font-mono text-emerald-700">+{pointsToEarn} pts</span>
                                     </div>
                                 )}
                             </div>
