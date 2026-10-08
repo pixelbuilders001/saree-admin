@@ -19,6 +19,7 @@ import {
     ChevronRight,
     CheckCircle2,
     Wallet,
+    ShoppingBag,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
@@ -56,6 +57,8 @@ import {
     type Addon,
     type CreateAddonDTO,
 } from '@/services/addonInventoryService';
+import { RegisterAddonSaleModal } from '@/components/addons/RegisterAddonSaleModal';
+import { AddonSalesLedger } from '@/components/addons/AddonSalesLedger';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -99,6 +102,13 @@ const formatIndianCompact = (num: number): string => {
 
 export default function AddonsPage() {
     const queryClient = useQueryClient();
+
+    // Tab state: 'inventory' | 'sales'
+    const [activeTab, setActiveTab] = useState<'inventory' | 'sales'>('inventory');
+
+    // Register Sale Modal state
+    const [isRegisterSaleOpen, setIsRegisterSaleOpen] = useState(false);
+    const [salePreselectedAddonId, setSalePreselectedAddonId] = useState<string | null>(null);
 
     // Filter & Search states
     const [searchTerm, setSearchTerm] = useState('');
@@ -349,10 +359,10 @@ export default function AddonsPage() {
                     </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                     <Button
                         variant="outline"
-                        className="border-gold/40 text-maroon hover:bg-gold/10 gap-1.5 h-9 px-3.5 text-xs font-bold transition-all shadow-sm bg-white cursor-pointer"
+                        className="border-gold/40 text-maroon hover:bg-gold/10 gap-1.5 h-9 px-3 text-xs font-bold transition-all shadow-sm bg-white cursor-pointer"
                         onClick={() => refetch()}
                         disabled={isFetching}
                     >
@@ -360,7 +370,17 @@ export default function AddonsPage() {
                         Refresh
                     </Button>
                     <Button
-                        className="bg-gradient-to-r from-maroon to-maroon-dark text-gold gap-1.5 h-9 px-4 text-xs font-bold shadow-md shadow-maroon/20 hover:shadow-lg hover:shadow-maroon/30 transition-all cursor-pointer"
+                        className="bg-emerald-700 hover:bg-emerald-800 text-white gap-1.5 h-9 px-3.5 text-xs font-bold shadow-md shadow-emerald-900/15 hover:shadow-lg transition-all cursor-pointer"
+                        onClick={() => {
+                            setSalePreselectedAddonId(null);
+                            setIsRegisterSaleOpen(true);
+                        }}
+                    >
+                        <ShoppingBag className="h-4 w-4" />
+                        Register Sale
+                    </Button>
+                    <Button
+                        className="bg-gradient-to-r from-maroon to-maroon-dark text-gold gap-1.5 h-9 px-3.5 text-xs font-bold shadow-md shadow-maroon/20 hover:shadow-lg hover:shadow-maroon/30 transition-all cursor-pointer"
                         onClick={handleOpenCreate}
                     >
                         <Plus className="h-4 w-4" />
@@ -369,10 +389,54 @@ export default function AddonsPage() {
                 </div>
             </div>
 
-            {/* KPI Summary Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
-                {/* Total Items */}
-                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
+            {/* Navigation Tabs */}
+            <div className="flex items-center gap-2 border-b border-gold/20 pb-2.5">
+                <button
+                    type="button"
+                    onClick={() => setActiveTab('inventory')}
+                    className={cn(
+                        'flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer border',
+                        activeTab === 'inventory'
+                            ? 'bg-maroon text-gold border-maroon shadow-xs'
+                            : 'bg-white text-stone-700 border-gold/30 hover:bg-cream/40 hover:text-maroon'
+                    )}
+                >
+                    <Boxes className="w-4 h-4" />
+                    <span>Inventory Register</span>
+                    <span
+                        className={cn(
+                            'text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold',
+                            activeTab === 'inventory'
+                                ? 'bg-maroon-dark text-gold'
+                                : 'bg-stone-100 text-stone-600'
+                        )}
+                    >
+                        {addons.length}
+                    </span>
+                </button>
+
+                <button
+                    type="button"
+                    onClick={() => setActiveTab('sales')}
+                    className={cn(
+                        'flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer border',
+                        activeTab === 'sales'
+                            ? 'bg-maroon text-gold border-maroon shadow-xs'
+                            : 'bg-white text-stone-700 border-gold/30 hover:bg-cream/40 hover:text-maroon'
+                    )}
+                >
+                    <ShoppingBag className={cn('w-4 h-4', activeTab === 'sales' ? 'text-gold' : 'text-emerald-700')} />
+                    <span>Sales Ledger & Daily Summary</span>
+                </button>
+            </div>
+
+            {/* Tab Views */}
+            {activeTab === 'inventory' ? (
+                <>
+                    {/* KPI Summary Cards */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+                        {/* Total Items */}
+                        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
                     <Card className="border-gold/20 shadow-xs hover:shadow-md transition-shadow bg-white">
                         <CardContent className="p-3 flex items-center justify-between gap-2">
                             <div className="space-y-0.5 min-w-0">
@@ -720,6 +784,19 @@ export default function AddonsPage() {
                                                         <Button
                                                             variant="outline"
                                                             size="sm"
+                                                            onClick={() => {
+                                                                setSalePreselectedAddonId(addon.id);
+                                                                setIsRegisterSaleOpen(true);
+                                                            }}
+                                                            disabled={addon.stock <= 0}
+                                                            className="h-7 w-7 p-0 border-emerald-300 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 transition-all cursor-pointer disabled:opacity-30"
+                                                            title={addon.stock <= 0 ? 'Out of stock' : 'Register sale for this item'}
+                                                        >
+                                                            <ShoppingBag className="h-3.5 w-3.5" />
+                                                        </Button>
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
                                                             onClick={() => handleOpenEdit(addon)}
                                                             className="h-7 w-7 p-0 border-gold/40 text-maroon hover:bg-gold/10 hover:text-maroon-dark transition-all cursor-pointer"
                                                             title="Edit Add-on"
@@ -817,6 +894,15 @@ export default function AddonsPage() {
                     )}
                 </CardContent>
             </Card>
+                </>
+            ) : (
+                <AddonSalesLedger
+                    onOpenRegisterSale={() => {
+                        setSalePreselectedAddonId(null);
+                        setIsRegisterSaleOpen(true);
+                    }}
+                />
+            )}
 
             {/* Modal: Add / Edit Add-on */}
             <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
@@ -1052,6 +1138,14 @@ export default function AddonsPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            {/* Modal: Register Add-on Sale */}
+            <RegisterAddonSaleModal
+                open={isRegisterSaleOpen}
+                onOpenChange={setIsRegisterSaleOpen}
+                addons={addons}
+                defaultAddonId={salePreselectedAddonId}
+            />
         </div>
     );
 }
