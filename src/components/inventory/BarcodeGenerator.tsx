@@ -9,6 +9,7 @@ import {
     DialogTitle,
     DialogFooter,
 } from "@/components/ui/dialog";
+import { generateSecretPriceCode } from '@/lib/utils';
 
 interface BarcodeGeneratorProps {
     value?: string;
@@ -19,6 +20,7 @@ interface BarcodeGeneratorProps {
     code?: string;
     stock?: number;
     sku?: string;
+    productTag?: string;
     isOpen: boolean;
     onClose: () => void;
 }
@@ -31,6 +33,7 @@ export function BarcodeGenerator({
     sellingPrice = 0,
     code = '',
     sku = '',
+    productTag = '',
     isOpen,
     onClose
 }: BarcodeGeneratorProps) {
@@ -46,9 +49,8 @@ export function BarcodeGenerator({
 
     const nameToShow = sareeName || label || 'Saree Product';
     const barcodeVal = value || code || '';
-    const displayMrp = mrp && mrp > 0 ? mrp : sellingPrice;
-    const formattedMrp = displayMrp ? displayMrp.toLocaleString('en-IN') : '0';
     const skuToShow = sku || code || '';
+    const tagToShow = productTag || generateSecretPriceCode(code || sku || value, mrp, sellingPrice);
 
     const handlePrint = () => {
         const content = printRef.current;
@@ -137,37 +139,35 @@ export function BarcodeGenerator({
                             max-height: 32px;
                         }
                         .sku-text {
-                            font-size: 8.5px;
-                            font-weight: 600;
-                            color: #475569;
+                            font-size: 9.5px;
+                            font-weight: 700;
+                            color: #1e293b;
                             font-family: monospace;
                             margin-bottom: 2px;
-                        }
-                        .price-container {
-                            display: flex;
-                            align-items: center;
-                            justify-content: center;
-                            font-size: 10px;
-                            line-height: 1.1;
-                            margin-bottom: 2px;
+                            text-align: center;
                             width: 100%;
-                        }
-                        .mrp-text {
-                            font-weight: 700;
-                            color: #000000;
-                            font-size: 10.5px;
                         }
                         .barcode-box {
                             display: flex;
                             justify-content: center;
                             align-items: center;
                             width: 100%;
-                            margin-top: 1px;
+                            margin: 1px 0;
                         }
                         .barcode-box svg {
                             max-width: 100%;
                             height: auto;
                             display: block;
+                        }
+                        .tag-text {
+                            font-size: 14.5px;
+                            font-weight: 800;
+                            color: #000000;
+                            font-family: monospace;
+                            letter-spacing: 1px;
+                            text-align: center;
+                            margin-top: 3px;
+                            width: 100%;
                         }
                         @media print {
                             body {
@@ -216,33 +216,21 @@ export function BarcodeGenerator({
                     {/* Printable sticker preview container */}
                     <div
                         ref={printRef}
-                        className="w-[220px] p-3 bg-white border border-dashed border-gray-300 rounded-lg shadow-sm flex flex-col items-center text-center select-none"
+                        className="w-[220px] p-3 bg-white border border-dashed border-gray-300 rounded-lg shadow-sm flex flex-col items-center justify-center text-center select-none"
                     >
-                        {/* Store Logo Header */}
-                        <div className="brand-header mb-2 flex items-center justify-center w-full">
-                            <img src="/logo.png" alt="Store Logo" className="brand-logo h-9 w-auto object-contain max-h-[36px]" />
+                        {/* 1. SKU value at Top */}
+                        <div className="sku-text text-[10.5px] font-mono font-bold text-gray-800 mb-1 tracking-wide text-center w-full">
+                            {skuToShow}
                         </div>
 
-                        {/* SKU Code */}
-                        <div className="sku-text text-[9px] font-mono font-medium text-gray-500 mb-1 tracking-wide">
-                            SKU: {skuToShow}
-                        </div>
-
-                        {/* Price Details - Only MRP */}
-                        <div className="price-container flex items-center justify-center text-[10.5px] mb-1 w-full font-mono font-bold text-gray-900">
-                            <span className="mrp-text">
-                                MRP: ₹{formattedMrp}
-                            </span>
-                        </div>
-
-                        {/* Barcode Graphic */}
-                        <div className="barcode-box flex items-center justify-center w-full mt-0.5">
+                        {/* 2. Barcode in Middle (without ID below) */}
+                        <div className="barcode-box flex items-center justify-center w-full my-0.5">
                             {barcodeVal ? (
                                 <Barcode
                                     value={barcodeVal}
                                     width={1.6}
-                                    height={40}
-                                    fontSize={11}
+                                    height={46}
+                                    displayValue={false}
                                     margin={2}
                                     background="#ffffff"
                                     lineColor="#000000"
@@ -251,6 +239,13 @@ export function BarcodeGenerator({
                                 <p className="text-xs text-red-500 italic py-2">No barcode value available</p>
                             )}
                         </div>
+
+                        {/* 3. Product Tag below Barcode */}
+                        {tagToShow && tagToShow !== '-' && (
+                            <div className="tag-text text-[15px] font-mono font-extrabold tracking-wider text-black mt-1.5 text-center w-full">
+                                {tagToShow}
+                            </div>
+                        )}
                     </div>
 
                     {/* Quantity Selector */}

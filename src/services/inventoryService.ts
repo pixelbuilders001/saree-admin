@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/useAuthStore';
 import { compressImage } from '@/lib/imageCompressor';
 import { uploadToImageKit } from '@/services/imagekitService';
+import { generateSecretPriceCode } from '@/lib/utils';
 
 export interface SareeImage {
     id: string;
@@ -21,6 +22,7 @@ export interface Saree {
     designCode?: string;
     hsnCode?: string;
     sku?: string;
+    productTag?: string;
     description?: string;
     fabric: string;
     color: string;
@@ -150,8 +152,11 @@ export const inventoryService = {
             const normalizedBarcode = (!item.barcode || isBarcodeSku) ? item.id : item.barcode;
 
             // Auto-heal: ensure Supabase inventory row uses the standard product ID for barcode
-            if (isBarcodeSku) {
-                supabase.from('inventory').update({ barcode: item.id }).eq('id', item.id).then();
+            const effectiveProductTag = item.product_tag || generateSecretPriceCode(item.id, item.mrp, item.selling_price);
+
+            // Auto-heal / backfill: if product_tag is empty in DB, persist it so it stays stored
+            if (!item.product_tag && effectiveProductTag && effectiveProductTag !== '-') {
+                supabase.from('inventory').update({ product_tag: effectiveProductTag }).eq('id', item.id).then();
             }
 
             return {
@@ -162,6 +167,7 @@ export const inventoryService = {
                 designCode: item.design_code || '',
                 hsnCode: item.hsn_code || '',
                 sku: item.sku || '',
+                productTag: effectiveProductTag,
                 description: item.description || '',
                 fabric: item.fabric,
                 color: item.color,
@@ -218,6 +224,7 @@ export const inventoryService = {
             designCode: data.design_code || '',
             hsnCode: data.hsn_code || '',
             sku: data.sku || '',
+            productTag: data.product_tag || generateSecretPriceCode(data.id, data.mrp, data.selling_price),
             description: data.description || '',
             fabric: data.fabric,
             color: data.color,
@@ -291,6 +298,10 @@ export const inventoryService = {
         const randId = 'S' + Math.floor(1000 + Math.random() * 9000);
         const userEmail = useAuthStore.getState().user?.email || 'system';
         const finalBarcode = saree.barcode && saree.barcode.trim() ? saree.barcode.trim() : randId;
+        const computedProductTag = saree.productTag && saree.productTag.trim()
+            ? saree.productTag.trim()
+            : generateSecretPriceCode(randId, saree.mrp, saree.sellingPrice);
+
         const newSaree = {
             id: randId,
             saree_name: saree.sareeName,
@@ -299,6 +310,7 @@ export const inventoryService = {
             design_code: saree.designCode ? saree.designCode.trim().toUpperCase() : null,
             hsn_code: saree.hsnCode ? saree.hsnCode.trim() : null,
             sku: saree.sku ? saree.sku.trim() : null,
+            product_tag: computedProductTag !== '-' ? computedProductTag : null,
             description: saree.description ? saree.description.trim() : null,
             fabric: saree.fabric,
             color: saree.color,
@@ -388,6 +400,7 @@ export const inventoryService = {
             designCode: data.design_code || '',
             hsnCode: data.hsn_code || '',
             sku: data.sku || '',
+            productTag: data.product_tag || computedProductTag,
             description: data.description || '',
             fabric: data.fabric,
             color: data.color,
@@ -449,6 +462,12 @@ export const inventoryService = {
         if (saree.gstRate !== undefined) updateData.gst_rate = saree.gstRate !== null ? saree.gstRate : 0;
         if (saree.priceIncludesGst !== undefined) updateData.price_includes_gst = saree.priceIncludesGst;
         if (saree.hasBlouse !== undefined) updateData.has_blouse = saree.hasBlouse;
+        if (saree.productTag !== undefined) {
+            updateData.product_tag = saree.productTag ? saree.productTag.trim() : null;
+        } else if (saree.mrp !== undefined || saree.sellingPrice !== undefined) {
+            const computed = generateSecretPriceCode(id, saree.mrp, saree.sellingPrice);
+            if (computed !== '-') updateData.product_tag = computed;
+        }
 
         const userEmail = useAuthStore.getState().user?.email || 'system';
         updateData.updated_by = userEmail;
@@ -565,6 +584,7 @@ export const inventoryService = {
             designCode: data.design_code || '',
             hsnCode: data.hsn_code || '',
             sku: data.sku || '',
+            productTag: data.product_tag || '',
             description: data.description || '',
             fabric: data.fabric,
             color: data.color,
@@ -1295,6 +1315,7 @@ export const inventoryService = {
             // In standard inventory, barcode is always the S-ID (e.g. S12345)
             const newBarcode = newId;
             existingBarcodes.add(newBarcode.toUpperCase());
+            const newProductTag = generateSecretPriceCode(newId, source.mrp, source.selling_price);
 
             newItemsToInsert.push({
                 id: newId,
@@ -1304,6 +1325,7 @@ export const inventoryService = {
                 design_code: source.design_code ? source.design_code.trim().toUpperCase() : null,
                 hsn_code: source.hsn_code ? source.hsn_code.trim() : null,
                 sku: newSku,
+                product_tag: newProductTag !== '-' ? newProductTag : null,
                 description: source.description || null,
                 fabric: source.fabric,
                 color: source.color,
@@ -1365,6 +1387,7 @@ export const inventoryService = {
             designCode: item.design_code || '',
             hsnCode: item.hsn_code || '',
             sku: item.sku || '',
+            productTag: item.product_tag || '',
             description: item.description || '',
             fabric: item.fabric,
             color: item.color,

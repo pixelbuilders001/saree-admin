@@ -33,6 +33,7 @@ import {
     Clock
 } from 'lucide-react';
 import type { Saree } from '@/services/inventoryService';
+import { generateSecretPriceCode } from '@/lib/utils';
 
 interface BatchBarcodePrinterProps {
     sarees: Saree[];
@@ -432,11 +433,11 @@ export function BatchBarcodePrinter({ sarees, isOpen, onClose }: BatchBarcodePri
                         .sticker-card {
                             border: 1px dashed #64748b;
                             border-radius: 4px;
-                            padding: 3px 5px;
+                            padding: 2mm 3mm;
                             display: flex;
                             flex-direction: column;
                             align-items: center;
-                            justify-content: space-between;
+                            justify-content: center;
                             text-align: center;
                             background: #ffffff;
                             box-sizing: border-box;
@@ -444,51 +445,42 @@ export function BatchBarcodePrinter({ sarees, isOpen, onClose }: BatchBarcodePri
                             page-break-inside: avoid;
                             break-inside: avoid;
                             height: 100%;
-                        }
-                        .brand-header {
-                            display: flex;
-                            align-items: center;
-                            justify-content: center;
-                            margin-bottom: 2px;
-                            width: 100%;
-                        }
-                        .brand-logo {
-                            height: 24px;
-                            width: auto;
-                            object-fit: contain;
-                            max-height: 24px;
+                            gap: 1.5mm;
                         }
                         .sku-row {
-                            font-size: 8px;
-                            font-weight: 600;
-                            color: #475569;
-                            font-family: monospace;
-                            margin-bottom: 1px;
-                        }
-                        .price-row {
-                            display: flex;
-                            align-items: center;
-                            justify-content: center;
                             font-size: 8.5px;
-                            line-height: 1.1;
+                            font-weight: 700;
+                            color: #1e293b;
+                            font-family: monospace;
+                            margin: 0;
+                            text-align: center;
                             width: 100%;
+                            line-height: 1.1;
                         }
-                        .mrp-text {
+                        .tag-row {
+                            font-size: 11.5px;
                             font-weight: 800;
                             color: #000000;
-                            font-size: 9.5px;
+                            font-family: monospace;
+                            letter-spacing: 0.8px;
+                            text-align: center;
+                            margin: 0;
+                            width: 100%;
+                            line-height: 1.1;
                         }
                         .barcode-box {
                             display: flex;
                             justify-content: center;
                             align-items: center;
                             width: 100%;
-                            margin-top: 1px;
+                            margin: 0;
+                            padding: 0;
                         }
                         .barcode-box svg {
                             max-width: 100%;
                             height: auto;
                             display: block;
+                            margin: 0 auto;
                         }
                         @media print {
                             body {
@@ -959,36 +951,38 @@ export function BatchBarcodePrinter({ sarees, isOpen, onClose }: BatchBarcodePri
                                             >
                                                 {pageItems.map(({ saree, copyIndex }, itemIdx) => {
                                                     const barcodeVal = saree.id;
-                                                    const displayMrp = saree.mrp && saree.mrp > 0 ? saree.mrp : saree.sellingPrice;
-                                                    const formattedMrp = displayMrp.toLocaleString('en-IN');
                                                     const skuVal = saree.sku || saree.id;
+                                                    const tagCode = saree.productTag || generateSecretPriceCode(saree.id, saree.mrp, saree.sellingPrice);
 
                                                     return (
                                                         <div
                                                             key={`${saree.id}-${copyIndex}-${itemIdx}`}
-                                                            className="border border-dashed border-slate-300 rounded p-1 flex flex-col items-center justify-between text-center bg-white overflow-hidden"
+                                                            className="border border-dashed border-slate-300 rounded p-1 flex flex-col items-center justify-center text-center bg-white overflow-hidden"
                                                         >
-                                                            <div className="mb-1 flex items-center justify-center w-full">
-                                                                <img src="/logo.png" alt="Logo" className="h-6 w-auto object-contain max-h-[24px]" />
+                                                            {/* 1. SKU value at Top */}
+                                                            <div className="text-[8px] font-mono font-bold text-gray-800 leading-none mb-1 text-center truncate max-w-[120px]">
+                                                                {skuVal}
                                                             </div>
-                                                            <div className="text-[7.5px] font-mono text-gray-500 font-medium leading-none my-0.5 truncate max-w-[120px]">
-                                                                SKU: {skuVal}
-                                                            </div>
-                                                            <div className="flex items-center justify-center text-[8px] leading-none my-0.5 font-mono font-bold text-gray-900">
-                                                                <span>MRP: ₹{formattedMrp}</span>
-                                                            </div>
+
+                                                            {/* 2. Barcode without ID below */}
                                                             <div className="w-full flex justify-center items-center my-0.5">
                                                                 <Barcode
                                                                     value={barcodeVal}
                                                                     width={gridConfig.barcodeWidth}
-                                                                    height={gridConfig.barcodeHeight}
-                                                                    fontSize={9}
+                                                                    height={gridConfig.barcodeHeight + 6}
+                                                                    displayValue={false}
                                                                     margin={1}
                                                                     background="#ffffff"
                                                                     lineColor="#000000"
-                                                                    displayValue={true}
                                                                 />
                                                             </div>
+
+                                                            {/* 3. Product Tag below Barcode */}
+                                                            {tagCode && tagCode !== '-' && (
+                                                                <div className="text-[11px] font-mono font-extrabold tracking-wider text-black leading-none mt-1 text-center">
+                                                                    {tagCode}
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     );
                                                 })}
@@ -1007,31 +1001,31 @@ export function BatchBarcodePrinter({ sarees, isOpen, onClose }: BatchBarcodePri
                         <div key={`print-page-${pageIdx}`} className="print-a4-page-block">
                             {pageItems.map(({ saree, copyIndex }, itemIdx) => {
                                 const barcodeVal = saree.id;
-                                const displayMrp = saree.mrp && saree.mrp > 0 ? saree.mrp : saree.sellingPrice;
-                                const formattedMrp = displayMrp.toLocaleString('en-IN');
                                 const skuVal = saree.sku || saree.id;
+                                const tagCode = saree.productTag || generateSecretPriceCode(saree.id, saree.mrp, saree.sellingPrice);
 
                                 return (
                                     <div key={`print-item-${saree.id}-${copyIndex}-${itemIdx}`} className="sticker-card">
-                                        <div className="brand-header">
-                                            <img src="/logo.png" alt="Logo" className="brand-logo" />
-                                        </div>
-                                        <div className="sku-row">SKU: {skuVal}</div>
-                                        <div className="price-row">
-                                            <span className="mrp-text">MRP: ₹{formattedMrp}</span>
-                                        </div>
+                                        {/* 1. SKU value at Top */}
+                                        <div className="sku-row">{skuVal}</div>
+
+                                        {/* 2. Barcode without ID below */}
                                         <div className="barcode-box">
                                             <Barcode
                                                 value={barcodeVal}
                                                 width={gridConfig.barcodeWidth}
-                                                height={gridConfig.barcodeHeight}
-                                                fontSize={9}
+                                                height={gridConfig.barcodeHeight + 6}
+                                                displayValue={false}
                                                 margin={1}
                                                 background="#ffffff"
                                                 lineColor="#000000"
-                                                displayValue={true}
                                             />
                                         </div>
+
+                                        {/* 3. Product Tag below Barcode */}
+                                        {tagCode && tagCode !== '-' && (
+                                            <div className="tag-row">{tagCode}</div>
+                                        )}
                                     </div>
                                 );
                             })}

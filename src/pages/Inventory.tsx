@@ -31,7 +31,7 @@ import {
     Check,
     XCircle,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, generateSecretPriceCode } from '@/lib/utils';
 import {
     Table,
     TableBody,
@@ -1028,20 +1028,21 @@ export default function InventoryPage() {
                                 <TableHead className="h-10 text-[10px] font-bold text-maroon py-1 whitespace-nowrap">Images</TableHead>
                                 <TableHead className="h-10 text-[10px] font-bold text-maroon py-1 whitespace-nowrap">Status</TableHead>
                                 <TableHead className="h-10 text-[10px] font-bold text-maroon py-1 whitespace-nowrap">Audit</TableHead>
+                                <TableHead className="h-10 text-[10px] font-bold text-gray-500 py-1 text-center whitespace-nowrap" title="Product Tag">Product Tag</TableHead>
                                 <TableHead className="sticky right-0 bg-cream/20 z-30 h-10 text-[10px] font-bold text-maroon py-1 text-right px-3 border-l border-gold/10 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)] w-[60px] min-w-[60px]">Actions</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {isLoading ? (
                                 <TableRow>
-                                    <TableCell colSpan={16} className="h-48 text-center text-maroon/50 text-xs italic">
+                                    <TableCell colSpan={17} className="h-48 text-center text-maroon/50 text-xs italic">
                                         <Loader2 className="h-6 w-6 animate-spin mx-auto mb-1" />
                                         Loading inventory database...
                                     </TableCell>
                                 </TableRow>
                             ) : paginatedSarees?.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={16} className="h-32 text-center">
+                                    <TableCell colSpan={17} className="h-32 text-center">
                                         <div className="flex flex-col items-center gap-2 py-4">
                                             <div className="p-3 bg-gray-100 rounded-full">
                                                 <Search className="h-5 w-5 text-gray-400" />
@@ -1235,6 +1236,31 @@ export default function InventoryPage() {
                                                 <div className="text-[9px] text-gray-400">U: {saree.updatedBy || 'system'}</div>
                                             </div>
                                         </TableCell>
+                                        <TableCell className="py-1 text-xs text-center font-mono whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                                            {(() => {
+                                                const secretCode = saree.productTag || generateSecretPriceCode(saree.id, saree.mrp, saree.sellingPrice);
+                                                if (!secretCode || secretCode === '-') return <span className="text-gray-300">—</span>;
+                                                return (
+                                                    <div className="inline-flex items-center gap-1 group/secret">
+                                                        <span
+                                                            onClick={(e) => copyToClipboard(secretCode, 'Product Tag', e)}
+                                                            className="inline-flex items-center gap-1 font-semibold text-gray-600 bg-gray-50 border border-gray-200/80 px-2 py-0.5 rounded cursor-pointer hover:bg-gold/10 hover:text-maroon transition-colors text-[10px]"
+                                                            title={`Product Tag: ${secretCode} (Click to copy)`}
+                                                        >
+                                                            {secretCode}
+                                                        </span>
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => copyToClipboard(secretCode, 'Product Tag', e)}
+                                                            className="opacity-0 group-hover/secret:opacity-100 p-0.5 hover:bg-gold/10 rounded text-gray-400 hover:text-maroon transition-opacity cursor-pointer"
+                                                            title="Copy Product Tag"
+                                                        >
+                                                            <Copy className="h-2.5 w-2.5" />
+                                                        </button>
+                                                    </div>
+                                                );
+                                            })()}
+                                        </TableCell>
                                         <TableCell className="sticky right-0 bg-white group-hover:bg-cream/40 transition-colors z-20 py-1 px-3 text-right border-l border-gold/10 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)] w-[60px] min-w-[60px]" onClick={e => e.stopPropagation()}>
                                             <DropdownMenu>
                                                 <DropdownMenuTrigger asChild>
@@ -1378,6 +1404,7 @@ export default function InventoryPage() {
                 code={barcodeToShow?.id}
                 stock={barcodeToShow?.stock}
                 sku={barcodeToShow?.sku}
+                productTag={barcodeToShow?.productTag}
             />
 
             <BatchBarcodePrinter
@@ -1666,6 +1693,31 @@ export default function InventoryPage() {
                                                         {s.priceIncludesGst ? '✓ Price includes GST' : 'Price excludes GST'}
                                                     </div>
                                                 )}
+                                            </div>
+                                            <div>
+                                                <div className="text-[9px] text-gray-400 uppercase">Secret / Tag Code</div>
+                                                <div className="flex items-center gap-1.5 mt-0.5">
+                                                    {(() => {
+                                                        const tagVal = s.productTag || generateSecretPriceCode(s.id, s.mrp, s.sellingPrice);
+                                                        return (
+                                                            <>
+                                                                <span className="text-sm font-bold text-emerald-800 font-mono bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                                                    {tagVal}
+                                                                </span>
+                                                                {tagVal && tagVal !== '-' && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => copyToClipboard(tagVal, 'Secret Code')}
+                                                                        className="p-1 hover:bg-emerald-100 rounded text-emerald-700 transition-colors cursor-pointer"
+                                                                        title="Copy Secret Code"
+                                                                    >
+                                                                        <Copy className="h-3.5 w-3.5" />
+                                                                    </button>
+                                                                )}
+                                                            </>
+                                                        );
+                                                    })()}
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
